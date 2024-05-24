@@ -1,0 +1,17 @@
+{
+    "name": "C",
+    "build": {
+      "dockerfile": "../builder.Dockerfile"
+    },
+    "runArgs": ["--platform=linux/amd64"],
+    "customizations": {
+      "vscode": {
+        "settings": {
+          "terminal.integrated.defaultProfile.linux": "bash",
+          "extensions.verifySignature": false
+        },
+        "extensions": ["ms-vscode.cpptools", "ms-vscode.cpptools-extension-pack", "ms-vscode.cmake-tools", "cschlosser.doxdocgen", "github.copilot", 
+        "github.copilot-chat", "ms-azuretools.vscode-docker", "ms-vscode.makefile-tools"]
+      }
+    }
+  }
