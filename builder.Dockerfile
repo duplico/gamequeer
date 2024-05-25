@@ -66,3 +66,8 @@ RUN ln -s /usr/bin/clang-tidy-${llvm_version} /usr/local/bin/clang-tidy
 
 # ENV PATH /usr/local/run-clang-tidy:$PATH
 # RUN run-clang-format --version
+
+# install unity cmock and ceedling (unit test environment)
+RUN gem install ceedling
+# set standard encoding to UTF-8 for ruby (and thus ceedling)
+ENV RUBYOPT "-KU -E utf-8:utf-8"

@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include "gamequeer.h"
+
 #include "gfx.h"
 #include "grlib.h"
 #include "grlib_gfx.h"
@@ -110,48 +112,113 @@ const Graphics_Image fingerprint_1BPP_UNCOMP = {
     pixel_fingerprint_1BPP_UNCOMP,
 };
 
-int main() {
+#define CART_FLASH_SIZE_MBYTES 16
+#define SAVE_FLASH_SIZE_MBYTES 16
+
+uint8_t s_clicked   = 0;
+uint8_t s_anim_done = 0;
+
+uint8_t flash_cart[CART_FLASH_SIZE_MBYTES * 1024 * 1024];
+uint8_t flash_save[SAVE_FLASH_SIZE_MBYTES * 1024 * 1024];
+uint8_t flash_fram[512];
+
+uint8_t read_byte(t_gq_pointer ptr) {
+    switch (GQ_PTR_NS(ptr)) {
+        case GQ_PTR_NS_CART:
+            return flash_cart[ptr & ~GQ_PTR_NS_MASK];
+        case GQ_PTR_NS_SAVE:
+            return flash_save[ptr & ~GQ_PTR_NS_MASK];
+        case GQ_PTR_NS_FRAM:
+            return flash_fram[ptr & ~GQ_PTR_NS_MASK];
+        case GQ_PTR_NS_FBUF:
+            return 0; // TODO: Implement framebuffer
+        default:
+            return 0;
+    }
+}
+
+uint8_t write_byte(t_gq_pointer ptr, uint8_t value) {
+    switch (GQ_PTR_NS(ptr)) {
+        case GQ_PTR_NS_CART:
+            flash_cart[ptr & ~GQ_PTR_NS_MASK] = value;
+            return 1;
+        case GQ_PTR_NS_SAVE:
+            flash_save[ptr & ~GQ_PTR_NS_MASK] = value;
+            return 1;
+        case GQ_PTR_NS_FRAM:
+            flash_fram[ptr & ~GQ_PTR_NS_MASK] = value;
+            return 1;
+        case GQ_PTR_NS_FBUF:
+            return 0; // TODO: Implement framebuffer
+        default:
+            return 0;
+    }
+}
+
+uint8_t gq_memcpy(t_gq_pointer dest, t_gq_pointer src, uint32_t size) {
+    uint32_t i;
+    for (i = 0; i < size; i++) {
+        if (!write_byte(dest + i, read_byte(src + i))) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+void HAL_init() {
     gfx_driver_init("Gamequeer");
     Graphics_initContext(&g_sContext, &g_gfx);
+
+    // TODO: Load the binary file cart image from the command line
+    // TODO: Load the binary file local mem image from the command line
+}
+
+void HAL_event_poll() {
+    static char c;
+    c = gfx_getKey(); // returns 0 if no key pressed, 1,2,3 for mouse buttons, or ascii code of keyboard character
+    switch (c) {
+        case 'a': // "left"
+            break;
+        case 'd': // "right"
+            break;
+        case 'k': // "a"
+            break;
+        case 'l': // "b"
+            break;
+        case ' ': // "click"
+            s_clicked = 1;
+            break;
+    }
+}
+
+void HAL_sleep() {
+    usleep(10000); // pause for number of milliseconds before repeating
+}
+
+void init() {
+    HAL_init();
+
     Graphics_setForegroundColor(&g_sContext, ClrWhite);
     Graphics_setBackgroundColor(&g_sContext, ClrBlack);
     Graphics_setFont(&g_sContext, &g_sFontFixed6x8);
     Graphics_clearDisplay(&g_sContext);
 
-    char c;
-    uint8_t s_clicked = 0;
-    // Open a new window for drawing.
-    // TODO: Prevent resizing
+    // TODO: load the local starting stage
+}
 
-    // TODO: Load the binary file cart image from the command line
-    // TODO: Load the binary file local mem image from the command line
-
+int main() {
+    init();
     // TODO: Load the starting animation
     while (1) {
         // Perform the current animation step
-        // Perform polling for other event sources
-
+        // TODO
         Graphics_drawImage(&g_sContext, &fingerprint_1BPP_UNCOMP, 0, 0);
         Graphics_drawString(&g_sContext, "Hello, world!", -1, 0, 96, false);
 
-        // Check if a key is pressed
-        // TODO: Poll the keys themselves instead
-        c = gfx_getKey(); // returns 0 if no key pressed, 1,2,3 for mouse buttons, or ascii code of keyboard character
-        switch (c) {
-            case 'a': // "left"
-                break;
-            case 'd': // "right"
-                break;
-            case 'k': // "a"
-                break;
-            case 'l': // "b"
-                break;
-            case ' ': // "click"
-                s_clicked = 1;
-                break;
-        }
+        // Perform polling for other event sources
+        HAL_event_poll();
 
-        // Handle events:
+        ////////// Handle events //////////
         // Animation done
         // Button pressed (A, B, left, right, click)
         if (s_clicked) {
@@ -160,6 +227,12 @@ int main() {
             s_clicked = 0;
         }
 
-        usleep(10000); // pause for number of milliseconds before repeating
+        if (s_anim_done) {
+            // Handle the animation done event.
+            // TODO: implement
+            s_anim_done = 0;
+        }
+
+        HAL_sleep();
     }
 }
