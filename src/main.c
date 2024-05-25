@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #include "gfx.h"
 #include "grlib.h"
@@ -10,9 +11,8 @@ Graphics_Context g_sContext;
 #define SCREEN_W 128
 #define SCREEN_H 128
 
-static const unsigned long palette_bw[] = {0x000000, 0xffffff};
-
-static const unsigned long palette_wb[] = {0xffffff, 0x000000};
+const uint32_t palette_bw[] = {0x000000, 0xffffff};
+const uint32_t palette_wb[] = {0xffffff, 0x000000};
 
 static const uint8_t pixel_fingerprint_1BPP_UNCOMP[] = {
     0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b11111111,
@@ -101,7 +101,7 @@ static const uint8_t pixel_fingerprint_1BPP_UNCOMP[] = {
     0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b11111111,
 };
 
-const tImage fingerprint_1BPP_UNCOMP = {
+const Graphics_Image fingerprint_1BPP_UNCOMP = {
     IMAGE_FMT_1BPP_UNCOMP,
     64,
     94,
@@ -113,12 +113,10 @@ const tImage fingerprint_1BPP_UNCOMP = {
 int main() {
     gfx_driver_init("Gamequeer");
     Graphics_initContext(&g_sContext, &g_gfx);
-    Graphics_setForegroundColor(&g_sContext, ClrBlack);
-    Graphics_setBackgroundColor(&g_sContext, ClrWhite);
+    Graphics_setForegroundColor(&g_sContext, ClrWhite);
+    Graphics_setBackgroundColor(&g_sContext, ClrBlack);
     Graphics_setFont(&g_sContext, &g_sFontFixed6x8);
     Graphics_clearDisplay(&g_sContext);
-
-    Graphics_drawImage(&g_sContext, &fingerprint_1BPP_UNCOMP, 0, 0);
 
     char c;
     uint8_t s_clicked = 0;
@@ -132,6 +130,9 @@ int main() {
     while (1) {
         // Perform the current animation step
         // Perform polling for other event sources
+
+        Graphics_drawImage(&g_sContext, &fingerprint_1BPP_UNCOMP, 0, 0);
+        Graphics_drawString(&g_sContext, "Hello, world!", -1, 0, 96, false);
 
         // Check if a key is pressed
         // TODO: Poll the keys themselves instead

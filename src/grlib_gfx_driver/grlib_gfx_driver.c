@@ -26,7 +26,7 @@ static void gfx_driver_pixelDrawMultiple(
     int16_t bPP,
     const uint8_t *data,
     const uint32_t *palette) {
-    // NB: Supports 1BPP only, so palette is unused.
+    // NB: Supports 1BPP only
 
     uint16_t image_data_byte;
 
@@ -35,6 +35,7 @@ static void gfx_driver_pixelDrawMultiple(
         for (; (x0 < 8 && count); x0++, count--) {
             volatile uint16_t val;
             val = (image_data_byte >> (8 - x0 - 1)) & 1;
+            val = palette[val];
             gfx_driver_pixelDraw(displayData, x, y, val);
             x++;
         }

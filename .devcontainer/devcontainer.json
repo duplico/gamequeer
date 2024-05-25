@@ -3,7 +3,6 @@
     "build": {
       "dockerfile": "../builder.Dockerfile"
     },
-    "runArgs": ["--platform=linux/amd64"],
     "customizations": {
       "vscode": {
         "settings": {
