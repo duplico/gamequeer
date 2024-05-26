@@ -9,6 +9,11 @@ persistent {
 
 animations {
     flag <- "flag.gif";
+    
+    flag_slow <- "flag.gif" {
+        dithering := "heckbert";
+        frame_rate = 5;
+    }
 }
 
 lightcues {
@@ -16,12 +21,12 @@ lightcues {
 }
 
 menus {
-    menu restart {
+    restart {
         1: "Yes";
         0: "Also yes";
     }
 
-    menu OkCancel {
+    OkCancel {
         1: "OK";
         0: "Cancel";
     }
