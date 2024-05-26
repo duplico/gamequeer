@@ -68,5 +68,10 @@ RUN gem install ceedling
 ENV RUBYOPT "-KU -E utf-8:utf-8"
 
 # Python dependencies
+
+RUN apt-get update --fix-missing && apt-get -y upgrade && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt /builder/mnt/
 RUN pip install --upgrade pip && pip install --requirement /builder/mnt/requirements.txt
