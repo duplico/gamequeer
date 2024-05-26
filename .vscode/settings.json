@@ -9,5 +9,6 @@
     "cmake.configureOnOpen": true,
     "files.associations": {
       "stdbool.h": "c"
-    }
+    },
+    "cmake.sourceDirectory": "/workspaces/gamequeer/gamequeer"
 }
