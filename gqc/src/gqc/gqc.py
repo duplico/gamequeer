@@ -4,7 +4,7 @@ import click
 import gqc.parser
 import gqc.anim
 
-DITHER_CHOICES = ('none', 'bayer', 'heckbert', 'floyd_steinberg', 'sierra2', 'sierra2_4a', 'sierra3', 'burkes', 'atkinson')
+DITHER_CHOICES = ('none', 'bayer', 'heckbert', 'floyd_steinberg', 'sierra2', 'sierra2_4a')
 
 @click.group()
 def gqc_cli():
