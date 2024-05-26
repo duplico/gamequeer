@@ -156,8 +156,7 @@ uint8_t write_byte(t_gq_pointer ptr, uint8_t value) {
 }
 
 uint8_t gq_memcpy(t_gq_pointer dest, t_gq_pointer src, uint32_t size) {
-    uint32_t i;
-    for (i = 0; i < size; i++) {
+    for (t_gq_pointer i = 0; i < size; i++) {
         if (!write_byte(dest + i, read_byte(src + i))) {
             return 0;
         }
@@ -208,6 +207,7 @@ void init() {
 
 int main() {
     init();
+    // TODO: Add the LEDs
     // TODO: Load the starting animation
     while (1) {
         // Perform the current animation step
@@ -220,17 +220,16 @@ int main() {
 
         ////////// Handle events //////////
         // Animation done
+        if (s_anim_done) {
+            // Handle the animation done event.
+            // TODO: implement
+            s_anim_done = 0;
+        }
         // Button pressed (A, B, left, right, click)
         if (s_clicked) {
             // Handle the click; quit the game.
             exit(0);
             s_clicked = 0;
-        }
-
-        if (s_anim_done) {
-            // Handle the animation done event.
-            // TODO: implement
-            s_anim_done = 0;
         }
 
         HAL_sleep();
