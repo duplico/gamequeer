@@ -1,0 +1,68 @@
+{
+    "name": "gq-game-language",
+    "description": "Game definition language for the GameQueer fantasy console",
+    "version": "0.0.1",
+    "files": [
+        "out",
+        "src"
+    ],
+    "type": "module",
+    "scripts": {
+        "build": "tsc -b tsconfig.json && node esbuild.mjs",
+        "watch": "concurrently -n tsc,esbuild -c blue,yellow \"tsc -b tsconfig.json --watch\" \"node esbuild.mjs --watch\"",
+        "lint": "eslint src --ext ts",
+        "langium:generate": "langium generate",
+        "langium:watch": "langium generate --watch",
+        "vscode:prepublish": "npm run esbuild-base -- --minify && npm run lint",
+        "esbuild-base": "esbuild ./src/extension/main.ts --bundle --outfile=out/main.js --external:vscode --format=cjs --platform=node"
+    },
+    "dependencies": {
+        "langium": "~3.0.0",
+        "vscode-languageclient": "~9.0.1",
+        "vscode-languageserver": "~9.0.1"
+    },
+    "devDependencies": {
+        "@types/node": "^18.0.0",
+        "@types/vscode": "~1.67.0",
+        "@typescript-eslint/eslint-plugin": "~6.4.1",
+        "@typescript-eslint/parser": "~6.4.1",
+        "concurrently": "~8.2.1",
+        "esbuild": "^0.19.12",
+        "eslint": "~8.47.0",
+        "langium-cli": "~3.0.0",
+        "typescript": "~5.1.6"
+    },
+    "displayName": "gq-game-language",
+    "engines": {
+        "vscode": "^1.67.0"
+    },
+    "categories": [
+        "Programming Languages"
+    ],
+    "contributes": {
+        "languages": [
+            {
+                "id": "game-queer-game-language",
+                "aliases": [
+                    "GameQueer Game Language",
+                    "game-queer-game-language"
+                ],
+                "extensions": [
+                    ".gq"
+                ],
+                "configuration": "./language-configuration.json"
+            }
+        ],
+        "grammars": [
+            {
+                "language": "game-queer-game-language",
+                "scopeName": "source.game-queer-game-language",
+                "path": "syntaxes/game-queer-game-language.tmLanguage.json"
+            }
+        ]
+    },
+    "activationEvents": [
+        "onLanguage:game-queer-game-language"
+    ],
+    "main": "./out/extension/main.cjs"
+}

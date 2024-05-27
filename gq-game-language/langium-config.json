@@ -1,0 +1,12 @@
+{
+    "projectName": "GameQueerGameLanguage",
+    "languages": [{
+        "id": "game-queer-game-language",
+        "grammar": "src/language/game-queer-game-language.langium",
+        "fileExtensions": [".gq"],
+        "textMate": {
+            "out": "syntaxes/game-queer-game-language.tmLanguage.json"
+        }
+    }],
+    "out": "src/language/generated"
+}

@@ -8,3 +8,5 @@ nvm install 20
 
 # For Langium:
 # npm i -g yo generator-langium
+# npm i --save-dev esbuild
+# npm install -g @vscode/vsce
