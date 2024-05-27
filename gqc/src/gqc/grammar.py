@@ -1,6 +1,7 @@
 import pyparsing as pp
 
 from gqc.parser import parse_variable_definition, parse_variable_definition_storageclass
+from gqc.parser import parse_animation_definition
 
 """
 Grammar for GQC language
@@ -63,9 +64,10 @@ def build_game_parser():
     int_definition = pp.Group(int_type - identifier - pp.Suppress("=") - integer - pp.Suppress(";"))
     string_definition = pp.Group(str_type - identifier - pp.Suppress(":=") - string - pp.Suppress(";"))
     var_definition = int_definition | string_definition
-    var_definition.set_parse_action(parse_variable_definition)
     var_definitions = var_definition | pp.Suppress("{") - pp.ZeroOrMore(var_definition) - pp.Suppress("}")
     var_definition_section = pp.Group((pp.Keyword("volatile") | pp.Keyword("persistent")) - pp.Group(var_definitions))
+
+    var_definition.set_parse_action(parse_variable_definition)
     var_definition_section.set_parse_action(parse_variable_definition_storageclass)
 
     # File assignments for animations and lightcues
@@ -79,6 +81,8 @@ def build_game_parser():
     animation_assignment = pp.Group(identifier - pp.Suppress("<-") - file_source - animation_options)
     animation_assignments = pp.Group(animation_assignment | pp.Suppress("{") - pp.ZeroOrMore(animation_assignment) - pp.Suppress("}"))
     animation_definition_section = pp.Group(pp.Keyword("animations") - animation_assignments)
+
+    animation_assignment.set_parse_action(parse_animation_definition)
 
     # Light cue sections
     lightcue_definition_section = pp.Group(pp.Keyword("lightcues") - file_assignments)

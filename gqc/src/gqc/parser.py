@@ -2,6 +2,8 @@ from dataclasses import dataclass
 
 import pyparsing as pp
 
+from gqc import anim
+
 class GqcParseError(Exception):
     def __init__(self, message, s, loc):
         # TODO: Show the actual line
@@ -20,6 +22,10 @@ class Animation:
 
         if name in Animation.anim_table:
             raise ValueError("Animation {} already defined".format(name))
+        Animation.anim_table[name] = self
+    
+    def __repr__(self) -> str:
+        return f"Animation({self.name}, {self.source}, {self.frame_rate}, {repr(self.dithering)})"
 
 class Variable:
     var_table = {}
@@ -56,6 +62,33 @@ class Variable:
         self.storageclass = storageclass
         Variable.link_table[storageclass][self.name] = self
 
+def parse_animation_definition(instring, loc, toks):
+    toks = toks[0]
+
+    name = toks[0]
+    source = toks[1]
+
+    frame_rate = None
+    dithering = None
+
+    kwargs = dict()
+
+    if toks[2]:
+        for opt in toks[2]:
+            if opt[0] == "frame_rate":
+                if frame_rate in kwargs:
+                    raise GqcParseError(f"Duplicate frame_rate for animation {name}", instring, loc)
+                kwargs['frame_rate'] = opt[1]
+            elif opt[0] == "dithering":
+                if dithering in kwargs:
+                    raise GqcParseError(f"Duplicate dithering for animation {name}", instring, loc)
+                kwargs["dithering"] = opt[1]
+
+    try:
+        return Animation(name, source, **kwargs)
+    except ValueError as ve:
+        raise GqcParseError(str(ve), instring, loc)
+
 def parse_variable_definition(instring, loc, toks):
     toks = toks[0]
 
@@ -91,6 +124,8 @@ def parse(text):
     gqc_game = grammar.build_game_parser()
     try:
         parsed = gqc_game.parse_file(text, parseAll=True)
+        print(Variable.var_table)
+        print(Animation.anim_table)
         return parsed
     except pp.ParseBaseException as pe:
         print(pe.explain())
