@@ -75,3 +75,8 @@ RUN apt-get update --fix-missing && apt-get -y upgrade && apt-get install -y --n
 
 COPY requirements.txt /builder/mnt/
 RUN pip install --upgrade pip && pip install --requirement /builder/mnt/requirements.txt
+
+# Node stuff for langium:
+COPY gq-game-language/install-langium-deps.sh /builder/mnt/gq-game-language/
+RUN chmod +x /builder/mnt/gq-game-language/install-langium-deps.sh
+RUN /builder/mnt/gq-game-language/install-langium-deps.sh
