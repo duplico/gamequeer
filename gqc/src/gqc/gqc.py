@@ -23,7 +23,13 @@ def mkanim(out_path : pathlib.Path, src_path : pathlib.Path, dither : str, frame
 def compile(input):
     # Parse the game file
     parsed = gqc.parser.parse(input)
+
+    # TODO: next step, not just printing
     parsed.pprint()
+
+    # TODO: animation processing
+
+    # TODO: lightcue processing
 
     # TODO: Code generation
 

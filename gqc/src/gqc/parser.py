@@ -10,6 +10,22 @@ class GqcParseError(Exception):
         message = f"Error at line {pp.lineno(loc, s)}, column {pp.col(loc, s)}: {message}"
         super().__init__(message)
 
+class Stage:
+    stage_table = {}
+
+    def __init__(self, name):
+        self.name = name
+        self.bganim = None
+        self.menu = None
+        self.events = []
+
+        if name in Stage.stage_table:
+            raise ValueError(f"Stage {name} already defined")
+        Stage.stage_table[name] = self
+
+    def __repr__(self) -> str:
+        return f"Stage({self.name})"
+
 class Animation:
     anim_table = {}
     link_table = None
@@ -124,8 +140,6 @@ def parse(text):
     gqc_game = grammar.build_game_parser()
     try:
         parsed = gqc_game.parse_file(text, parseAll=True)
-        print(Variable.var_table)
-        print(Animation.anim_table)
         return parsed
     except pp.ParseBaseException as pe:
         print(pe.explain())

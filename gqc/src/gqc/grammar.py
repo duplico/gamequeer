@@ -7,8 +7,9 @@ from gqc.parser import parse_animation_definition
 Grammar for GQC language
 ========================
 
-program = declaration_section*
-declaration_section = var_definition_section | animation_definition_section | lightcue_definition_section | menu_definition_section | stage_definition_section
+program = declaration_section* stage_section*
+declaration_section = var_definition_section | animation_definition_section | lightcue_definition_section | menu_definition_section
+stage_section = stage_definition_section
 
 var_definition_section = ("volatile" | "persistent") var_definitions
 var_definitions = var_definition | "{" var_definition* "}"
@@ -47,6 +48,8 @@ event_statement = play | gostage
 play = "play" "bganim" identifier ";"
 gostage = "gostage" identifier ";"
 """
+
+# TODO: Add an event type for lighting cue completion
 
 def build_game_parser():
     # Define the grammar
@@ -115,7 +118,7 @@ def build_game_parser():
     stage_definition_section = pp.Group(pp.Keyword("stage") - identifier - stage_options)
 
     # # Finish up
-    gqc_game << pp.ZeroOrMore(animation_definition_section | lightcue_definition_section | var_definition_section | menu_definition_section | stage_definition_section)
+    gqc_game << pp.ZeroOrMore(animation_definition_section | lightcue_definition_section | var_definition_section | menu_definition_section) - pp.ZeroOrMore(stage_definition_section)
     gqc_game.ignore(pp.cppStyleComment)
 
     return gqc_game

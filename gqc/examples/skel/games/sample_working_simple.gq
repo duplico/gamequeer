@@ -1,0 +1,20 @@
+animations {
+    taylor <- "default.mp4";
+    /*
+    {
+        dithering := "heckbert";
+        frame_rate = 25;
+    }
+    */
+}
+
+// The name `start` is a keyword for the starting stage.
+stage start {
+    bganim taylor;
+
+/*
+    event bgdone {
+        play bganim taylor;
+    }
+*/
+}
