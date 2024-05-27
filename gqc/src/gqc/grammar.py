@@ -1,4 +1,7 @@
 import pyparsing as pp
+
+from gqc.parser import parse_variable_definition, parse_variable_definition_storageclass
+
 """
 Grammar for GQC language
 ========================
@@ -44,66 +47,71 @@ play = "play" "bganim" identifier ";"
 gostage = "gostage" identifier ";"
 """
 
-# Define the grammar
-gqc_game = pp.Forward()
+def build_game_parser():
+    # Define the grammar
+    gqc_game = pp.Forward()
 
-# Basic tokens
-identifier = pp.Word(pp.alphas, pp.alphanums + "_").setName("identifier")
-string = pp.QuotedString('"').setName("string")
-integer = pp.Word(pp.nums).setName("integer").setParseAction(lambda t: int(t[0]))
+    # Basic tokens
+    identifier = pp.Word(pp.alphas, pp.alphanums + "_").set_name("identifier")
+    string = pp.QuotedString('"').setName("string")
+    integer = pp.Word(pp.nums).setName("integer").set_parse_action(lambda t: int(t[0]))
 
-int_type = pp.Keyword("int").setName("int")
-str_type = pp.Keyword("str").setName("str")
+    int_type = pp.Keyword("int").setName("int")
+    str_type = pp.Keyword("str").setName("str")
 
-# Variable sections
-int_definition = pp.Group(int_type - identifier - pp.Suppress("=") - integer - pp.Suppress(";"))
-string_definition = pp.Group(str_type - identifier - pp.Suppress(":=") - string - pp.Suppress(";"))
-var_definition = int_definition | string_definition
-var_definitions = var_definition | pp.Suppress("{") - pp.ZeroOrMore(var_definition) - pp.Suppress("}")
-var_definition_section = pp.Group((pp.Keyword("volatile") | pp.Keyword("persistent")) - pp.Group(var_definitions))
+    # Variable sections
+    int_definition = pp.Group(int_type - identifier - pp.Suppress("=") - integer - pp.Suppress(";"))
+    string_definition = pp.Group(str_type - identifier - pp.Suppress(":=") - string - pp.Suppress(";"))
+    var_definition = int_definition | string_definition
+    var_definition.set_parse_action(parse_variable_definition)
+    var_definitions = var_definition | pp.Suppress("{") - pp.ZeroOrMore(var_definition) - pp.Suppress("}")
+    var_definition_section = pp.Group((pp.Keyword("volatile") | pp.Keyword("persistent")) - pp.Group(var_definitions))
+    var_definition_section.set_parse_action(parse_variable_definition_storageclass)
 
-# File assignments for animations and lightcues
-file_source = string
-file_assignment = pp.Group(identifier - pp.Suppress("<-") - file_source - pp.Suppress(";"))
-file_assignments = pp.Group(file_assignment | pp.Suppress("{") - pp.ZeroOrMore(file_assignment) - pp.Suppress("}"))
+    # File assignments for animations and lightcues
+    file_source = string
+    file_assignment = pp.Group(identifier - pp.Suppress("<-") - file_source - pp.Suppress(";"))
+    file_assignments = pp.Group(file_assignment | pp.Suppress("{") - pp.ZeroOrMore(file_assignment) - pp.Suppress("}"))
 
-# Animation sections
-animation_option = pp.Group(pp.Keyword("frame_rate") - pp.Suppress("=") - integer - pp.Suppress(";") | pp.Keyword("dithering") - pp.Suppress(":=") - string - pp.Suppress(";"))
-animation_options = pp.Group(pp.Suppress(";") | animation_option | pp.Suppress("{") - pp.ZeroOrMore(animation_option) - pp.Suppress("}"))
-animation_assignment = pp.Group(identifier - pp.Suppress("<-") - file_source - animation_options)
-animation_assignments = pp.Group(animation_assignment | pp.Suppress("{") - pp.ZeroOrMore(animation_assignment) - pp.Suppress("}"))
-animation_definition_section = pp.Group(pp.Keyword("animations") - animation_assignments)
+    # Animation sections
+    animation_option = pp.Group(pp.Keyword("frame_rate") - pp.Suppress("=") - integer - pp.Suppress(";") | pp.Keyword("dithering") - pp.Suppress(":=") - string - pp.Suppress(";"))
+    animation_options = pp.Group(pp.Suppress(";") | animation_option | pp.Suppress("{") - pp.ZeroOrMore(animation_option) - pp.Suppress("}"))
+    animation_assignment = pp.Group(identifier - pp.Suppress("<-") - file_source - animation_options)
+    animation_assignments = pp.Group(animation_assignment | pp.Suppress("{") - pp.ZeroOrMore(animation_assignment) - pp.Suppress("}"))
+    animation_definition_section = pp.Group(pp.Keyword("animations") - animation_assignments)
 
-# Light cue sections
-lightcue_definition_section = pp.Group(pp.Keyword("lightcues") - file_assignments)
+    # Light cue sections
+    lightcue_definition_section = pp.Group(pp.Keyword("lightcues") - file_assignments)
 
-# # Menu sections
-menu_option = pp.Group(integer - pp.Suppress(":") - string - pp.Suppress(";"))
-menu_options = pp.Group(menu_option | pp.Suppress("{") - pp.ZeroOrMore(menu_option) - pp.Suppress("}"))
-menu_definition = pp.Group(identifier - menu_options)
-menu_definitions = pp.Group(menu_definition | pp.Suppress("{") - pp.ZeroOrMore(menu_definition) - pp.Suppress("}"))
-menu_definition_section = pp.Group(pp.Keyword("menus") - menu_definitions)
+    # # Menu sections
+    menu_option = pp.Group(integer - pp.Suppress(":") - string - pp.Suppress(";"))
+    menu_options = pp.Group(menu_option | pp.Suppress("{") - pp.ZeroOrMore(menu_option) - pp.Suppress("}"))
+    menu_definition = pp.Group(identifier - menu_options)
+    menu_definitions = pp.Group(menu_definition | pp.Suppress("{") - pp.ZeroOrMore(menu_definition) - pp.Suppress("}"))
+    menu_definition_section = pp.Group(pp.Keyword("menus") - menu_definitions)
 
-# ### Stage sections ###
-# # Commands
-play = pp.Group(pp.Keyword("play") - pp.Keyword("bganim") - identifier - pp.Suppress(";"))
-gostage = pp.Group(pp.Keyword("gostage") - identifier - pp.Suppress(";"))
+    # ### Stage sections ###
+    # # Commands
+    play = pp.Group(pp.Keyword("play") - pp.Keyword("bganim") - identifier - pp.Suppress(";"))
+    gostage = pp.Group(pp.Keyword("gostage") - identifier - pp.Suppress(";"))
 
-event_statement = play | gostage
-event_statements = pp.Group(event_statement | pp.Suppress("{") - pp.ZeroOrMore(event_statement) - pp.Suppress("}"))
+    event_statement = play | gostage
+    event_statements = pp.Group(event_statement | pp.Suppress("{") - pp.ZeroOrMore(event_statement) - pp.Suppress("}"))
 
-# # Event types
-event_input_button = pp.Keyword("A") | pp.Keyword("B") | pp.Keyword("<-") | pp.Keyword("->")
-event_type = pp.Keyword("input") - pp.Suppress("(") - event_input_button - pp.Suppress(")") | pp.Keyword("bgdone") | pp.Keyword("menu")
+    # # Event types
+    event_input_button = pp.Keyword("A") | pp.Keyword("B") | pp.Keyword("<-") | pp.Keyword("->")
+    event_type = pp.Keyword("input") - pp.Suppress("(") - event_input_button - pp.Suppress(")") | pp.Keyword("bgdone") | pp.Keyword("menu")
 
-# # General stage definition and options
-stage_bganim = pp.Group(pp.Keyword("bganim") - identifier - pp.Suppress(";"))
-stage_menu = pp.Group(pp.Keyword("menu") - identifier - pp.Suppress(";") | pp.Keyword("menu") - identifier - pp.Keyword("prompt") - string - pp.Suppress(";"))
-stage_event = pp.Group(pp.Keyword("event") - event_type - event_statements)
-stage_option = stage_bganim | stage_menu | stage_event
-stage_options = pp.Group(stage_option | pp.Suppress("{") - pp.ZeroOrMore(stage_option) - pp.Suppress("}"))
-stage_definition_section = pp.Group(pp.Keyword("stage") - identifier - stage_options)
+    # # General stage definition and options
+    stage_bganim = pp.Group(pp.Keyword("bganim") - identifier - pp.Suppress(";"))
+    stage_menu = pp.Group(pp.Keyword("menu") - identifier - pp.Suppress(";") | pp.Keyword("menu") - identifier - pp.Keyword("prompt") - string - pp.Suppress(";"))
+    stage_event = pp.Group(pp.Keyword("event") - event_type - event_statements)
+    stage_option = stage_bganim | stage_menu | stage_event
+    stage_options = pp.Group(stage_option | pp.Suppress("{") - pp.ZeroOrMore(stage_option) - pp.Suppress("}"))
+    stage_definition_section = pp.Group(pp.Keyword("stage") - identifier - stage_options)
 
-# # Finish up
-gqc_game << pp.ZeroOrMore(animation_definition_section | lightcue_definition_section | var_definition_section | menu_definition_section | stage_definition_section)
-gqc_game.ignore(pp.cppStyleComment)
+    # # Finish up
+    gqc_game << pp.ZeroOrMore(animation_definition_section | lightcue_definition_section | var_definition_section | menu_definition_section | stage_definition_section)
+    gqc_game.ignore(pp.cppStyleComment)
+
+    return gqc_game
