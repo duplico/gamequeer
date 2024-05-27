@@ -2,11 +2,24 @@ from dataclasses import dataclass
 
 import pyparsing as pp
 
-class Animation:
-    pass
+class GqcParseError(Exception):
+    def __init__(self, message, s, loc):
+        # TODO: Show the actual line
+        message = f"Error at line {pp.lineno(loc, s)}, column {pp.col(loc, s)}: {message}"
+        super().__init__(message)
 
-class AnimationTable:
-    pass
+class Animation:
+    anim_table = {}
+    link_table = None
+    
+    def __init__(self, name, source, frame_rate=None, dithering=None):
+        self.name = name
+        self.source = source
+        self.frame_rate = frame_rate
+        self.dithering = dithering
+
+        if name in Animation.anim_table:
+            raise ValueError("Animation {} already defined".format(name))
 
 class Variable:
     var_table = {}
@@ -21,40 +34,49 @@ class Variable:
         self.storageclass = None
 
         if name in Variable.var_table:
-            # TODO: parse error?
-            raise ValueError("Variable {} already defined".format(name))
+            raise ValueError(f"Duplicate definition of {name}")
+        Variable.var_table[name] = self
 
         self.addr = None # Set at link time
 
     def __str__(self) -> str:
-        return "<{} {} {} = {}>@{}".format(self.storageclass if self.storageclass else 'unlinked', self.datatype, self.name, self.value, self.addr)
+        return "<{} {} {} = {}>@{}".format(
+            self.storageclass if self.storageclass else 'unlinked', 
+            self.datatype, 
+            self.name, 
+            self.value, 
+            self.addr
+        )
     
     def __repr__(self) -> str:
-        return "<{} {} {} = {}>@{}".format(self.storageclass if self.storageclass else 'unlinked', self.datatype, self.name, self.value, self.addr)
+        return f"Variable({self.datatype}, {self.name}, {self.value})"
 
     def set_storageclass(self, storageclass):
         assert storageclass in ["volatile", "persistent"]
         self.storageclass = storageclass
         Variable.link_table[storageclass][self.name] = self
 
-def parse_variable_definition(toks):
+def parse_variable_definition(instring, loc, toks):
     toks = toks[0]
 
     datatype = toks[0]
     name = toks[1]
     value = toks[2]
-    return Variable(datatype, name, value)
+    try:
+        return Variable(datatype, name, value)
+    except ValueError as ve:
+        raise GqcParseError(str(ve), instring, loc)
 
-def parse_variable_definition_storageclass(toks):
+def parse_variable_definition_storageclass(instring, loc, toks):
     toks = toks[0]
     storageclass = toks[0]
 
-    # TODO: Parse errors?
+    # TODO: Is this needed?
     if storageclass not in ["volatile", "persistent"]:
-        raise ValueError("Invalid storage class: {}".format(storageclass))
+        raise GqcParseError(f"Invalid storage class: {storageclass}", instring, loc)
     
     if Variable.link_table[storageclass]:
-        raise ValueError("Storage class {} already defined".format(storageclass))
+        raise GqcParseError(f"Storage class {storageclass} already defined", instring, loc)
     
     for var in toks[1]:
         var.set_storageclass(storageclass)
@@ -73,4 +95,7 @@ def parse(text):
     except pp.ParseBaseException as pe:
         print(pe.explain())
         print("column: {}".format(pe.column))
+        exit(1)
+    except GqcParseError as ge:
+        print(ge)
         exit(1)

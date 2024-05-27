@@ -1,0 +1,48 @@
+volatile {
+    int badge_id = 0;
+}
+
+persistent {
+    str title := "Sample";
+    int badges_seen = 0;
+    str badge_id := "123";
+}
+
+animations {
+    flag <- "flag.gif";
+    
+    flag_slow <- "flag.gif" {
+        dithering := "heckbert";
+        frame_rate = 5;
+    }
+}
+
+lightcues {
+    rainbow <- "rainbow.gqcue";
+}
+
+menus {
+    restart {
+        1: "Yes";
+        0: "Also yes";
+    }
+
+    OkCancel {
+        1: "OK";
+        0: "Cancel";
+    }
+}
+
+// The name `start` is a keyword for the starting stage.
+stage start {
+    bganim flag;
+    menu none;
+
+    event bgdone {
+        play bganim flag;
+    }
+
+    event input(A) {
+        gostage exit;
+    }
+}
