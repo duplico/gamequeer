@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 import pyparsing as pp
 
-from gqc import anim
+from . import anim
 
 class GqcParseError(Exception):
     def __init__(self, message, s, loc):

@@ -1,7 +1,7 @@
 import pyparsing as pp
 
-from gqc.parser import parse_variable_definition, parse_variable_definition_storageclass
-from gqc.parser import parse_animation_definition
+from .parser import parse_variable_definition, parse_variable_definition_storageclass
+from .parser import parse_animation_definition
 
 """
 Grammar for GQC language

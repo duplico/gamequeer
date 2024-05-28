@@ -5,6 +5,7 @@ animations {
         dithering := "heckbert";
         frame_rate = 25;
     }
+    // test
     */
 }
 
