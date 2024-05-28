@@ -1,0 +1,10 @@
+game {
+    id = 0;
+    title := "Path failure";
+    author := "duplico";
+}
+
+animations {
+    failure <- "filedoesntexist.mp4";
+}
+
