@@ -29,6 +29,8 @@ class Animation:
             raise ValueError("Animation {} already defined".format(name))
         Animation.anim_table[name] = self
 
+        print(f"Begin work on animation {name}")
+
         self.frames = []
         
         make_animation_kwargs = dict()
@@ -44,9 +46,14 @@ class Animation:
             **make_animation_kwargs
         )
 
+        print(f"Generating binary data", end='', flush=True)
+        
         # Load each frame into a GqImage object
         for frame_path in (Path() / 'build' / 'assets' / 'animations' / name).glob('frame*.bmp'):
             self.frames.append(GqImage(path=frame_path))
+            print(".", end='', flush=True)
+        print("done.")
+        print(f"Complete work on animation {name}")
     
     def __repr__(self) -> str:
         return f"Animation('{self.name}', '{self.source}', {repr(self.frame_rate)}, {repr(self.dithering)})"
@@ -158,6 +165,10 @@ def make_animation(anim_src_path : pathlib.Path, output_dir : pathlib.Path, dith
     for file in output_dir.glob('frame*.bmp'):
         file.unlink()
 
+    # Check whether the source file exists and raise a value error if it doesn't
+    if not anim_src_path.exists():
+        raise ValueError(f"Animation source file {anim_src_path} does not exist")
+
     # Load the source file
     in_file = ffmpeg.input(anim_src_path)
 
@@ -174,13 +185,18 @@ def make_animation(anim_src_path : pathlib.Path, output_dir : pathlib.Path, dith
     # Apply the desired framerate
     out = dithered.filter('fps', framerate)
 
-    # Write the output - summary gif
-    out_file = output_dir / 'anim.gif'
-    out.output(str(out_file)).run(overwrite_output=True)
-
-    # Write the output - frame files
-    out_file = output_dir / 'frame%04d.bmp'
-    out.output(str(out_file)).run(overwrite_output=True)
+    # Write the output - summary gif and frame files
+    out_file_summary = output_dir / 'anim.gif'
+    out_file_frames = output_dir / 'frame%04d.bmp'
+    
+    for out_file in [out_file_summary, out_file_frames]:
+        try:
+            print(f"Invoking ffmpeg {anim_src_path} -> {out_file}...", end='', flush=True)
+            out.output(str(out_file)).run(overwrite_output=True, quiet=True)
+            print("done.")
+        except ffmpeg._run.Error as e:
+            print()
+            raise ValueError(f"ffmpeg error; Raw output of ffmpeg follows: \n\n{e.stderr.decode()}")
 
 def convert_animations(assets_dir : pathlib.Path, build_dir : pathlib.Path):
     pass

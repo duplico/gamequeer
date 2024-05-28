@@ -104,7 +104,6 @@ class Variable:
         Variable.link_table[storageclass][self.name] = self
 
 def parse_game_definition(instring, loc, toks):
-    print(toks)
     toks = toks[0]
 
     # Note: if we're already here, the parser has already enforced that each of the key
