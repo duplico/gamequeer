@@ -1,3 +1,9 @@
+game {
+    id = 2;
+    title := "Broken Example";
+    author := "duplico";
+}
+
 volatile {
     int badge_id = 0;
 }

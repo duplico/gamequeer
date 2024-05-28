@@ -11,10 +11,22 @@ hidden terminal ML_COMMENT: /\/\*[\s\S]*?\*\//;
 hidden terminal SL_COMMENT: /\/\/[^\n\r]*/;
 
 entry Program:
-   DeclarationSection*;
+   GameDefinitionSection DeclarationSection*;
 
 DeclarationSection:
     VarDefinitionSection | AnimationDefinitionSection | LightcueDefinitionSection | MenuDefinitionSection | StageDefinition;
+
+// Game definition section
+GameIdAssignment:
+    'id' '=' id=INT ';';
+GameTitleAssignment:
+    'title' ':=' title=STRING ';';
+GameAuthorAssignment:
+    'title' ':=' title=STRING ';';
+GameAssignment:
+    GameIdAssignment | GameTitleAssignment | GameAuthorAssignment;
+GameDefinitionSection:
+    'game' '{' GameAssignment* '}';
 
 // Variable definition section
 IntDefinition: 

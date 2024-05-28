@@ -7,9 +7,14 @@ from .parser import parse_animation_definition, parse_stage_definition
 Grammar for GQC language
 ========================
 
-program = declaration_section* stage_section*
-declaration_section = var_definition_section | animation_definition_section | lightcue_definition_section | menu_definition_section
-stage_section = stage_definition_section
+program = game_definition_section declaration_section*
+declaration_section = var_definition_section | animation_definition_section | lightcue_definition_section | menu_definition_section | stage_definition_section
+
+game_definition_section = "game" "{" game_assignment* "}"
+game_id_assignment = "id" "=" integer ";"
+game_title_assignment = "title" ":=" string ";"
+game_author_assignment = "author" ":=" string ";"
+game_assignment = game_id_assignment | game_title_assignment | game_author_assignment
 
 var_definition_section = ("volatile" | "persistent") var_definitions
 var_definitions = var_definition | "{" var_definition* "}"
@@ -62,6 +67,13 @@ def build_game_parser():
 
     int_type = pp.Keyword("int").setName("int")
     str_type = pp.Keyword("str").setName("str")
+
+    # Game definition section
+    game_id_assignment = pp.Group(pp.Keyword("id") - pp.Suppress("=") - integer - pp.Suppress(";"))
+    game_title_assignment = pp.Group(pp.Keyword("title") - pp.Suppress(":=") - string - pp.Suppress(";"))
+    game_author_assignment = pp.Group(pp.Keyword("author") - pp.Suppress(":=") - string - pp.Suppress(";"))
+    game_assignment = game_id_assignment | game_title_assignment | game_author_assignment
+    game_definition_section = pp.Group(pp.Keyword("game") - pp.Suppress("{") - pp.ZeroOrMore(game_assignment) - pp.Suppress("}"))
 
     # Variable sections
     int_definition = pp.Group(int_type - identifier - pp.Suppress("=") - integer - pp.Suppress(";"))
@@ -120,7 +132,7 @@ def build_game_parser():
     stage_definition_section.set_parse_action(parse_stage_definition)
 
     # # Finish up
-    gqc_game << pp.ZeroOrMore(animation_definition_section | lightcue_definition_section | var_definition_section | menu_definition_section) - pp.ZeroOrMore(stage_definition_section)
+    gqc_game << game_definition_section - pp.ZeroOrMore(animation_definition_section | lightcue_definition_section | var_definition_section | menu_definition_section | stage_definition_section)
     gqc_game.ignore(pp.cppStyleComment)
 
     return gqc_game
