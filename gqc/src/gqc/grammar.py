@@ -1,7 +1,7 @@
 import pyparsing as pp
 
 from .parser import parse_variable_definition, parse_variable_definition_storageclass
-from .parser import parse_animation_definition
+from .parser import parse_animation_definition, parse_stage_definition
 
 """
 Grammar for GQC language
@@ -115,7 +115,9 @@ def build_game_parser():
     stage_event = pp.Group(pp.Keyword("event") - event_type - event_statements)
     stage_option = stage_bganim | stage_menu | stage_event
     stage_options = pp.Group(stage_option | pp.Suppress("{") - pp.ZeroOrMore(stage_option) - pp.Suppress("}"))
-    stage_definition_section = pp.Group(pp.Keyword("stage") - identifier - stage_options)
+    stage_definition_section = pp.Group(pp.Suppress("stage") - identifier - stage_options)
+
+    stage_definition_section.set_parse_action(parse_stage_definition)
 
     # # Finish up
     gqc_game << pp.ZeroOrMore(animation_definition_section | lightcue_definition_section | var_definition_section | menu_definition_section) - pp.ZeroOrMore(stage_definition_section)

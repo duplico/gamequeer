@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 import pyparsing as pp
 
-from . import anim
+from .anim import Animation
 
 class GqcParseError(Exception):
     def __init__(self, message, s, loc):
@@ -13,11 +13,9 @@ class GqcParseError(Exception):
 class Stage:
     stage_table = {}
 
-    def __init__(self, name):
+    # TODO: not : list, right? can't I make it an iterable or something?
+    def __init__(self, name : str, bganim : str = None, menu : str = None, event_statements : list = []):
         self.name = name
-        self.bganim = None
-        self.menu = None
-        self.events = []
 
         if name in Stage.stage_table:
             raise ValueError(f"Stage {name} already defined")
@@ -25,23 +23,6 @@ class Stage:
 
     def __repr__(self) -> str:
         return f"Stage({self.name})"
-
-class Animation:
-    anim_table = {}
-    link_table = None
-    
-    def __init__(self, name, source, frame_rate=None, dithering=None):
-        self.name = name
-        self.source = source
-        self.frame_rate = frame_rate
-        self.dithering = dithering
-
-        if name in Animation.anim_table:
-            raise ValueError("Animation {} already defined".format(name))
-        Animation.anim_table[name] = self
-    
-    def __repr__(self) -> str:
-        return f"Animation({self.name}, {self.source}, {self.frame_rate}, {repr(self.dithering)})"
 
 class Variable:
     var_table = {}
@@ -77,6 +58,25 @@ class Variable:
         assert storageclass in ["volatile", "persistent"]
         self.storageclass = storageclass
         Variable.link_table[storageclass][self.name] = self
+
+def parse_stage_definition(instring, loc, toks):
+    toks = toks[0]
+
+    name = toks[0]
+
+    stage_kwargs = dict(
+        event_statements = []
+    )
+
+    for stage_options in toks[1]:
+        if stage_options[0] == 'event':
+            stage_kwargs['event_statements'].append(stage_options[1])
+        elif stage_options[0] in stage_kwargs:
+            raise GqcParseError(f"Duplicate option {stage_options[0]} for stage {name}", instring, loc)
+        else:
+            stage_kwargs[stage_options[0]] = stage_options[1]
+
+    return Stage(name, **stage_kwargs)
 
 def parse_animation_definition(instring, loc, toks):
     toks = toks[0]
