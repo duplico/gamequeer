@@ -2,12 +2,16 @@ project_name=gamequeer
 BASE_DIR:=$(realpath $(shell dirname $(firstword $(MAKEFILE_LIST))))
 IMAGES:=$(shell docker images $(project_name)-builder -a -q)
 
-.PHONY: clean all builder-run gqc gamequeer gq-game-language
+.PHONY: clean-builder clean-code clean all builder-run builder-rebuild gqc gamequeer gq-game-language
 .DEFAULT_GOAL := all
 
 builder-build: builder.Dockerfile
 	docker build -f builder.Dockerfile -t $(project_name)-builder:latest .
 	@touch $@
+
+builder-rebuild: builder.Dockerfile
+	docker build --no-cache -f builder.Dockerfile -t $(project_name)-builder:latest .
+	@touch builder-build
 
 builder-run:
 	docker run \
@@ -48,7 +52,7 @@ gq-game-language/gq-game-language-0.0.1.vsix: builder-build
 		--workdir /builder/mnt \
 		-v .:/builder/mnt \
 		$(project_name)-builder:latest \
-		/bin/bash -c "cd gq-game-language && vsce package --allow-missing-repository"
+		/bin/bash -c "cd gq-game-language && npm run langium:generate && npm run build && vsce package --allow-missing-repository"
 
 ### Build targets in root build directory
 
@@ -80,16 +84,21 @@ gq-game-language: build/gq-game-language.vsix
 
 all: gqc gamequeer gq-game-language
 
-clean:
+clean-builder:
 ifeq ($(IMAGES),)
 	@echo "No images to remove"
 else
 	docker rmi $(IMAGES)
 endif
-	rm -f build/*
-	rm -f builder-build
-	rm -f gamequeer/build/gamequeer
-	rm -f gqc/dist/gqc-0.0.1.tar.gz
-	rm -f gqc/dist/gqc-0.0.1-py3-none-any.whl
-	rm -f gq-game-language/gq-game-language-0.0.1.vsix
 
+clean-code:
+	rm -rf build/
+	rm -f builder-build
+	rm -rf gamequeer/build/
+	rm -rf gqc/dist/
+	rm -f gq-game-language/gq-game-language-0.0.1.vsix
+	rm -rf gq-game-language/out/ gq-game-language/syntaxes/
+
+
+
+clean: clean-code clean-builder

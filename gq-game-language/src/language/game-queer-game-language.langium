@@ -3,6 +3,7 @@ grammar GameQueerGameLanguage
 hidden terminal WS: /\s+/;
 terminal ID: /[_a-zA-Z][\w_]*/;
 terminal INT returns number: /[0-9]+/;
+
 terminal STRING: /"(\\.|[^"\\])*"/;
 
 terminal INPUTBUTTON: '(A)' | '(B)' | '(<-)' | '(->)';
@@ -11,10 +12,22 @@ hidden terminal ML_COMMENT: /\/\*[\s\S]*?\*\//;
 hidden terminal SL_COMMENT: /\/\/[^\n\r]*/;
 
 entry Program:
-   DeclarationSection*;
+   GameDefinitionSection DeclarationSection*;
 
 DeclarationSection:
     VarDefinitionSection | AnimationDefinitionSection | LightcueDefinitionSection | MenuDefinitionSection | StageDefinition;
+
+// Game definition section
+GameIdAssignment:
+    'id' '=' id=INT ';';
+GameTitleAssignment:
+    'title' ':=' title=STRING ';';
+GameAuthorAssignment:
+    'author' ':=' title=STRING ';';
+GameAssignment:
+    GameIdAssignment | GameTitleAssignment | GameAuthorAssignment;
+GameDefinitionSection:
+    'game' '{' GameAssignment* '}';
 
 // Variable definition section
 IntDefinition: 

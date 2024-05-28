@@ -1,9 +1,14 @@
+game {
+    id = 2;
+    title := "Broken Example";
+    author := "duplico";
+}
+
 volatile {
     int badge_id = 0;
 }
 
 persistent {
-    str title := "Sample";
     int badges_seen = 0;
     str badge_id := "123";
 }
