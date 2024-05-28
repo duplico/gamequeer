@@ -2,7 +2,7 @@ project_name=gamequeer
 BASE_DIR:=$(realpath $(shell dirname $(firstword $(MAKEFILE_LIST))))
 IMAGES:=$(shell docker images $(project_name)-builder -a -q)
 
-.PHONY: clean all builder-run
+.PHONY: clean all builder-run gqc gamequeer gq-game-language
 .DEFAULT_GOAL := all
 
 builder-build: builder.Dockerfile
@@ -64,11 +64,21 @@ build/gqc-0.0.1-py3-none-any.whl: gqc/dist/gqc-0.0.1-py3-none-any.whl
 	mkdir -p build
 	cp $(BASE_DIR)/gqc/dist/gqc-0.0.1-py3-none-any.whl $@
 
-build/gq-game-language-0.0.1.vsix: gq-game-language/gq-game-language-0.0.1.vsix
+build/gq-game-language.vsix: gq-game-language/gq-game-language-0.0.1.vsix
 	mkdir -p build
 	cp $(BASE_DIR)/gq-game-language/gq-game-language-0.0.1.vsix $@
 
-all: build/gamequeer build/gqc-0.0.1.tar.gz build/gqc-0.0.1-py3-none-any.whl build/gq-game-language-0.0.1.vsix
+### Pseudo-targets for the toolchain:
+
+gqc: build/gqc-0.0.1.tar.gz build/gqc-0.0.1-py3-none-any.whl
+
+gamequeer: build/gamequeer
+
+gq-game-language: build/gq-game-language.vsix
+
+### Important meta targets
+
+all: gqc gamequeer gq-game-language
 
 clean:
 ifeq ($(IMAGES),)
@@ -76,3 +86,10 @@ ifeq ($(IMAGES),)
 else
 	docker rmi $(IMAGES)
 endif
+	rm -f build/*
+	rm -f builder-build
+	rm -f gamequeer/build/gamequeer
+	rm -f gqc/dist/gqc-0.0.1.tar.gz
+	rm -f gqc/dist/gqc-0.0.1-py3-none-any.whl
+	rm -f gq-game-language/gq-game-language-0.0.1.vsix
+
