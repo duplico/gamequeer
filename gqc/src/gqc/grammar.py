@@ -1,7 +1,7 @@
 import pyparsing as pp
 
 from .parser import parse_variable_definition, parse_variable_definition_storageclass
-from .parser import parse_animation_definition, parse_stage_definition
+from .parser import parse_animation_definition, parse_stage_definition, parse_game_definition
 
 """
 Grammar for GQC language
@@ -14,7 +14,7 @@ game_definition_section = "game" "{" game_assignment* "}"
 game_id_assignment = "id" "=" integer ";"
 game_title_assignment = "title" ":=" string ";"
 game_author_assignment = "author" ":=" string ";"
-game_assignment = game_id_assignment | game_title_assignment | game_author_assignment
+game_assignment = game_id_assignment | game_title_assignment | game_author_assignment # one of each, in any order
 
 var_definition_section = ("volatile" | "persistent") var_definitions
 var_definitions = var_definition | "{" var_definition* "}"
@@ -54,6 +54,8 @@ play = "play" "bganim" identifier ";"
 gostage = "gostage" identifier ";"
 """
 
+VAR_STRING_MAXLEN = 21
+
 # TODO: Add an event type for lighting cue completion
 
 def build_game_parser():
@@ -63,17 +65,19 @@ def build_game_parser():
     # Basic tokens
     identifier = pp.Word(pp.alphas, pp.alphanums + "_").set_name("identifier")
     string = pp.QuotedString('"').setName("string")
+    meta_string = pp.QuotedString('"', escChar='\\').setName("meta_string")
     integer = pp.Word(pp.nums).setName("integer").set_parse_action(lambda t: int(t[0]))
 
     int_type = pp.Keyword("int").setName("int")
     str_type = pp.Keyword("str").setName("str")
 
     # Game definition section
-    game_id_assignment = pp.Group(pp.Keyword("id") - pp.Suppress("=") - integer - pp.Suppress(";"))
-    game_title_assignment = pp.Group(pp.Keyword("title") - pp.Suppress(":=") - string - pp.Suppress(";"))
-    game_author_assignment = pp.Group(pp.Keyword("author") - pp.Suppress(":=") - string - pp.Suppress(";"))
-    game_assignment = game_id_assignment | game_title_assignment | game_author_assignment
-    game_definition_section = pp.Group(pp.Keyword("game") - pp.Suppress("{") - pp.ZeroOrMore(game_assignment) - pp.Suppress("}"))
+    game_id_assignment = pp.Group(pp.Keyword("id") - pp.Suppress("=") - integer - pp.Suppress(";")).set_name("id")
+    game_title_assignment = pp.Group(pp.Keyword("title") - pp.Suppress(":=") - string - pp.Suppress(";")).set_name("title")
+    game_author_assignment = pp.Group(pp.Keyword("author") - pp.Suppress(":=") - string - pp.Suppress(";")).set_name("author")
+    game_assignment = pp.Group(game_id_assignment & game_title_assignment & game_author_assignment)
+    game_definition_section = pp.Group(pp.Keyword("game") - pp.Suppress("{") - game_assignment - pp.Suppress("}"))
+    game_definition_section.set_parse_action(parse_game_definition)
 
     # Variable sections
     int_definition = pp.Group(int_type - identifier - pp.Suppress("=") - integer - pp.Suppress(";"))
@@ -86,7 +90,7 @@ def build_game_parser():
     var_definition_section.set_parse_action(parse_variable_definition_storageclass)
 
     # File assignments for animations and lightcues
-    file_source = string
+    file_source = meta_string
     file_assignment = pp.Group(identifier - pp.Suppress("<-") - file_source - pp.Suppress(";"))
     file_assignments = pp.Group(file_assignment | pp.Suppress("{") - pp.ZeroOrMore(file_assignment) - pp.Suppress("}"))
 
