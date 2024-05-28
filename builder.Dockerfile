@@ -80,3 +80,6 @@ RUN pip install --upgrade pip && pip install --requirement /builder/mnt/requirem
 COPY gq-game-language/install-langium-deps.sh /builder/mnt/gq-game-language/
 RUN chmod +x /builder/mnt/gq-game-language/install-langium-deps.sh
 RUN /builder/mnt/gq-game-language/install-langium-deps.sh
+
+# Put the dev python gqc module in the python path
+ENV PYTHONPATH $PYTHONPATH:/builder/mnt/gqc/src/:/workspaces/gamequeer/gqc/src/
