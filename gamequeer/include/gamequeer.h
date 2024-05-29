@@ -26,6 +26,7 @@ typedef struct gq_header {
     char title[GQ_STR_SIZE];      // Game title, null-terminated
     uint16_t anim_count;          // Number of animations
     uint16_t stage_count;         // Number of stages
+    t_gq_pointer starting_stage;  // Pointer to the starting stage
     uint16_t flags;               // TODO
     uint16_t crc16;               // CRC16 checksum of the header
 } gq_header;

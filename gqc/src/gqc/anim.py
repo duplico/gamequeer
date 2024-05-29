@@ -96,7 +96,6 @@ class Animation:
             height=self.frames[0].height,
             frame_pointer=self.frame_pointer
         )
-        print(anim_struct)
         return struct.pack(structs.GQ_ANIM_FORMAT, *anim_struct)
 
 class Frame:

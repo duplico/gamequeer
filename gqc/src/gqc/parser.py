@@ -17,11 +17,14 @@ class Game:
     link_table = dict() # OrderedDict not needed to remember order since Python 3.7
     game = None
 
-    def __init__(self, id : int, title : str, author : str):
+    def __init__(self, id : int, title : str, author : str, starting_stage : str = 'start'):
         self.addr = 0x00000000 # Set at link time
         self.stages = []
         self.animations = []
         self.variables = []
+
+        self.starting_stage = None
+        self.starting_stage_name = starting_stage
 
         if Game.game is not None:
             raise ValueError("Game already defined")
@@ -33,6 +36,8 @@ class Game:
 
     def add_stage(self, stage):
         self.stages.append(stage)
+        if stage.name == self.starting_stage_name:
+            self.starting_stage = stage
 
     def add_animation(self, animation):
         self.animations.append(animation)
@@ -62,12 +67,15 @@ class Game:
         return structs.GQ_HEADER_SIZE
 
     def to_bytes(self):
+        if self.starting_stage is None:
+            raise ValueError("Starting stage not defined")
         header = structs.GqHeader(
             magic=structs.GQ_MAGIC,
             id=self.id,
             title=self.title.encode('ascii')[:structs.GQ_STR_SIZE-1],
             anim_count=len(self.animations),
             stage_count=len(self.stages),
+            starting_stage_ptr=self.starting_stage.addr,
             flags=0,
             crc16=0
         )
@@ -182,7 +190,7 @@ class Variable:
         )
     
     def __repr__(self) -> str:
-        return f"Variable({self.datatype}, {self.name}, {self.value}, storageclass={repr(self.storageclass)})"
+        return f"Variable({repr(self.datatype)}, {repr(self.name)}, {self.value}, storageclass={repr(self.storageclass)})"
 
     def set_storageclass(self, storageclass):
         assert storageclass in ["volatile", "persistent"]
@@ -221,6 +229,7 @@ def parse_game_definition(instring, loc, toks):
     id = None
     title = None
     author = None
+    starting_stage = None
 
     try:
         for assignment in toks[1]:
@@ -230,10 +239,12 @@ def parse_game_definition(instring, loc, toks):
                 title = assignment[1]
             elif assignment[0] == "author":
                 author = assignment[1]
+            elif assignment[0] == "starting_stage":
+                starting_stage = assignment[1]
             else:
                 raise ValueError(f"Invalid assignment {assignment[0]}")
         
-        return Game(id, title, author)
+        return Game(id, title, author, starting_stage)
     except ValueError as ve:
         raise GqcParseError(str(ve), instring, loc)
 
@@ -320,7 +331,6 @@ def parse(text):
         parsed = gqc_game.parse_file(text, parseAll=True)
     except pp.ParseBaseException as pe:
         print(pe.explain(), file=sys.stderr)
-        print("column: {}".format(pe.column), file=sys.stderr)
         exit(1)
     except GqcParseError as ge:
         print(ge, file=sys.stderr)

@@ -34,11 +34,12 @@ def gq_ptr_get_addr(ptr):
 #     char title[GQ_STR_SIZE];      // Game title, null-terminated
 #     uint16_t anim_count;          // Number of animations
 #     uint16_t stage_count;         // Number of stages
+#     t_gq_pointer starting_stage;  // Pointer to the starting stage
 #     uint16_t flags;               // TODO
 #     uint16_t crc16;               // CRC16 checksum of the header
 # } gq_header;
-GqHeader = namedtuple('GqHeader', 'magic id title anim_count stage_count flags crc16')
-GQ_HEADER_FORMAT = f'<{GQ_MAGIC_SIZE}sH{GQ_STR_SIZE}sHHHH'
+GqHeader = namedtuple('GqHeader', 'magic id title anim_count stage_count starting_stage_ptr flags crc16')
+GQ_HEADER_FORMAT = f'<{GQ_MAGIC_SIZE}sH{GQ_STR_SIZE}sHH{T_GQ_POINTER_FORMAT}HH'
 GQ_HEADER_SIZE = struct.calcsize(GQ_HEADER_FORMAT)
 
 # typedef struct gq_anim {

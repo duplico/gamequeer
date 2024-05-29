@@ -2,6 +2,7 @@ game {
     id = 1;
     title := "Working Example";
     author := "duplico";
+    starting_stage = start;
 }
 
 volatile {
@@ -14,6 +15,7 @@ persistent {
 
 animations {
     // flag <- "flag.gif";
+    flag <- "default.mp4";
     
     // flag_slow <- "flag.gif" {
     //     dithering := "heckbert";
