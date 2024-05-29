@@ -76,8 +76,11 @@ class Stage:
     link_table = dict() # OrderedDict not needed to remember order since Python 3.7
 
     # TODO: not : list, right? can't I make it an iterable or something?
-    def __init__(self, name : str, bganim_name : str = None, menu_name : str = None, event_statements : list = []):
+    def __init__(self, name : str, bganim : str = None, menu : str = None, event_statements : list = []):
         self.name = name
+        self.bganim_name = bganim
+        self.menu_name = menu
+        self.event_statements = event_statements
 
         if name in Stage.stage_table:
             raise ValueError(f"Stage {name} already defined")

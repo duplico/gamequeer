@@ -1,4 +1,5 @@
 import sys
+import typing
 from collections import namedtuple
 
 from tabulate import tabulate
@@ -61,7 +62,7 @@ def create_symbol_table(table_dest = sys.stdout):
     vars_ptr_offset = 0
     for var in list(Variable.storageclass_table['persistent'].values()) + list(Variable.storageclass_table['volatile'].values()):
         var.set_addr(vars_ptr_start + vars_ptr_offset)
-        vars_ptr_offset += var.size
+        vars_ptr_offset += var.size()
 
     # TODO: stage table
 
@@ -70,7 +71,7 @@ def create_symbol_table(table_dest = sys.stdout):
         '.anim' : Animation.link_table,
         '.stage' : Stage.link_table,
         '.frame' : Frame.link_table,
-        '.fdata' : FrameData.link_table,
+        '.framedata' : FrameData.link_table,
         '.var' : Variable.link_table
     }
 
@@ -102,3 +103,6 @@ def create_symbol_table(table_dest = sys.stdout):
     print(tabulate(section_table, headers=section_table_headers), file=table_dest)
 
     return symbol_table
+
+def generate_code(parsed, symbol_table : dict, out_file : typing.BinaryIO):
+    pass

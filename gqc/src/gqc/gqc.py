@@ -26,18 +26,22 @@ def mkanim(out_path : pathlib.Path, src_path : pathlib.Path, dither : str, frame
 
 @gqc_cli.command()
 @click.option('--no-mem-map', '-n', is_flag=True)
+@click.option('--out-dir', '-o', type=click.Path(file_okay=False, dir_okay=True, writable=True, path_type=pathlib.Path), default=None)
 @click.argument('input', type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True, path_type=pathlib.Path), required=True)
-def compile(input : pathlib.Path, no_mem_map : bool):
-    # Get the relative path of the input file, compared to the `games` source directory
-    subpath = input.resolve().relative_to(pathlib.Path.cwd() / 'games')
-    # Strip the filename from that path, and call it subpath_dir
-    subpath_dir = subpath.parents[0]
-    # Create the output directory path by creating the directory subtree under `games`
-    #  in the `build` directory, and using the filename of the input file as the final
-    #  directory name for the output of the project.
-    out_path = pathlib.Path.cwd() / 'build' / subpath_dir / subpath.stem
+def compile(input : pathlib.Path, no_mem_map : bool, out_dir : pathlib.Path):
+    # output_path is the directory where the output of the project will be placed
+    if out_dir is None:
+        out_dir = pathlib.Path.cwd() / 'build' / input.stem
+    out_dir.mkdir(parents=True, exist_ok=True)
+    game_name = input.stem
 
-    out_path.mkdir(parents=True, exist_ok=True)
+    # We'll create the following, unless told not to:
+    #  out_path/
+    #  ├── assets/
+    #  │   ├── animations/
+    #  │   └── lightcues/
+    #  ├── map.txt
+    #  └── <game_name>.gqgame
 
     # Parse the game file, implemented almost entirely in side effects
     with open(input, 'r') as f:
@@ -50,15 +54,17 @@ def compile(input : pathlib.Path, no_mem_map : bool):
 
     # Place symbols into the symbol table
     # TODO: select the correct output stream
-    mem_map_path = out_path / 'map.txt'
+    mem_map_path = out_dir / 'map.txt'
     if no_mem_map:
         mem_map_path = os.devnull
     with open(mem_map_path, 'w') as map_file:
         symbol_table = linker.create_symbol_table(table_dest=map_file)
 
-    # TODO: Code generation
+    # TODO: Any additional linking tasks
 
-    # TODO: Linker
+    # TODO: Code generation
+    with open(out_dir / f'{game_name}.gqgame', 'wb') as out_file:
+        linker.generate_code(parsed, symbol_table, out_file)
 
 @gqc_cli.command()
 @click.argument('base_dir', type=click.Path(file_okay=False, dir_okay=True, writable=True, path_type=pathlib.Path))
@@ -79,7 +85,6 @@ def init_dir(base_dir : pathlib.Path, force : bool):
 
     create_files = [
         'Makefile',
-        'Makefile.local',
         '.gitignore',
     ]
 
@@ -125,29 +130,34 @@ def update_makefile_local(base_dir : pathlib.Path):
 
     GamePath = namedtuple('game_path', ['name', 'relpath'])
 
-    game_dir = base_dir / 'games'
+    games_src_dir = base_dir / 'games'
 
     # Get the complete relative path of all .gq files in the games directory, recursively
-    game_src_paths = [game for game in game_dir.rglob('*.gq')]
+    game_src_paths = [game for game in games_src_dir.rglob('*.gq')]
     game_paths = []
     for path in game_src_paths:
-        g = GamePath(path.stem, path.parents[0].relative_to(game_dir))
-        game_paths.append(g)
+        # For example, for a file at games/foo/bar/gamename.gq, we want to store:
+        #  GamePath('gamename', 'foo/bar')
+        game_paths.append(GamePath(path.stem, path.parents[0].relative_to(games_src_dir)))
 
     # Populate the Makefile with the game destinations, and create
     #  the build directory tree for games as well.
     with makefile_path.open('w') as f:
         f.write('# Auto-generated Makefile.local\n\n')
+        # TODO: Permit this to be overridden
         f.write('GQC_CMD := python -m gqc\n\n')
         f.write('.PHONY: all\n')
         f.write('.DEFAULT_GOAL := all\n\n')
         all_list = []
+        # For every detected game,
         for game_path in game_paths:
-            src_file = game_dir / (game_path.relpath) / f'{game_path.name}.gq'
-            dest_dir = base_dir / 'build' / (game_path.relpath)
+            # Get the source directory and build a destination directory path under build/
+            src_file = games_src_dir / (game_path.relpath) / f'{game_path.name}.gq'
+            dest_dir = base_dir / 'build' / (game_path.relpath) / game_path.name
             dest_file = dest_dir / f'{game_path.name}.gqgame'
+            # Create a Makefile target for the .gqgame file for the game
             f.write(f'{dest_file.relative_to(base_dir)}: {src_file.relative_to(base_dir)}\n')
-            f.write(f'\t$(GQC_CMD) compile $<\n\n')
+            f.write(f'\t$(GQC_CMD) compile -o {dest_dir} $<\n\n')
             all_list.append(f'{dest_file.relative_to(base_dir)}')
         f.write('all: ' + ' '.join(all_list) + '\n')
 

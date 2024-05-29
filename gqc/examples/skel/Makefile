@@ -4,8 +4,8 @@
 #  you're free to edit this file however you like.
 
 ifndef GQC_CMD
-	# You want to alter this line if you need to invoke gqc with a different command:
-	GQC_CMD := python -m gqc
+# You'll want to alter this line if you need to invoke gqc with a different command:
+GQC_CMD := python -m gqc
 endif
 
 BASE_DIR:=$(realpath $(shell dirname $(firstword $(MAKEFILE_LIST))))
