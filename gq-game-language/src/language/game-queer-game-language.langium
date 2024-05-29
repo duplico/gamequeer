@@ -24,8 +24,10 @@ GameTitleAssignment:
     'title' ':=' title=STRING ';';
 GameAuthorAssignment:
     'author' ':=' title=STRING ';';
+GameStartingStageAssignment:
+    'starting_stage' '=' stage=ID ';';
 GameAssignment:
-    GameIdAssignment | GameTitleAssignment | GameAuthorAssignment;
+    GameIdAssignment | GameTitleAssignment | GameAuthorAssignment | GameStartingStageAssignment;
 GameDefinitionSection:
     'game' '{' GameAssignment* '}';
 

@@ -14,7 +14,8 @@ game_definition_section = "game" "{" game_assignment* "}"
 game_id_assignment = "id" "=" integer ";"
 game_title_assignment = "title" ":=" string ";"
 game_author_assignment = "author" ":=" string ";"
-game_assignment = game_id_assignment | game_title_assignment | game_author_assignment # one of each, in any order
+game_starting_stage_assignment = "starting_stage" "=" identifier ";"
+game_assignment = game_id_assignment | game_title_assignment | game_author_assignment | game_starting_stage_assignment  # one of each, in any order
 
 var_definition_section = ("volatile" | "persistent") var_definitions
 var_definitions = var_definition | "{" var_definition* "}"
@@ -75,7 +76,8 @@ def build_game_parser():
     game_id_assignment = pp.Group(pp.Keyword("id") - pp.Suppress("=") - integer - pp.Suppress(";")).set_name("id")
     game_title_assignment = pp.Group(pp.Keyword("title") - pp.Suppress(":=") - string - pp.Suppress(";")).set_name("title")
     game_author_assignment = pp.Group(pp.Keyword("author") - pp.Suppress(":=") - string - pp.Suppress(";")).set_name("author")
-    game_assignment = pp.Group(game_id_assignment & game_title_assignment & game_author_assignment)
+    game_starting_stage_assignment = pp.Group(pp.Keyword("starting_stage") - pp.Suppress("=") - identifier - pp.Suppress(";")).set_name("starting_stage")
+    game_assignment = pp.Group(game_id_assignment & game_title_assignment & game_author_assignment & game_starting_stage_assignment)
     game_definition_section = pp.Group(pp.Keyword("game") - pp.Suppress("{") - game_assignment - pp.Suppress("}"))
     game_definition_section.set_parse_action(parse_game_definition)
 
