@@ -52,7 +52,7 @@ gq-game-language/gq-game-language-0.0.1.vsix: builder-build
 		--workdir /builder/mnt \
 		-v .:/builder/mnt \
 		$(project_name)-builder:latest \
-		/bin/bash -c "cd gq-game-language && npm run langium:generate && npm run build && vsce package --allow-missing-repository"
+		/bin/bash -c "cd gq-game-language && npm install langium && npm run langium:generate && npm run build && vsce package --allow-missing-repository"
 
 ### Build targets in root build directory
 
