@@ -69,8 +69,7 @@ ENV RUBYOPT "-KU -E utf-8:utf-8"
 
 # Node stuff for langium:
 COPY gq-game-language/install-langium-deps.sh /builder/mnt/gq-game-language/
-RUN chmod +x /builder/mnt/gq-game-language/install-langium-deps.sh
-RUN /builder/mnt/gq-game-language/install-langium-deps.sh
+RUN chmod +x /builder/mnt/gq-game-language/install-langium-deps.sh && /builder/mnt/gq-game-language/install-langium-deps.sh
 
 # Python dependencies
 
