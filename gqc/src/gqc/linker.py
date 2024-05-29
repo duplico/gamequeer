@@ -64,7 +64,14 @@ def create_symbol_table(table_dest = sys.stdout):
         var.set_addr(vars_ptr_start + vars_ptr_offset)
         vars_ptr_offset += var.size()
 
-    # TODO: stage table
+    # TODO: Menus
+
+    # The stage table is next, because it depends upon references to the animations and menus, even though
+    #  it may before them in the final layout.
+    stage_ptr_offset = 0
+    for stage in Stage.stage_table.values():
+        stage.set_addr(stage_ptr_start + stage_ptr_offset)
+        stage_ptr_offset += structs.GQ_STAGE_SIZE
 
     symbol_table = {
         '.game' : Game.link_table,
@@ -75,7 +82,7 @@ def create_symbol_table(table_dest = sys.stdout):
         '.var' : Variable.link_table
     }
 
-    # The table was constructed using side effects. For completeness, we emit it here.
+    # Emit a human readable summary of the symbol table.
 
     section_table = []
     section_table_headers = ['Section', 'Start', 'Size', 'Symbol']
@@ -102,7 +109,18 @@ def create_symbol_table(table_dest = sys.stdout):
     
     print(tabulate(section_table, headers=section_table_headers), file=table_dest)
 
+    # Return the machine-readable symbol table for use in final code generation.
     return symbol_table
 
-def generate_code(parsed, symbol_table : dict, out_file : typing.BinaryIO):
-    pass
+def generate_code(parsed, symbol_table : dict):
+    output = bytes()
+
+    # Emit each section in order to the output bytes.
+    # TODO: error if their addresses are non-contiguous.
+    #       or, switch to using Intel Hex format or TI-TXT format.
+
+    for section, table in symbol_table.items():
+        for symbol in table.values():
+            output += symbol.to_bytes()
+    
+    return output

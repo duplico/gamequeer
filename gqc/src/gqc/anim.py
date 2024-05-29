@@ -22,7 +22,8 @@ class Animation:
     next_id : str = 0
     
     # TODO: move DITHER_CHOICES to an enum?
-    def __init__(self, name : str, source : str, dithering : str = None, frame_rate : int = None):
+    # TODO: deduplicate the resolution of defaults here:
+    def __init__(self, name : str, source : str, dithering : str = 'none', frame_rate : int = 25):
         self.frame_pointer = 0x00000000
         self.addr = 0x00000000
         self.name = name
@@ -56,11 +57,16 @@ class Animation:
         )
 
         print(f"Generating binary data", end='', flush=True)
-        
+        dot_timer_start = self.frame_rate if self.frame_rate else 25
+        dot_timer = dot_timer_start
         # Load each frame into a Frame object
         for frame_path in (Path() / 'build' / 'assets' / 'animations' / name).glob('frame*.bmp'):
             self.frames.append(Frame(path=frame_path))
-            print(".", end='', flush=True)
+            if dot_timer == 0:
+                print(".", end='', flush=True)
+                dot_timer = dot_timer_start
+            else:
+                dot_timer -= 1
         print("done.")
         print(f"Complete work on animation {name}")
     
@@ -90,6 +96,7 @@ class Animation:
             height=self.frames[0].height,
             frame_pointer=self.frame_pointer
         )
+        print(anim_struct)
         return struct.pack(structs.GQ_ANIM_FORMAT, *anim_struct)
 
 class Frame:
@@ -133,6 +140,14 @@ class Frame:
     def set_addr(self, addr : int, namespace : int = structs.GQ_PTR_NS_CART):
         self.addr = structs.gq_ptr_apply_ns(namespace, addr)
         Frame.link_table[self.addr] = self
+    
+    def to_bytes(self):
+        frame_struct = structs.GqAnimFrame(
+            bPP=self.compression_type_number,
+            data_pointer=self.data_pointer,
+            data_size=len(self.bytes)
+        )
+        return struct.pack(structs.GQ_ANIM_FRAME_FORMAT, *frame_struct)
     
     def size(self):
         return structs.GQ_ANIM_FRAME_SIZE

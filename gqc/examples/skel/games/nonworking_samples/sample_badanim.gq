@@ -1,0 +1,13 @@
+game {
+    id = 0;
+    title := "Working Example";
+    author := "duplico";
+}
+
+animations {
+    foo <- "default.mp4";
+}
+
+stage start {
+    bganim bar;
+}
