@@ -7,6 +7,7 @@ source $HOME/.bashrc
 nvm install 20
 
 # For Langium:
+npm install -g langium
 npm i -g yo generator-langium
 npm i --save-dev esbuild
 npm install -g @vscode/vsce
