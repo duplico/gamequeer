@@ -1,10 +1,9 @@
-from dataclasses import dataclass
+import struct
 
 import pyparsing as pp
 
 from .anim import Animation
-
-game : 'Game' = None
+from . import structs
 
 class GqcParseError(Exception):
     def __init__(self, message, s, loc):
@@ -13,15 +12,18 @@ class GqcParseError(Exception):
         super().__init__(message)
 
 class Game:
+    link_table = dict() # OrderedDict not needed to remember order since Python 3.7
+    game = None
+
     def __init__(self, id : int, title : str, author : str):
+        self.addr = 0x00000000 # Set at link time
         self.stages = []
         self.animations = []
         self.variables = []
 
-        global game
-        if game is not None:
+        if Game.game is not None:
             raise ValueError("Game already defined")
-        game = self
+        Game.game = self
 
         self.id = id
         self.title = title
@@ -49,28 +51,54 @@ class Game:
     
     def __repr__(self) -> str:
         return f"Game({self.id}, {repr(self.title)}, {repr(self.author)})"
+    
+    def set_addr(self, addr : int, namespace : int = structs.GQ_PTR_NS_CART):
+        self.addr = structs.gq_ptr_apply_ns(namespace, addr)
+        Game.link_table[self.addr] = self
+    
+    def size(self):
+        return structs.GQ_HEADER_SIZE
+
+    def to_bytes(self):
+        header = structs.GqHeader(
+            magic=structs.GQ_MAGIC,
+            id=self.id,
+            title=self.title,
+            anim_count=len(self.animations),
+            stage_count=len(self.stages),
+            flags=0,
+            crc16=0
+        )
+        return struct.pack(structs.GQ_HEADER_FORMAT, *header)
 
 class Stage:
     stage_table = {}
+    link_table = dict() # OrderedDict not needed to remember order since Python 3.7
 
     # TODO: not : list, right? can't I make it an iterable or something?
-    def __init__(self, name : str, bganim : str = None, menu : str = None, event_statements : list = []):
+    def __init__(self, name : str, bganim_name : str = None, menu_name : str = None, event_statements : list = []):
         self.name = name
 
         if name in Stage.stage_table:
             raise ValueError(f"Stage {name} already defined")
         Stage.stage_table[name] = self
 
-        game.add_stage(self)
+        # TODO: what?
+        Game.game.add_stage(self)
 
     def __repr__(self) -> str:
         return f"Stage({self.name})"
+    
+    def to_bytes(self):
+        pass
 
 class Variable:
     var_table = {}
-    link_table = dict(persistent={}, volatile={})
+    storageclass_table = dict(persistent={}, volatile={})
+    link_table = dict() # OrderedDict not needed to remember order since Python 3.7
 
     def __init__(self, datatype : str, name : str, value, storageclass : str =None):
+        self.addr = 0x00000000 # Set at link time
         self.datatype = datatype
         self.name = name
         self.value = value
@@ -82,9 +110,17 @@ class Variable:
             raise ValueError(f"Duplicate definition of {name}")
         Variable.var_table[name] = self
 
-        self.addr = None # Set at link time
+        if datatype == "int":
+            if not isinstance(value, int):
+                raise ValueError(f"Invalid value {value} for int variable {name}")
+        elif datatype == "str":
+            if not isinstance(value, str):
+                raise ValueError(f"Invalid value {value} for str variable {name}")
+            if len(value) > structs.GQ_STR_SIZE-1:
+                raise ValueError(f"String {name} length {len(value)} exceeds maximum of {structs.GQ_STR_SIZE-1}")
 
-        game.add_variable(self)
+        # TODO: needed?
+        Game.game.add_variable(self)
 
     def __str__(self) -> str:
         return "<{} {} {} = {}>@{}".format(
@@ -101,7 +137,30 @@ class Variable:
     def set_storageclass(self, storageclass):
         assert storageclass in ["volatile", "persistent"]
         self.storageclass = storageclass
-        Variable.link_table[storageclass][self.name] = self
+        Variable.storageclass_table[storageclass][self.name] = self
+    
+    def to_bytes(self):
+        if self.datatype == "int":
+            # TODO: Extract constant int size and put it in structs.py
+            return self.value.to_bytes(4, 'little')
+        elif self.datatype == "str":
+            strlen = len(self.value)
+            if strlen > structs.GQ_STR_SIZE-1: # -1 for null terminator
+                raise ValueError(f"String {self.name} length {strlen} exceeds maximum of {structs.GQ_STR_SIZE-1}")
+        else:
+            raise ValueError(f"Invalid datatype {self.datatype}")
+    
+    def size(self):
+        if self.datatype == "int":
+            return 4
+        elif self.datatype == "str":
+            return structs.GQ_STR_SIZE
+        else:
+            raise ValueError(f"Invalid datatype {self.datatype}")
+    
+    def set_addr(self, addr : int, namespace : int = structs.GQ_PTR_NS_CART):
+        self.addr = structs.gq_ptr_apply_ns(namespace, addr)
+        Variable.link_table[self.addr] = self
 
 def parse_game_definition(instring, loc, toks):
     toks = toks[0]
@@ -193,7 +252,7 @@ def parse_variable_definition_storageclass(instring, loc, toks):
     if storageclass not in ["volatile", "persistent"]:
         raise GqcParseError(f"Invalid storage class: {storageclass}", instring, loc)
     
-    if Variable.link_table[storageclass]:
+    if Variable.storageclass_table[storageclass]:
         raise GqcParseError(f"Storage class {storageclass} already defined", instring, loc)
     
     for var in toks[1]:
@@ -209,6 +268,7 @@ def parse(text):
     gqc_game = grammar.build_game_parser()
     try:
         parsed = gqc_game.parse_file(text, parseAll=True)
+        # TODO: Do the second pass for the Stages
         return parsed
     except pp.ParseBaseException as pe:
         print(pe.explain())

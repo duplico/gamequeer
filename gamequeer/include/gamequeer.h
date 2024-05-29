@@ -6,6 +6,7 @@
 
 #define GQ_MAGIC_SIZE 4
 #define GQ_MAGIC      "GQ01"
+#define GQ_STR_SIZE   22
 
 #define GQ_PTR_NS_MASK 0xFF000000
 #define GQ_PTR_NS_NULL 0x00
@@ -22,11 +23,14 @@ typedef uint32_t t_gq_pointer;
 typedef struct gq_header {
     uint8_t magic[GQ_MAGIC_SIZE]; // Magic number
     uint16_t id;                  // Numerical ID of the game
-    char title[16];               // Game title, null-terminated
+    char title[GQ_STR_SIZE];      // Game title, null-terminated
     uint16_t anim_count;          // Number of animations
     uint16_t stage_count;         // Number of stages
+    uint16_t flags;               // TODO
     uint16_t crc16;               // CRC16 checksum of the header
 } gq_header;
+
+// TODO: Add variable table
 
 typedef struct gq_anim {
     uint16_t id;                // Numerical ID of the animation (sequential, 0-based)

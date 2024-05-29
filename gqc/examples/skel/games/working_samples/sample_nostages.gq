@@ -1,0 +1,11 @@
+game {
+    id = 0;
+    title := "Working Example";
+    author := "duplico";
+}
+
+animations {
+    taylor <- "default.mp4" {
+        frame_rate = 3;
+    }
+}

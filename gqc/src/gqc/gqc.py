@@ -1,3 +1,5 @@
+import os
+import sys
 import pathlib
 
 from collections import namedtuple
@@ -6,6 +8,7 @@ import click
 from . import parser
 from . import anim
 from . import makefile_src
+from . import linker
 
 DITHER_CHOICES = ('none', 'bayer', 'heckbert', 'floyd_steinberg', 'sierra2', 'sierra2_4a')
 
@@ -22,18 +25,36 @@ def mkanim(out_path : pathlib.Path, src_path : pathlib.Path, dither : str, frame
     anim.make_animation(src_path, out_path, dither, frame_rate)
 
 @gqc_cli.command()
-@click.option('--out-path', '-o', type=click.Path(file_okay=False, dir_okay=True, writable=True, path_type=pathlib.Path), default='out.gqgame')
-@click.argument('input', type=click.File('r'))
-def compile(input, out_path : pathlib.Path):
-    # Parse the game file
-    parsed = parser.parse(input)
+@click.option('--no-mem-map', '-n', is_flag=True)
+@click.argument('input', type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True, path_type=pathlib.Path), required=True)
+def compile(input : pathlib.Path, no_mem_map : bool):
+    # Get the relative path of the input file, compared to the `games` source directory
+    subpath = input.resolve().relative_to(pathlib.Path.cwd() / 'games')
+    # Strip the filename from that path, and call it subpath_dir
+    subpath_dir = subpath.parents[0]
+    # Create the output directory path by creating the directory subtree under `games`
+    #  in the `build` directory, and using the filename of the input file as the final
+    #  directory name for the output of the project.
+    out_path = pathlib.Path.cwd() / 'build' / subpath_dir / subpath.stem
 
-    # TODO: next step, not just printing
-    parsed.pprint()
+    out_path.mkdir(parents=True, exist_ok=True)
+
+    # Parse the game file, implemented almost entirely in side effects
+    with open(input, 'r') as f:
+        parsed = parser.parse(f)
 
     # TODO: animation processing
+    #       currently handled inside the parse actions
 
     # TODO: lightcue processing
+
+    # Place symbols into the symbol table
+    # TODO: select the correct output stream
+    mem_map_path = out_path / 'map.txt'
+    if no_mem_map:
+        mem_map_path = os.devnull
+    with open(mem_map_path, 'w') as map_file:
+        symbol_table = linker.create_symbol_table(table_dest=map_file)
 
     # TODO: Code generation
 
@@ -48,9 +69,6 @@ def init_dir(base_dir : pathlib.Path, force : bool):
         'assets/animations/',
         'assets/lightcues/',
         'build',
-        'build/assets',
-        'build/assets/animations',
-        'build/assets/lightcues',
         'games'
     ]
 
@@ -129,7 +147,7 @@ def update_makefile_local(base_dir : pathlib.Path):
             dest_dir = base_dir / 'build' / (game_path.relpath)
             dest_file = dest_dir / f'{game_path.name}.gqgame'
             f.write(f'{dest_file.relative_to(base_dir)}: {src_file.relative_to(base_dir)}\n')
-            f.write(f'\t$(GQC_CMD) compile -o $@ $<\n\n')
+            f.write(f'\t$(GQC_CMD) compile $<\n\n')
             all_list.append(f'{dest_file.relative_to(base_dir)}')
         f.write('all: ' + ' '.join(all_list) + '\n')
 
