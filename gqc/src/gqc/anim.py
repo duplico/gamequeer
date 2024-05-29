@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+import struct
 from enum import IntEnum
 from pathlib import Path
 
@@ -6,6 +6,8 @@ import ffmpeg
 import pathlib
 
 from PIL import Image
+
+from . import structs
 
 # TODO: Set up globals or a singleton or something containing the base path etc.
 
@@ -16,14 +18,20 @@ class FrameEncoding(IntEnum):
 
 class Animation:
     anim_table = {}
-    link_table = None
+    link_table = dict() # OrderedDict not needed to remember order since Python 3.7
+    next_id : str = 0
     
     # TODO: move DITHER_CHOICES to an enum?
     def __init__(self, name : str, source : str, dithering : str = None, frame_rate : int = None):
+        self.frame_pointer = 0x00000000
+        self.addr = 0x00000000
         self.name = name
         self.source = source
         self.frame_rate = frame_rate
         self.dithering = dithering
+
+        self.id = Animation.next_id
+        Animation.next_id += 1
 
         if name in Animation.anim_table:
             raise ValueError("Animation {} already defined".format(name))
@@ -39,6 +47,7 @@ class Animation:
         if frame_rate:
             make_animation_kwargs['frame_rate'] = frame_rate
 
+        # TODO: Namespace built animations by game name
         # Reformat the animation source file into the build directory.
         make_animation(
             Path() / 'assets' / 'animations' / source,
@@ -48,18 +57,49 @@ class Animation:
 
         print(f"Generating binary data", end='', flush=True)
         
-        # Load each frame into a GqImage object
+        # Load each frame into a Frame object
         for frame_path in (Path() / 'build' / 'assets' / 'animations' / name).glob('frame*.bmp'):
-            self.frames.append(GqImage(path=frame_path))
+            self.frames.append(Frame(path=frame_path))
             print(".", end='', flush=True)
         print("done.")
         print(f"Complete work on animation {name}")
     
+    def set_frame_pointer(self, frame_pointer : int, namespace : int = structs.GQ_PTR_NS_CART):
+        self.frame_pointer = structs.gq_ptr_apply_ns(namespace, frame_pointer)
+    
+    # TODO: break this out into an abstract class or something.
+    def set_addr(self, addr : int, namespace : int = structs.GQ_PTR_NS_CART):
+        # TODO: Add a check to ensure that the namespace byte isn't already
+        #       set in the address.
+        self.addr = structs.gq_ptr_apply_ns(namespace, addr)
+        Animation.link_table[self.addr] = self
+    
+    def size(self):
+        return structs.GQ_ANIM_SIZE
+
     def __repr__(self) -> str:
         return f"Animation('{self.name}', '{self.source}', {repr(self.frame_rate)}, {repr(self.dithering)})"
+    
+    def to_bytes(self):
+        anim_struct = structs.GqAnim(
+            id=self.id,
+            frame_count=len(self.frames),
+            frame_rate=self.frame_rate,
+            flags=0,
+            width=self.frames[0].width,
+            height=self.frames[0].height,
+            frame_pointer=self.frame_pointer
+        )
+        return struct.pack(structs.GQ_ANIM_FORMAT, *anim_struct)
 
-class GqImage(object):
+class Frame:
+    link_table = dict() # OrderedDict not needed to remember order since Python 3.7
+
     def __init__(self, img : Image = None, path : pathlib.Path = None):
+        self.data_pointer = 0x00000000
+        self.addr = 0x00000000
+        self.frame_data = FrameData(self)
+
         assert img or path
         
         if img:
@@ -89,6 +129,13 @@ class GqImage(object):
 
         self.width = self.image.width
         self.height = self.image.height
+    
+    def set_addr(self, addr : int, namespace : int = structs.GQ_PTR_NS_CART):
+        self.addr = structs.gq_ptr_apply_ns(namespace, addr)
+        Frame.link_table[self.addr] = self
+    
+    def size(self):
+        return structs.GQ_ANIM_FRAME_SIZE
 
     def uncompressed_bytes(self):
         run = 0
@@ -156,7 +203,29 @@ class GqImage(object):
     def image_rle7_bytes(self):
         return self.rle_bytes(7)
 
-def make_animation(anim_src_path : pathlib.Path, output_dir : pathlib.Path, dither : str = 'none', framerate : int = 24):
+    def __repr__(self) -> str:
+        return f"Frame({self.width}x{self.height}:{self.compression_type_name})"
+
+class FrameData:
+    link_table = dict() # OrderedDict not needed to remember order since Python 3.7
+
+    def __init__(self, frame : Frame):
+        self.frame = frame
+    
+    def set_addr(self, addr : int, namespace : int = structs.GQ_PTR_NS_CART):
+        self.addr = structs.gq_ptr_apply_ns(namespace, addr)
+        FrameData.link_table[self.addr] = self
+    
+    def to_bytes(self):
+        return self.frame.bytes
+
+    def size(self):
+        return len(self.frame.bytes)
+    
+    def __repr__(self) -> str:
+        return f"FrameData({self.frame.width}x{self.frame.height}:{self.frame.compression_type_name})"
+
+def make_animation(anim_src_path : pathlib.Path, output_dir : pathlib.Path, dithering : str = 'none', frame_rate : int = 24):
     # Set up the output directory
     output_dir.mkdir(parents=True, exist_ok=True)
     # Delete the old output files: anim.gif and frame*.bmp
@@ -181,9 +250,9 @@ def make_animation(anim_src_path : pathlib.Path, output_dir : pathlib.Path, dith
     white = ffmpeg.input('color=c=0xffffff:r=1:d=1:s=8x16', f='lavfi')
     palette = ffmpeg.filter([black, white], 'hstack', 2)
     # Apply dithering
-    dithered = ffmpeg.filter([cropped, palette], 'paletteuse', new='false', dither=dither)
+    dithered = ffmpeg.filter([cropped, palette], 'paletteuse', new='false', dither=dithering)
     # Apply the desired framerate
-    out = dithered.filter('fps', framerate)
+    out = dithered.filter('fps', frame_rate)
 
     # Write the output - summary gif and frame files
     out_file_summary = output_dir / 'anim.gif'
