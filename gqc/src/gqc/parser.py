@@ -1,4 +1,6 @@
+import sys
 import struct
+from typing import Iterable
 
 import pyparsing as pp
 
@@ -63,7 +65,7 @@ class Game:
         header = structs.GqHeader(
             magic=structs.GQ_MAGIC,
             id=self.id,
-            title=self.title,
+            title=self.title.encode('ascii')[:structs.GQ_STR_SIZE-1],
             anim_count=len(self.animations),
             stage_count=len(self.stages),
             flags=0,
@@ -75,25 +77,70 @@ class Stage:
     stage_table = {}
     link_table = dict() # OrderedDict not needed to remember order since Python 3.7
 
-    # TODO: not : list, right? can't I make it an iterable or something?
-    def __init__(self, name : str, bganim : str = None, menu : str = None, event_statements : list = []):
+    def __init__(self, name : str, bganim : str = None, menu : str = None, event_statements : Iterable = []):
+        self.addr = 0x00000000 # Set at link time
+        self.id = len(Stage.stage_table)
+        self.resolved = False
         self.name = name
         self.bganim_name = bganim
         self.menu_name = menu
         self.event_statements = event_statements
+        self.unresolved_symbols = []
 
         if name in Stage.stage_table:
             raise ValueError(f"Stage {name} already defined")
         Stage.stage_table[name] = self
 
+        self.resolve()
+
         # TODO: what?
         Game.game.add_stage(self)
+
+    def resolve(self) -> bool:
+        # Don't bother trying to resolve symbols if we've already done so.
+        if self.resolved:
+            return True
+        
+        self.unresolved_symbols = []
+        resolved = True
+
+        # Attempt to resolve background animation
+        if self.bganim_name is None:
+            self.bganim = None
+        elif self.bganim_name in Animation.anim_table:
+            self.bganim = Animation.anim_table[self.bganim_name]
+        else:
+            self.unresolved_symbols.append(self.bganim_name)
+            resolved = False
+
+        # TODO: Attempt to resolve menu
+
+        # TODO: Anything to do with event statements here?
+
+        # Return whether the resolution of all symbols is complete.
+        self.resolved = resolved
+        return resolved
+
+    def set_addr(self, addr : int, namespace : int = structs.GQ_PTR_NS_CART):
+        self.addr = structs.gq_ptr_apply_ns(namespace, addr)
+        Stage.link_table[self.addr] = self
+    
+    def size(self):
+        return structs.GQ_STAGE_SIZE
 
     def __repr__(self) -> str:
         return f"Stage({self.name})"
     
     def to_bytes(self):
-        pass
+        stage = structs.GqStage(
+            id=self.id,
+            anim_bg_pointer=self.bganim.addr if self.bganim else 0,
+            menu_pointer=0,
+            events_code_pointer=0,
+            events_code_size=0
+        )
+        return struct.pack(structs.GQ_STAGE_FORMAT, *stage)
+        
 
 class Variable:
     var_table = {}
@@ -271,12 +318,17 @@ def parse(text):
     gqc_game = grammar.build_game_parser()
     try:
         parsed = gqc_game.parse_file(text, parseAll=True)
-        # TODO: Do the second pass for the Stages
-        return parsed
     except pp.ParseBaseException as pe:
-        print(pe.explain())
-        print("column: {}".format(pe.column))
+        print(pe.explain(), file=sys.stderr)
+        print("column: {}".format(pe.column), file=sys.stderr)
         exit(1)
     except GqcParseError as ge:
-        print(ge)
+        print(ge, file=sys.stderr)
         exit(1)
+    
+    for stage in Stage.stage_table.values():
+        if not stage.resolve():
+            print(f"FATAL: Unresolved symbols remain in Stage `{stage.name}`: {', '.join(stage.unresolved_symbols)}", file=sys.stderr)
+            exit(1)
+
+    return parsed
