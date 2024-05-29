@@ -2,8 +2,16 @@ project_name=gamequeer
 BASE_DIR:=$(realpath $(shell dirname $(firstword $(MAKEFILE_LIST))))
 IMAGES:=$(shell docker images $(project_name)-builder -a -q)
 
+CURRENT_UID := $(shell id -u)
+CURRENT_GID := $(shell id -g)
+
+export CURRENT_UID
+export CURRENT_GID
+
 .PHONY: clean-builder clean-code clean all builder-run builder-rebuild gqc gamequeer gq-game-language
 .DEFAULT_GOAL := all
+
+DOCKER_CMD := docker run --rm -it --workdir /builder/mnt -v .:/builder/mnt --user $(CURRENT_UID):$(CURRENT_GID) $(project_name)-builder:latest
 
 builder-build: builder.Dockerfile
 	docker build -f builder.Dockerfile -t $(project_name)-builder:latest .
@@ -14,45 +22,21 @@ builder-rebuild: builder.Dockerfile
 	@touch builder-build
 
 builder-run:
-	docker run \
-		--rm \
-		-it \
-		--workdir /builder/mnt \
-		-v .:/builder/mnt \
-		$(project_name)-builder:latest \
-		/bin/bash
+	$(DOCKER_CMD) /bin/bash
 
 ### Build targets in subdirectories
 
 gamequeer/build/gamequeer: builder-build
-	docker run \
-		--rm \
-		-it \
-		--workdir /builder/mnt \
-		-v .:/builder/mnt \
-		$(project_name)-builder:latest \
-		/bin/bash -c "cd gamequeer && cmake -B build && cmake --build build"
+	$(DOCKER_CMD) /bin/bash -c "cd gamequeer && cmake -B build && cmake --build build"
 
 # TODO: version number should be a variable
 gqc/dist/gqc-0.0.1.tar.gz gqc/dist/gqc-0.0.1-py3-none-any.whl: builder-build
-	docker run \
-		--rm \
-		-it \
-		--workdir /builder/mnt \
-		-v .:/builder/mnt \
-		$(project_name)-builder:latest \
-		/bin/bash -c "cd gqc && python -m build"
+	$(DOCKER_CMD) /bin/bash -c "cd gqc && python -m build"
 
 # TODO: version number should be a variable
 # TODO: We should really be packaging this into the container
 gq-game-language/gq-game-language-0.0.1.vsix: builder-build
-	docker run \
-		--rm \
-		-it \
-		--workdir /builder/mnt \
-		-v .:/builder/mnt \
-		$(project_name)-builder:latest \
-		/bin/bash -c "cd gq-game-language && npm install langium && npm run langium:generate && npm run build && vsce package --allow-missing-repository"
+	$(DOCKER_CMD) /bin/bash -c "cd gq-game-language && npm install langium && npm run langium:generate && npm run build && vsce package --allow-missing-repository"
 
 ### Build targets in root build directory
 
