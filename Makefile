@@ -2,6 +2,12 @@ project_name=gamequeer
 BASE_DIR:=$(realpath $(shell dirname $(firstword $(MAKEFILE_LIST))))
 IMAGES:=$(shell docker images $(project_name)-builder -a -q)
 
+CURRENT_UID := $(shell id -u)
+CURRENT_GID := $(shell id -g)
+
+export CURRENT_UID
+export CURRENT_GID
+
 .PHONY: clean-builder clean-code clean all builder-run builder-rebuild gqc gamequeer gq-game-language
 .DEFAULT_GOAL := all
 
@@ -20,6 +26,7 @@ builder-run:
 		--workdir /builder/mnt \
 		-v .:/builder/mnt \
 		$(project_name)-builder:latest \
+		--user $(CURRENT_UID):$(CURRENT_GID) \
 		/bin/bash
 
 ### Build targets in subdirectories
@@ -31,6 +38,7 @@ gamequeer/build/gamequeer: builder-build
 		--workdir /builder/mnt \
 		-v .:/builder/mnt \
 		$(project_name)-builder:latest \
+		--user $(CURRENT_UID):$(CURRENT_GID) \
 		/bin/bash -c "cd gamequeer && cmake -B build && cmake --build build"
 
 # TODO: version number should be a variable
@@ -41,6 +49,7 @@ gqc/dist/gqc-0.0.1.tar.gz gqc/dist/gqc-0.0.1-py3-none-any.whl: builder-build
 		--workdir /builder/mnt \
 		-v .:/builder/mnt \
 		$(project_name)-builder:latest \
+		--user $(CURRENT_UID):$(CURRENT_GID) \
 		/bin/bash -c "cd gqc && python -m build"
 
 # TODO: version number should be a variable
@@ -52,6 +61,7 @@ gq-game-language/gq-game-language-0.0.1.vsix: builder-build
 		--workdir /builder/mnt \
 		-v .:/builder/mnt \
 		$(project_name)-builder:latest \
+		--user $(CURRENT_UID):$(CURRENT_GID) \
 		/bin/bash -c "cd gq-game-language && npm install langium && npm run langium:generate && npm run build && vsce package --allow-missing-repository"
 
 ### Build targets in root build directory
