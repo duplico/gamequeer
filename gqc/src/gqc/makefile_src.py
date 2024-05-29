@@ -5,8 +5,8 @@ makefile_skel = """\
 #  you're free to edit this file however you like.
 
 ifndef GQC_CMD
-\t# You want to alter this line if you need to invoke gqc with a different command:
-\tGQC_CMD := GQCCMD
+# You'll want to alter this line if you need to invoke gqc with a different command:
+GQC_CMD := GQCCMD
 endif
 
 BASE_DIR:=$(realpath $(shell dirname $(firstword $(MAKEFILE_LIST))))
