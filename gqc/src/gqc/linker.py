@@ -4,8 +4,8 @@ from collections import namedtuple
 
 from tabulate import tabulate
 
-from .parser import Game, Stage, Variable
-from .anim import Animation, Frame, FrameData
+from .datamodel import Game, Stage, Variable, Animation, Frame, FrameData
+
 from . import structs
 
 def create_symbol_table(table_dest = sys.stdout):
