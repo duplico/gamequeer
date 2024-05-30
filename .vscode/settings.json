@@ -5,10 +5,10 @@
     "[cpp]": {
       "editor.formatOnSave": true
     },
-    "C_Cpp.default.compileCommands": "${workspaceFolder}/gamequeer/src/build/compile_commands.json",
-    "cmake.configureOnOpen": true,
+    "cmake.configureOnOpen": false,
     "files.associations": {
       "stdbool.h": "c"
     },
-    "cmake.sourceDirectory": "${workspaceFolder}/gamequeer"
+    "cmake.sourceDirectory": "${workspaceFolder}/gamequeer",
+    "cmake.buildDirectory": "${sourceDirectory}/build"
 }
