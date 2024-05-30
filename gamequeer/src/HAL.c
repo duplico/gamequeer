@@ -111,5 +111,6 @@ void HAL_event_poll() {
 }
 
 void HAL_sleep() {
-    usleep(10000); // pause for number of microseconds before repeating
+    // TODO: Figure out how to emulate the badge sleep behavior
+    usleep(40000);
 }

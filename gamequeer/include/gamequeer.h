@@ -69,5 +69,10 @@ extern Graphics_Context g_sContext;
 extern uint8_t s_clicked;
 
 uint8_t load_game();
+uint8_t load_stage(t_gq_pointer stage_ptr);
+uint8_t load_animation(t_gq_pointer anim_ptr);
+uint8_t load_frame(t_gq_pointer frame_ptr);
+uint8_t next_frame();
+void show_curr_frame();
 
 #endif

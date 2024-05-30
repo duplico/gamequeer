@@ -268,7 +268,7 @@ class Animation:
         dot_timer_start = (self.frame_rate if self.frame_rate else 25) * 2
         dot_timer = dot_timer_start
         # Load each frame into a Frame object
-        for frame_path in (pathlib.Path() / 'build' / 'assets' / 'animations' / name).glob('frame*.bmp'):
+        for frame_path in sorted((pathlib.Path() / 'build' / 'assets' / 'animations' / name).glob('frame*.bmp')):
             self.frames.append(Frame(path=frame_path))
             if dot_timer == 0:
                 print(".", end='', flush=True)
@@ -310,7 +310,6 @@ class Frame:
     link_table = dict() # OrderedDict not needed to remember order since Python 3.7
 
     def __init__(self, img : Image = None, path : pathlib.Path = None):
-        self.data_pointer = 0x00000000
         self.addr = 0x00000000
         self.frame_data = FrameData(self)
 
@@ -325,14 +324,14 @@ class Frame:
 
         # Now, determine which of these image types is the smallest:
         image_types = dict(
+            # IMAGE_FMT_1BPP_COMP_RLE7=self.image_rle7_bytes(), # TODO: Re-add once the C side supports it
             IMAGE_FMT_1BPP_COMP_RLE4=self.image_rle4_bytes(),
-            IMAGE_FMT_1BPP_COMP_RLE7=self.image_rle7_bytes(),
             IMAGE_FMT_1BPP_UNCOMP=self.uncompressed_bytes()
         )
 
         # TODO: replace with the enum
         image_formats = dict(
-            IMAGE_FMT_1BPP_COMP_RLE7=0x71,
+            # IMAGE_FMT_1BPP_COMP_RLE7=0x71,
             IMAGE_FMT_1BPP_COMP_RLE4=0x41,
             IMAGE_FMT_1BPP_UNCOMP=0x01
         )
@@ -351,7 +350,7 @@ class Frame:
     def to_bytes(self):
         frame_struct = structs.GqAnimFrame(
             bPP=self.compression_type_number,
-            data_pointer=self.data_pointer,
+            data_pointer=self.frame_data.addr,
             data_size=len(self.bytes)
         )
         return struct.pack(structs.GQ_ANIM_FRAME_FORMAT, *frame_struct)

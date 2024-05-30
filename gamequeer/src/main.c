@@ -12,9 +12,6 @@
 
 Graphics_Context g_sContext;
 
-const uint32_t palette_bw[] = {0x000000, 0xffffff};
-const uint32_t palette_wb[] = {0xffffff, 0x000000};
-
 uint8_t s_clicked   = 0;
 uint8_t s_anim_done = 0;
 
@@ -27,6 +24,9 @@ void init() {
     // TODO: load the local starting stage
 }
 
+// TODO: Implement RL7 graphics loading based on
+// https://github.com/duplico/qc16_badge/blob/master/ccs_workspace/qbadge/ui/graphics.c#L23
+
 int main(int argc, char *argv[]) {
     HAL_init(argc, argv);
     init();
@@ -37,9 +37,11 @@ int main(int argc, char *argv[]) {
     // TODO: Load the starting animation
     while (1) {
         // Perform the current animation step
-        // TODO
-        // Graphics_drawImage(&g_sContext, &fingerprint_1BPP_UNCOMP, 0, 0);
-        Graphics_drawString(&g_sContext, "Hello, world!", -1, 0, 96, false);
+        if (next_frame()) {
+            show_curr_frame();
+        } else {
+            s_anim_done = 1;
+        }
 
         // Perform polling for other event sources
         HAL_event_poll();
