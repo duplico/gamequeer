@@ -13,11 +13,11 @@ export CURRENT_GID
 
 DOCKER_CMD := docker run -v /tmp/.X11-unix:/tmp/.X11-unix -e DISPLAY=$(DISPLAY) -h $(HOSTNAME) --rm -it --workdir /workspaces/gamequeer -v .:/workspaces/gamequeer --user $(CURRENT_UID):$(CURRENT_GID) $(project_name)-builder:latest
 
-builder-build: builder.Dockerfile
+builder-build: builder.Dockerfile requirements.txt gq-game-language/install-langium-deps.sh 
 	docker build -f builder.Dockerfile -t $(project_name)-builder:latest .
 	@touch $@
 
-builder-rebuild: builder.Dockerfile
+builder-rebuild:
 	docker build --no-cache -f builder.Dockerfile -t $(project_name)-builder:latest .
 	@touch builder-build
 
