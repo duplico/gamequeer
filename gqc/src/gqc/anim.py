@@ -3,7 +3,7 @@ import pathlib
 
 from rich.progress import Progress
 
-def make_animation(progress: Progress, progress_tasks : list, anim_src_path : pathlib.Path, output_dir : pathlib.Path, dithering : str = 'none', frame_rate : int = 24):
+def make_animation(progress: Progress, anim_src_path : pathlib.Path, output_dir : pathlib.Path, dithering : str = 'none', frame_rate : int = 24):
     # Set up the output directory
     output_dir.mkdir(parents=True, exist_ok=True)
     # Delete the old output files: anim.gif and frame*.bmp
@@ -34,8 +34,8 @@ def make_animation(progress: Progress, progress_tasks : list, anim_src_path : pa
 
     # Write the output - summary gif and frame files
     out_files = [
-        (output_dir / 'anim.gif', progress_tasks[0]),
-        (output_dir / 'frame%04d.bmp', progress_tasks[1])
+        (output_dir / 'anim.gif', progress.add_task(f" [dim]-> gif summary", total=1, start=False)),
+        (output_dir / 'frame%04d.bmp', progress.add_task(f" [dim]-> bmp frames", total=1, start=False))
     ]
 
     for out_file, task in out_files:
