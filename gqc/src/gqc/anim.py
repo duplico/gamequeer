@@ -1,7 +1,9 @@
 import ffmpeg
 import pathlib
 
-def make_animation(anim_src_path : pathlib.Path, output_dir : pathlib.Path, dithering : str = 'none', frame_rate : int = 24):
+from rich.progress import Progress
+
+def make_animation(progress: Progress, progress_tasks : list, anim_src_path : pathlib.Path, output_dir : pathlib.Path, dithering : str = 'none', frame_rate : int = 24):
     # Set up the output directory
     output_dir.mkdir(parents=True, exist_ok=True)
     # Delete the old output files: anim.gif and frame*.bmp
@@ -31,17 +33,19 @@ def make_animation(anim_src_path : pathlib.Path, output_dir : pathlib.Path, dith
     out = dithered.filter('fps', frame_rate)
 
     # Write the output - summary gif and frame files
-    out_file_summary = output_dir / 'anim.gif'
-    out_file_frames = output_dir / 'frame%04d.bmp'
-    
-    for out_file in [out_file_summary, out_file_frames]:
+    out_files = [
+        (output_dir / 'anim.gif', progress_tasks[0]),
+        (output_dir / 'frame%04d.bmp', progress_tasks[1])
+    ]
+
+    for out_file, task in out_files:
         try:
-            print(f"  Invoking ffmpeg {anim_src_path} -> {out_file}...", end='', flush=True)
+            progress.start_task(task)
             out.output(str(out_file)).run(overwrite_output=True, quiet=True)
-            print("done.")
+            progress.update(task, completed=1, total=1)
         except ffmpeg._run.Error as e:
-            print()
             raise ValueError(f"ffmpeg error; Raw output of ffmpeg follows: \n\n{e.stderr.decode()}")
+        progress.update(task, advance=1)
 
 def convert_animations(assets_dir : pathlib.Path, build_dir : pathlib.Path):
     pass

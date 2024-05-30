@@ -6,6 +6,8 @@ import pathlib
 from PIL import Image
 
 import pyparsing as pp
+from rich import print
+from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn
 
 from . import structs
 from .anim import make_animation
@@ -42,6 +44,7 @@ class Game:
     def add_variable(self, variable):
         self.variables.append(variable)
 
+    # TODO: Replace
     def pprint(self):
         print("Stages:")
         for stage in self.stages:
@@ -145,7 +148,6 @@ class Stage:
             events_code_size=0
         )
         return struct.pack(structs.GQ_STAGE_FORMAT, *stage)
-        
 
 class Variable:
     var_table = {}
@@ -246,37 +248,41 @@ class Animation:
             raise ValueError("Animation {} already defined".format(name))
         Animation.anim_table[name] = self
 
-        print(f"Begin work on animation `{name}`")
+        with Progress(TextColumn("[progress.description]{task.description}"), BarColumn(), TaskProgressColumn(), TimeElapsedColumn()) as animation_progress:
+            anim_task = animation_progress.add_task(f"[blue]Animation [italic]{name}[/italic]", total=None)
+            gif_task = animation_progress.add_task(f" [dim]-> gif summary", total=1, start=False)
+            bmp_task = animation_progress.add_task(f" [dim]-> bmp frames", total=1, start=False)
+            binary_task = animation_progress.add_task(f" [dim]-> gqimage", total=1, start=False)
 
-        self.frames = []
-        
-        make_animation_kwargs = dict()
-        if dithering:
-            make_animation_kwargs['dithering'] = dithering
-        if frame_rate:
-            make_animation_kwargs['frame_rate'] = frame_rate
+            self.frames = []
+            
+            make_animation_kwargs = dict()
+            if dithering:
+                make_animation_kwargs['dithering'] = dithering
+            if frame_rate:
+                make_animation_kwargs['frame_rate'] = frame_rate
 
-        # TODO: Namespace built animations by game name
-        # Reformat the animation source file into the build directory.
-        make_animation(
-            pathlib.Path() / 'assets' / 'animations' / source,
-            pathlib.Path() / 'build' / 'assets' / 'animations' / name,
-            **make_animation_kwargs
-        )
+            # TODO: Namespace built animations by game name
+            # Reformat the animation source file into the build directory.
+            make_animation(
+                animation_progress,
+                [gif_task, bmp_task],
+                pathlib.Path() / 'assets' / 'animations' / source,
+                pathlib.Path() / 'build' / 'assets' / 'animations' / name,
+                **make_animation_kwargs
+            )
 
-        print(f"  Converting frames to target binary format...", end='', flush=True)
-        dot_timer_start = (self.frame_rate if self.frame_rate else 25) * 2
-        dot_timer = dot_timer_start
-        # Load each frame into a Frame object
-        for frame_path in sorted((pathlib.Path() / 'build' / 'assets' / 'animations' / name).glob('frame*.bmp')):
-            self.frames.append(Frame(path=frame_path))
-            if dot_timer == 0:
-                print(".", end='', flush=True)
-                dot_timer = dot_timer_start
-            else:
-                dot_timer -= 1
-        print("done.")
-        print(f"Complete work on animation `{name}`")
+            # Load each frame into a Frame object
+            frame_paths = sorted((pathlib.Path() / 'build' / 'assets' / 'animations' / name).glob('frame*.bmp'))
+            animation_progress.update(binary_task, total=len(frame_paths))
+            animation_progress.start_task(binary_task)
+            for frame_path in frame_paths:
+                self.frames.append(Frame(path=frame_path))
+                animation_progress.update(binary_task, advance=1)
+            animation_progress.start_task(anim_task)
+            animation_progress.update(anim_task, completed=1, total=1)
+            
+
     
     def set_frame_pointer(self, frame_pointer : int, namespace : int = structs.GQ_PTR_NS_CART):
         self.frame_pointer = structs.gq_ptr_apply_ns(namespace, frame_pointer)

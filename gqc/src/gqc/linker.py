@@ -3,6 +3,7 @@ import typing
 from collections import namedtuple
 
 from tabulate import tabulate
+from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn
 
 from .datamodel import Game, Stage, Variable, Animation, Frame, FrameData
 
@@ -119,8 +120,14 @@ def generate_code(parsed, symbol_table : dict):
     # TODO: error if their addresses are non-contiguous.
     #       or, switch to using Intel Hex format or TI-TXT format.
 
-    for section, table in symbol_table.items():
-        for symbol in table.values():
-            output += symbol.to_bytes()
+    # Count the total number of symbols to be processed
+    symbol_count = sum([len(table) for table in symbol_table.values()])
+
+    with Progress(TextColumn("[progress.description]{task.description}"), BarColumn(), TaskProgressColumn(), TimeElapsedColumn()) as progress:
+        task = progress.add_task(f"Generating code", total=symbol_count)
+        for table in symbol_table.values():
+            for symbol in table.values():
+                output += symbol.to_bytes()
+                progress.update(task, advance=1)
     
     return output

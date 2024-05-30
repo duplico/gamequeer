@@ -6,3 +6,4 @@ ffmpeg-python>=0.2
 build >= 1.2
 pillow >= 10.3
 tabulate >= 0.9
+rich >= 13.7
