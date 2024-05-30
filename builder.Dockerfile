@@ -24,8 +24,8 @@ ENV LANG='en_US.UTF-8' LANGUAGE='en_US:en' LC_ALL='en_US.UTF-8'
 RUN echo 'en_US.UTF-8 UTF-8' > /etc/locale.gen && /usr/sbin/locale-gen
 RUN echo "alias ll='ls -laGFh'" >> /root/.bashrc
 
-VOLUME ["/builder/mnt"]
-WORKDIR /builder/mnt
+VOLUME ["/workspaces/gamequeer"]
+WORKDIR /workspaces/gamequeer
 
 # install clang tools
 
@@ -70,8 +70,8 @@ RUN gem install ceedling
 ENV RUBYOPT "-KU -E utf-8:utf-8"
 
 # Node stuff for langium:
-COPY gq-game-language/install-langium-deps.sh /builder/mnt/gq-game-language/
-RUN chmod +x /builder/mnt/gq-game-language/install-langium-deps.sh && /builder/mnt/gq-game-language/install-langium-deps.sh
+COPY gq-game-language/install-langium-deps.sh /workspaces/gamequeer/gq-game-language/
+RUN chmod +x /workspaces/gamequeer/gq-game-language/install-langium-deps.sh && /workspaces/gamequeer/gq-game-language/install-langium-deps.sh
 
 # Python dependencies
 
@@ -79,8 +79,8 @@ RUN apt-get update --fix-missing && apt-get -y upgrade && apt-get install -y --n
     ffmpeg \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt /builder/mnt/
-RUN pip install --upgrade pip && pip install --requirement /builder/mnt/requirements.txt
+COPY requirements.txt /workspaces/gamequeer/
+RUN pip install --upgrade pip && pip install --requirement /workspaces/gamequeer/requirements.txt
 
 # Put the dev python gqc module in the python path
-ENV PYTHONPATH $PYTHONPATH:/builder/mnt/gqc/src/:/workspaces/gamequeer/gqc/src/
+ENV PYTHONPATH $PYTHONPATH:/workspaces/gamequeer/gqc/src/:/workspaces/gamequeer/gqc/src/

@@ -9,6 +9,7 @@
     "files.associations": {
       "stdbool.h": "c"
     },
+    "cmake.generator": "Unix Makefiles",
     "cmake.sourceDirectory": "${workspaceFolder}/gamequeer",
     "cmake.buildDirectory": "${sourceDirectory}/build"
 }
