@@ -9,6 +9,8 @@ RUN apt-get update --fix-missing && apt-get -y upgrade && apt-get install -y --n
     curl \
     cmake \
     build-essential \
+    gdb \
+    ninja-build \
     locales \
     make \
     ruby \

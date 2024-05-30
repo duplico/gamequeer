@@ -6,9 +6,12 @@ game {
 }
 
 animations {
-    taylor <- "default.mp4";
+    george <- "default.mp4" {
+        dithering := "sierra2_4a";
+        frame_rate = 25;
+    }
 }
 
 stage start {
-    bganim taylor;
+    bganim george;
 }

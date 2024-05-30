@@ -52,7 +52,7 @@ GQ_HEADER_SIZE = struct.calcsize(GQ_HEADER_FORMAT)
 #     t_gq_pointer frame_pointer; // Pointer to the first gq_anim_frame
 # } gq_anim;
 GqAnim = namedtuple('GqAnim', 'id frame_count frame_rate flags width height frame_pointer')
-GQ_ANIM_FORMAT = '<HHHHBBQ'
+GQ_ANIM_FORMAT = f'<HHHHBB{T_GQ_POINTER_FORMAT}'
 GQ_ANIM_SIZE = struct.calcsize(GQ_ANIM_FORMAT)
 
 # typedef struct gq_anim_frame {
@@ -61,7 +61,7 @@ GQ_ANIM_SIZE = struct.calcsize(GQ_ANIM_FORMAT)
 #     uint32_t data_size;        // Size of the frame data
 # } gq_anim_frame;
 GqAnimFrame = namedtuple('GqAnimFrame', 'bPP data_pointer data_size')
-GQ_ANIM_FRAME_FORMAT = '<BQI'
+GQ_ANIM_FRAME_FORMAT = f'<B{T_GQ_POINTER_FORMAT}I'
 GQ_ANIM_FRAME_SIZE = struct.calcsize(GQ_ANIM_FRAME_FORMAT)
 
 # typedef struct gq_stage {

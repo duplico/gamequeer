@@ -26,6 +26,8 @@ add_executable(
     ${PROJECT_NAME}
     # Main sources:
     src/main.c
+    src/gamequeer.c
+    src/HAL.c
     # Graphics driver:
     src/grlib_gfx_driver/grlib_gfx_driver.c
     # gfx (Linux graphics library) sources:
