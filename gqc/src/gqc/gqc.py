@@ -1,10 +1,11 @@
 import os
 import sys
 import pathlib
-
 from collections import namedtuple
 
 import click
+from rich.progress import Progress
+
 from . import parser
 from . import anim
 from . import makefile_src
@@ -22,7 +23,8 @@ def gqc_cli():
 @click.option('--dither', '-d', type=click.Choice(DITHER_CHOICES), default=DITHER_CHOICES[0])
 @click.option('--frame-rate', '-f', type=int, default=24)
 def mkanim(out_path : pathlib.Path, src_path : pathlib.Path, dither : str, frame_rate : int):
-    anim.make_animation(src_path, out_path, dither, frame_rate)
+    with Progress() as progress:
+        anim.make_animation(progress, src_path, out_path, dither, frame_rate)
 
 @gqc_cli.command()
 @click.option('--no-mem-map', '-n', is_flag=True)
@@ -57,19 +59,15 @@ def compile(input : pathlib.Path, no_mem_map : bool, out_dir : pathlib.Path):
     mem_map_path = out_dir / 'map.txt'
     if no_mem_map:
         mem_map_path = os.devnull
-    else:
-        print(f"Writing memory map to {mem_map_path}")
+
     with open(mem_map_path, 'w') as map_file:
         symbol_table = linker.create_symbol_table(table_dest=map_file)
 
     # TODO: Any additional linking tasks
 
-    # TODO: Code generation
-    print("Generating code...", end='', flush=True)
+    # Code generation
     output_code = linker.generate_code(parsed, symbol_table)
-    print("done.")
     with open(out_dir / f'{game_name}.gqgame', 'wb') as out_file:
-        print(f"Writing to {out_file.name}...", end='', flush=True)
         out_file.write(output_code)
     print("done.")
 
