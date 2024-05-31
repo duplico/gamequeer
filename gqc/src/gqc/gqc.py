@@ -24,7 +24,7 @@ def gqc_cli():
 @click.option('--frame-rate', '-f', type=int, default=24)
 def mkanim(out_path : pathlib.Path, src_path : pathlib.Path, dither : str, frame_rate : int):
     with Progress() as progress:
-        anim.make_animation(progress, dither, frame_rate)
+        anim.make_animation(progress, src_path, out_path, dither, frame_rate)
 
 @gqc_cli.command()
 @click.option('--no-mem-map', '-n', is_flag=True)
