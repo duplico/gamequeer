@@ -10,6 +10,7 @@ from . import parser
 from . import anim
 from . import makefile_src
 from . import linker
+from .datamodel import Game
 
 DITHER_CHOICES = ('none', 'bayer', 'heckbert', 'floyd_steinberg', 'sierra2', 'sierra2_4a')
 
@@ -31,11 +32,12 @@ def mkanim(out_path : pathlib.Path, src_path : pathlib.Path, dither : str, frame
 @click.option('--out-dir', '-o', type=click.Path(file_okay=False, dir_okay=True, writable=True, path_type=pathlib.Path), default=None)
 @click.argument('input', type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True, path_type=pathlib.Path), required=True)
 def compile(input : pathlib.Path, no_mem_map : bool, out_dir : pathlib.Path):
+    Game.game_name = input.stem
+
     # output_path is the directory where the output of the project will be placed
     if out_dir is None:
-        out_dir = pathlib.Path.cwd() / 'build' / input.stem
+        out_dir = pathlib.Path.cwd() / 'build' / Game.game_name
     out_dir.mkdir(parents=True, exist_ok=True)
-    game_name = input.stem
 
     # We'll create the following, unless told not to:
     #  out_path/
@@ -67,7 +69,7 @@ def compile(input : pathlib.Path, no_mem_map : bool, out_dir : pathlib.Path):
 
     # Code generation
     output_code = linker.generate_code(parsed, symbol_table)
-    with open(out_dir / f'{game_name}.gqgame', 'wb') as out_file:
+    with open(out_dir / f'{Game.game_name}.gqgame', 'wb') as out_file:
         out_file.write(output_code)
     print("done.")
 
