@@ -19,6 +19,7 @@ FrameOnDisk = namedtuple('FrameOnDisk', ['compression_type_name', 'width', 'heig
 
 class Game:
     link_table = dict() # OrderedDict not needed to remember order since Python 3.7
+    game_name : str = None
     game = None
 
     def __init__(self, id : int, title : str, author : str, starting_stage : str = 'start'):
@@ -268,8 +269,7 @@ class Animation:
                 make_animation_kwargs['frame_rate'] = frame_rate
 
             self.src_path = pathlib.Path() / 'assets' / 'animations' / source
-            # TODO: Namespace built animations by game name
-            self.dst_path = pathlib.Path() / 'build' / 'assets' / 'animations' / name
+            self.dst_path = pathlib.Path() / 'build' / 'assets' / 'animations' / Game.game_name / name
             digest_path = self.dst_path / '.digest'
             
             # Check if the dst_path has a file in it called .digest and compare it to self.digest()
@@ -296,7 +296,7 @@ class Animation:
             binary_task = animation_progress.add_task(f" [dim]-> gqimage", total=1, start=False)
             
             # Load each frame into a Frame object
-            frame_paths = sorted((pathlib.Path() / 'build' / 'assets' / 'animations' / name).glob('frame*.bmp'))
+            frame_paths = sorted(self.dst_path.glob('frame*.bmp'))
             animation_progress.update(binary_task, total=len(frame_paths))
             animation_progress.start_task(binary_task)
             for frame_path in frame_paths:
