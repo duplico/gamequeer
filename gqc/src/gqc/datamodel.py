@@ -3,8 +3,10 @@ import struct
 from enum import IntEnum
 from typing import Iterable
 import pathlib
-from PIL import Image
+from collections import namedtuple
+import pickle
 
+from PIL import Image
 import pyparsing as pp
 from rich import print
 from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn
@@ -12,6 +14,8 @@ from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, T
 from . import structs
 from .anim import make_animation
 import hashlib
+
+FrameOnDisk = namedtuple('FrameOnDisk', ['compression_type_name', 'width', 'height', 'bytes'])
 
 class Game:
     link_table = dict() # OrderedDict not needed to remember order since Python 3.7
@@ -235,6 +239,7 @@ class Animation:
     # TODO: move DITHER_CHOICES to an enum?
     # TODO: deduplicate the resolution of defaults here:
     # TODO: change source from a str to a pathlib.Path
+    # TODO: accept a size parameter
     def __init__(self, name : str, source : str, dithering : str = 'none', frame_rate : int = 25):
         self.frame_pointer = 0x00000000
         self.addr = 0x00000000
@@ -253,7 +258,7 @@ class Animation:
         with Progress(TextColumn("[progress.description]{task.description}"), BarColumn(), TaskProgressColumn(), TimeElapsedColumn()) as animation_progress:
             anim_task = animation_progress.add_task(f"[blue]Animation [italic]{name}[/italic]", total=None)
             hash_task = animation_progress.add_task(f" [dim]-- digest", total=1, start=False)
-
+            
             self.frames = []
             
             make_animation_kwargs = dict()
@@ -263,9 +268,10 @@ class Animation:
                 make_animation_kwargs['frame_rate'] = frame_rate
 
             self.src_path = pathlib.Path() / 'assets' / 'animations' / source
+            # TODO: Namespace built animations by game name
             self.dst_path = pathlib.Path() / 'build' / 'assets' / 'animations' / name
             digest_path = self.dst_path / '.digest'
-
+            
             # Check if the dst_path has a file in it called .digest and compare it to self.digest()
             # If they match, skip the ffmpeg conversion step
             ffmpeged = False
@@ -279,7 +285,6 @@ class Animation:
                         ffmpeged = True
                         animation_progress.update(hash_task, advance=1)
 
-            # TODO: Namespace built animations by game name
             # Reformat the animation source file into the build directory.
             if not ffmpeged:
                 make_animation(
@@ -289,13 +294,20 @@ class Animation:
                     **make_animation_kwargs
                 )
             binary_task = animation_progress.add_task(f" [dim]-> gqimage", total=1, start=False)
-
+            
             # Load each frame into a Frame object
             frame_paths = sorted((pathlib.Path() / 'build' / 'assets' / 'animations' / name).glob('frame*.bmp'))
             animation_progress.update(binary_task, total=len(frame_paths))
             animation_progress.start_task(binary_task)
             for frame_path in frame_paths:
-                self.frames.append(Frame(path=frame_path))
+                serialized_path = frame_path.with_suffix('.gqframe')
+                # TODO: Do some kind of error handling here for whatever can be
+                #       raised while trying to deserialize the frame.
+                if ffmpeged and serialized_path.exists():
+                    self.frames.append(Frame(path=serialized_path))
+                else:
+                    self.frames.append(Frame(path=frame_path))
+                    self.frames[-1].serialize(serialized_path)
                 animation_progress.update(binary_task, advance=1)
             animation_progress.start_task(anim_task)
             animation_progress.update(anim_task, completed=1, total=1)
@@ -310,7 +322,10 @@ class Animation:
             
     def digest(self) -> int:
         # An Animation object is uniquely identified by a hash of the source file,
-        #  its frame rate, and its dithering configuration.
+        #  its frame rate, size, and its dithering configuration.
+        # TODO: The following should be added, but currently it breaks when
+        #       trying to load from file (because the frames list is empty)
+        #size = f"{self.frames[0].width}x{self.frames[0].height}"
 
         # Get a SHA-256 hash of self.source's contents
         with open(self.src_path, 'rb') as file:
@@ -318,6 +333,9 @@ class Animation:
             sha256_hash = hashlib.sha256(contents)
         sha256_hash.update(str(self.frame_rate).encode('ascii'))
         sha256_hash.update(self.dithering.encode('ascii'))
+        # sha256_hash.update(size.encode('ascii')) TODO: Re-add
+        from . import __version__
+        sha256_hash.update(__version__.encode('ascii'))
         return sha256_hash.hexdigest()
     
     def set_frame_pointer(self, frame_pointer : int, namespace : int = structs.GQ_PTR_NS_CART):
@@ -351,16 +369,29 @@ class Animation:
 class Frame:
     link_table = dict() # OrderedDict not needed to remember order since Python 3.7
 
+    # TODO: replace with the enum
+    image_formats = dict(
+        # IMAGE_FMT_1BPP_COMP_RLE7=0x71,
+        IMAGE_FMT_1BPP_COMP_RLE4=0x41,
+        IMAGE_FMT_1BPP_UNCOMP=0x01
+    )
+
     def __init__(self, img : Image = None, path : pathlib.Path = None):
         self.addr = 0x00000000
         self.frame_data = FrameData(self)
 
         assert img or path
         
+        reading_bytes = False
+
         if img:
             self.image = img
         elif path:
-            self.image = Image.open(path)
+            if path.suffix == '.gqframe':
+                self.deserialize(path)
+                return
+            else:
+                self.image = Image.open(path)
         
         self.image = self.image.convert('1')
 
@@ -371,15 +402,8 @@ class Frame:
             IMAGE_FMT_1BPP_UNCOMP=self.uncompressed_bytes()
         )
 
-        # TODO: replace with the enum
-        image_formats = dict(
-            # IMAGE_FMT_1BPP_COMP_RLE7=0x71,
-            IMAGE_FMT_1BPP_COMP_RLE4=0x41,
-            IMAGE_FMT_1BPP_UNCOMP=0x01
-        )
-
         self.compression_type_name = sorted(list(image_types.keys()), key=lambda a: len(image_types[a]))[0]
-        self.compression_type_number = image_formats[self.compression_type_name]
+        self.compression_type_number = Frame.image_formats[self.compression_type_name]
         self.bytes = image_types[self.compression_type_name]
 
         self.width = self.image.width
@@ -397,6 +421,25 @@ class Frame:
         )
         return struct.pack(structs.GQ_ANIM_FRAME_FORMAT, *frame_struct)
     
+    def serialize(self, out_path : pathlib.Path):
+        d = FrameOnDisk(
+            compression_type_name=self.compression_type_name,
+            width=self.width,
+            height=self.height,
+            bytes=self.bytes
+        )
+        with open(out_path, 'wb') as file:
+            pickle.dump(d, file)
+
+    def deserialize(self, in_path : pathlib.Path):
+        with open(in_path, 'rb') as file:
+            d = pickle.load(file)
+            self.compression_type_name = d.compression_type_name
+            self.compression_type_number = Frame.image_formats[self.compression_type_name]
+            self.width = d.width
+            self.height = d.height
+            self.bytes = d.bytes
+
     def size(self):
         return structs.GQ_ANIM_FRAME_SIZE
 
