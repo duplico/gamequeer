@@ -3,6 +3,7 @@ import sys
 import pyparsing as pp
 
 from .datamodel import Animation, Game, Stage, Variable, Event
+from .datamodel import Command, CommandDone, CommandPlayBg, CommandGoStage
 from .structs import EventType
 
 class GqcParseError(Exception):
@@ -135,7 +136,19 @@ def parse_variable_definition_storageclass(instring, loc, toks):
     # return Variable.link_table[storageclass]
 
 def parse_command(instring, loc, toks):
-    pass
+    toks = toks[0]
+
+    command = toks[0]
+
+    if command == "play":
+        if toks[1] == 'bganim':
+            return CommandPlayBg(instring, loc, toks[2])
+        else:
+            raise GqcParseError(f"Invalid play subcommand {command}", instring, loc)
+    elif command == "gostage":
+        return CommandGoStage(instring, loc, toks[1])
+    else:
+        raise GqcParseError(f"Invalid command {command}", instring, loc)
 
 def parse(text):
     # Import here to avoid circular import

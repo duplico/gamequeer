@@ -87,6 +87,25 @@ class EventType(IntEnum):
     BUTTON_CLICK = 0x05
     BGDONE = 0x06
 
+# TODO: Verify with the C source
+class OpCode(IntEnum):
+    NOP = 0x00
+    DONE = 0x01
+    PLAYBG = 0x02
+    GOSTAGE = 0x03
+
+# Bytecode format:
+# typedef struct gq_op {
+#     uint8_t opcode;    // Opcode
+#     uint8_t flags;     // Flags
+#     t_gq_pointer arg1; // Argument 1
+#     t_gq_pointer arg2; // Argument 2
+# } __attribute__((packed)) gq_op;
+
+GqOp = namedtuple('GqOp', 'opcode flags arg1 arg2')
+GQ_OP_FORMAT = f'<BB{T_GQ_POINTER_FORMAT}{T_GQ_POINTER_FORMAT}'
+GQ_OP_SIZE = struct.calcsize(GQ_OP_FORMAT)
+
 # typedef struct gq_stage {
 #     uint16_t id;                                 // Numerical ID of the stage (sequential, 0-based)
 #     t_gq_pointer anim_bg_pointer;                // Pointer to the background animation (NULL if none)

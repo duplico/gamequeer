@@ -71,7 +71,6 @@ def compile(input : pathlib.Path, no_mem_map : bool, out_dir : pathlib.Path):
     output_code = linker.generate_code(parsed, symbol_table)
     with open(out_dir / f'{Game.game_name}.gqgame', 'wb') as out_file:
         out_file.write(output_code)
-    print("done.")
 
 @gqc_cli.command()
 @click.argument('base_dir', type=click.Path(file_okay=False, dir_okay=True, writable=True, path_type=pathlib.Path))

@@ -5,7 +5,7 @@ from collections import namedtuple
 from tabulate import tabulate
 from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn
 
-from .datamodel import Game, Stage, Variable, Animation, Frame, FrameData
+from .datamodel import Game, Stage, Variable, Animation, Frame, FrameData, Event
 
 from . import structs
 
@@ -17,6 +17,7 @@ def create_symbol_table(table_dest = sys.stdout):
     # frames (fixed size by count)
     # frame data (variable size)
     # variable area (variable size)
+    # events code (variable size)
 
     frame_count = sum([len(anim.frames) for anim in Animation.anim_table.values()])
 
@@ -67,10 +68,21 @@ def create_symbol_table(table_dest = sys.stdout):
 
     # TODO: Menus
 
+    # The event table's addresses are calculated as part of the placement of
+    #  stages.
+    events_ptr_start = vars_ptr_start + vars_ptr_offset
+    events_ptr_offset = 0
+
     # The stage table is next, because it depends upon references to the animations and menus, even though
     #  it may before them in the final layout.
     stage_ptr_offset = 0
     for stage in Stage.stage_table.values():
+        for event_type in structs.EventType:
+            if event_type in stage.events:
+                event = stage.events[event_type]
+                event.set_addr(events_ptr_start + events_ptr_offset)
+                events_ptr_offset += event.size()
+
         stage.set_addr(stage_ptr_start + stage_ptr_offset)
         stage_ptr_offset += structs.GQ_STAGE_SIZE
 
@@ -80,7 +92,8 @@ def create_symbol_table(table_dest = sys.stdout):
         '.stage' : Stage.link_table,
         '.frame' : Frame.link_table,
         '.framedata' : FrameData.link_table,
-        '.var' : Variable.link_table
+        '.var' : Variable.link_table,
+        '.event' : Event.link_table,
     }
 
     # Emit a human readable summary of the symbol table.

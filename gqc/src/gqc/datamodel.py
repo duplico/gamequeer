@@ -13,8 +13,11 @@ from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, T
 
 from . import structs
 from .structs import EventType
+from .structs import OpCode as CommandType
 from .anim import make_animation
 import hashlib
+
+# TODO: Turn the datamodel module into a directory
 
 FrameOnDisk = namedtuple('FrameOnDisk', ['compression_type_name', 'width', 'height', 'bytes'])
 
@@ -88,23 +91,104 @@ class Game:
         )
         return struct.pack(structs.GQ_HEADER_FORMAT, *header)
 
-class CommandType(IntEnum):
-    PLAY = 1
-    GOSTAGE = 2
+# TODO: Module for Commands?
 
 class Command:
-    def __init__(self, command_type : CommandType, command_args : Iterable):
-        self.command_type = command_type
-        self.command_args = command_args
+    def __init__(self, command_type : CommandType, instring = None, loc = None,  flags : int = 0, arg1 : int = 0, arg2 : int = 0):
+        self.instring = instring
+        self.loc = loc
         
+        self.command_type = command_type
+        self.command_flags = flags
+        self.arg1 = arg1
+        self.arg2 = arg2
+        self.resolved = False
+    
+    def resolve(self):
+        # TODO: Probably not this:
+        self.resolved = True
+        return True
+    
+    def to_bytes(self):
+        if not self.resolve():
+            # TODO: Raise a GqError here, or otherwise show the location of the error in source
+            raise ValueError("Unresolved command symbols remain")
+
+        op = structs.GqOp(
+            opcode=self.command_type,
+            flags=self.command_flags,
+            arg1=self.arg1,
+            arg2=self.arg2
+        )
+        return struct.pack(structs.GQ_OP_FORMAT, *op)
+    
+    def size(self):
+        return structs.GQ_OP_SIZE
+
     def __repr__(self) -> str:
-        return f"Command({self.command_type}, {self.command_args})"
+        return f"Command({self.command_type} {self.command_flags}, {self.arg1} {self.arg2})"
+
+class CommandDone(Command):
+    def __init__(self):
+        super().__init__(CommandType.DONE)
+        self.resolved = True
+
+class CommandGoStage(Command):
+    def __init__(self, instring, loc, stage : str):
+        super().__init__(CommandType.GOSTAGE, instring, loc, arg1=stage)
+    
+    def resolve(self):
+        if self.resolved:
+            return True
+
+        # TODO: Extract constant for NULL:
+        if self.arg1 in Stage.stage_table and Stage.stage_table[self.arg1].addr != 0x00000000:
+            self.arg1 = Stage.stage_table[self.arg1].addr
+            resolved = True
+        
+        return resolved
+
+class CommandPlayBg(Command):
+    def __init__(self, instring, loc, bganim : str):
+        super().__init__(CommandType.PLAYBG, instring, loc, arg1=bganim)
+    
+    def resolve(self):
+        if self.resolved:
+            return True
+
+        if self.arg1 in Animation.anim_table and Animation.anim_table[self.arg1].addr != 0x00000000:
+            self.arg1 = Animation.anim_table[self.arg1].addr
+            resolved = True
+        
+        return resolved
 
 class Event:
+    event_table = []
+    link_table = dict()
+
     def __init__(self, event_type : EventType, event_statements : Iterable):
         self.event_type = event_type
+        self.addr = 0x00000000 # Set at link time
+
         self.event_statements = event_statements
-        # TODO: addr
+        if self.event_statements:
+            # Only add a DONE command if there are other commands in the event
+            self.event_statements.append(CommandDone())
+        # TODO: don't generate anything for an empty event
+
+    def set_addr(self, addr : int, namespace : int = structs.GQ_PTR_NS_CART):
+        self.addr = structs.gq_ptr_apply_ns(namespace, addr)
+        Event.link_table[self.addr] = self
+
+    def to_bytes(self):
+        event_bytes = []
+        for statement in self.event_statements:
+            event_bytes.append(statement.to_bytes())
+        return b''.join(event_bytes)
+
+    def size(self):
+        # TODO: List needed??
+        return sum(statement.size() for statement in self.event_statements)
 
     def __repr__(self) -> str:
         return f"Event({self.event_type}, {self.event_statements})"
@@ -127,8 +211,8 @@ class Stage:
         Stage.stage_table[name] = self
 
         self.events = dict()
-        self.events_resolved = None
-        
+
+        # TODO: Validate it's a valid event type
         for event in events:
             if event.event_type not in self.events:
                 self.events[event.event_type] = event
@@ -159,7 +243,7 @@ class Stage:
 
         # TODO: Attempt to resolve menu
 
-        # TODO: Anything to do with event statements here?
+        # Event statements resolve themselves at code generation time
 
         # Return whether the resolution of all symbols is complete.
         self.resolved = resolved
@@ -184,7 +268,7 @@ class Stage:
             #       them all to null
             if event_type in self.events:
                 # TODO: Not this - resolve the address of the event code first
-                event_pointers.append(0x00)
+                event_pointers.append(self.events[event_type].addr)
             else:
                 event_pointers.append(0x00)
 
@@ -195,7 +279,6 @@ class Stage:
             menu_pointer=0,
             event_commands=event_pointers
         )
-        print(stage)
         return struct.pack(structs.GQ_STAGE_FORMAT, stage.id, stage.anim_bg_pointer, stage.menu_pointer, *stage.event_commands)
 
 class Variable:
