@@ -2,6 +2,7 @@ import pyparsing as pp
 
 from .parser import parse_variable_definition, parse_variable_definition_storageclass
 from .parser import parse_animation_definition, parse_stage_definition, parse_game_definition
+from .parser import parse_event_definition
 
 """
 Grammar for GQC language
@@ -108,26 +109,26 @@ def build_game_parser():
     # Light cue sections
     lightcue_definition_section = pp.Group(pp.Keyword("lightcues") - file_assignments)
 
-    # # Menu sections
+    # Menu sections
     menu_option = pp.Group(integer - pp.Suppress(":") - string - pp.Suppress(";"))
     menu_options = pp.Group(menu_option | pp.Suppress("{") - pp.ZeroOrMore(menu_option) - pp.Suppress("}"))
     menu_definition = pp.Group(identifier - menu_options)
     menu_definitions = pp.Group(menu_definition | pp.Suppress("{") - pp.ZeroOrMore(menu_definition) - pp.Suppress("}"))
     menu_definition_section = pp.Group(pp.Keyword("menus") - menu_definitions)
 
-    # ### Stage sections ###
-    # # Commands
+    ### Stage sections ###
+    # Commands
     play = pp.Group(pp.Keyword("play") - pp.Keyword("bganim") - identifier - pp.Suppress(";"))
     gostage = pp.Group(pp.Keyword("gostage") - identifier - pp.Suppress(";"))
 
     event_statement = play | gostage
     event_statements = pp.Group(event_statement | pp.Suppress("{") - pp.ZeroOrMore(event_statement) - pp.Suppress("}"))
 
-    # # Event types
+    # Event types
     event_input_button = pp.Keyword("A") | pp.Keyword("B") | pp.Keyword("<-") | pp.Keyword("->")
     event_type = pp.Keyword("input") - pp.Suppress("(") - event_input_button - pp.Suppress(")") | pp.Keyword("bgdone") | pp.Keyword("menu")
 
-    # # General stage definition and options
+    # General stage definition and options
     stage_bganim = pp.Group(pp.Keyword("bganim") - identifier - pp.Suppress(";"))
     stage_menu = pp.Group(pp.Keyword("menu") - identifier - pp.Suppress(";") | pp.Keyword("menu") - identifier - pp.Keyword("prompt") - string - pp.Suppress(";"))
     stage_event = pp.Group(pp.Keyword("event") - event_type - event_statements)
@@ -135,9 +136,11 @@ def build_game_parser():
     stage_options = pp.Group(stage_option | pp.Suppress("{") - pp.ZeroOrMore(stage_option) - pp.Suppress("}"))
     stage_definition_section = pp.Group(pp.Suppress("stage") - identifier - stage_options)
 
+    stage_event.set_parse_action(parse_event_definition)
+
     stage_definition_section.set_parse_action(parse_stage_definition)
 
-    # # Finish up
+    # Finish up
     gqc_game << game_definition_section - pp.ZeroOrMore(animation_definition_section | lightcue_definition_section | var_definition_section | menu_definition_section | stage_definition_section)
     gqc_game.ignore(pp.cppStyleComment)
 

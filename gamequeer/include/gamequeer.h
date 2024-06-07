@@ -57,12 +57,27 @@ typedef struct gq_anim_frame {
     uint32_t data_size;        // Size of the frame data
 } __attribute__((packed)) gq_anim_frame;
 
+typedef enum gq_event_type {
+    GQ_EVENT_NOP = 0x00,
+    GQ_EVENT_BUTTON_A,
+    GQ_EVENT_BUTTON_B,
+    GQ_EVENT_BUTTON_L,
+    GQ_EVENT_BUTTON_R,
+    GQ_EVENT_BUTTON_CLICK,
+    GQ_EVENT_BGDONE,
+    GQ_EVENT_ENTER,
+    GQ_EVENT_COUNT
+} gq_event_type;
+
+typedef struct gq_event {
+    t_gq_pointer commands_pointer; // Pointer to the commands
+} __attribute__((packed)) gq_event;
+
 typedef struct gq_stage {
-    uint16_t id;                      // Numerical ID of the stage (sequential, 0-based)
-    t_gq_pointer anim_bg_pointer;     // Pointer to the background animation (NULL if none)
-    t_gq_pointer menu_pointer;        // Pointer to the menu definition for this stage
-    t_gq_pointer events_code_pointer; // Pointer to the events code
-    uint32_t events_code_size;        // Size of the events code
+    uint16_t id;                                 // Numerical ID of the stage (sequential, 0-based)
+    t_gq_pointer anim_bg_pointer;                // Pointer to the background animation (NULL if none)
+    t_gq_pointer menu_pointer;                   // Pointer to the menu definition for this stage
+    t_gq_pointer event_commands[GQ_EVENT_COUNT]; // Event commands
 } __attribute__((packed)) gq_stage;
 
 extern Graphics_Context g_sContext;

@@ -2,7 +2,8 @@ import sys
 
 import pyparsing as pp
 
-from .datamodel import Animation, Game, Stage, Variable
+from .datamodel import Animation, Game, Stage, Variable, Event
+from .structs import EventType
 
 class GqcParseError(Exception):
     def __init__(self, message, s, loc):
@@ -44,18 +45,39 @@ def parse_stage_definition(instring, loc, toks):
     name = toks[0]
 
     stage_kwargs = dict(
-        event_statements = []
+        events = []
     )
 
-    for stage_options in toks[1]:
-        if stage_options[0] == 'event':
-            stage_kwargs['event_statements'].append(stage_options[1])
-        elif stage_options[0] in stage_kwargs:
-            raise GqcParseError(f"Duplicate option {stage_options[0]} for stage {name}", instring, loc)
+    for stage_option in toks[1]:
+        if isinstance(stage_option, Event):
+            stage_kwargs['events'].append(stage_option)
+        elif stage_option[0] in stage_kwargs:
+            raise GqcParseError(f"Duplicate option {stage_option[0]} for stage {name}", instring, loc)
         else:
-            stage_kwargs[stage_options[0]] = stage_options[1]
+            stage_kwargs[stage_option[0]] = stage_option[1]
 
     return Stage(name, **stage_kwargs)
+
+def parse_event_definition(instring, loc, toks):
+    toks = toks[0]
+
+    event_type = None
+    event_statements = None
+
+    if toks[1] == 'bgdone':
+        event_type = EventType.BGDONE
+        event_statements = toks[2]
+    elif toks[1] == 'input':
+        event_inputs = {
+            'A' : EventType.BUTTON_A,
+            'B' : EventType.BUTTON_B,
+            '->' : EventType.BUTTON_R,
+            '<-' : EventType.BUTTON_L,
+        }
+        event_type = event_inputs[toks[2]]
+        event_statements = toks[3]
+    
+    return Event(event_type, event_statements)
 
 def parse_animation_definition(instring, loc, toks):
     toks = toks[0]
@@ -112,6 +134,9 @@ def parse_variable_definition_storageclass(instring, loc, toks):
     # TODO: Needed?
     # return Variable.link_table[storageclass]
 
+def parse_command(instring, loc, toks):
+    pass
+
 def parse(text):
     # Import here to avoid circular import
     from gqc import grammar
@@ -119,6 +144,8 @@ def parse(text):
     gqc_game = grammar.build_game_parser()
     try:
         parsed = gqc_game.parse_file(text, parseAll=True)
+        # TODO: Either do something with parsed or don't accept the return value.
+        # print(parsed)
     except pp.ParseBaseException as pe:
         print(pe.explain(), file=sys.stderr)
         exit(1)

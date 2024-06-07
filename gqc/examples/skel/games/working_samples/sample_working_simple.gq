@@ -14,4 +14,8 @@ animations {
 
 stage start {
     bganim george;
+
+    event bgdone {
+        play bganim george;
+    }
 }

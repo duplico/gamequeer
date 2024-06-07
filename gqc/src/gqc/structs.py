@@ -1,5 +1,6 @@
 import struct
 from collections import namedtuple
+from enum import IntEnum
 
 # NB: These definitions must be kept strictly in sync with the corresponding
 #     structs defined in ../../../gamequeer/include/gamequeer.h
@@ -64,13 +65,35 @@ GqAnimFrame = namedtuple('GqAnimFrame', 'bPP data_pointer data_size')
 GQ_ANIM_FRAME_FORMAT = f'<B{T_GQ_POINTER_FORMAT}I'
 GQ_ANIM_FRAME_SIZE = struct.calcsize(GQ_ANIM_FRAME_FORMAT)
 
+# Event types from gamequeer.h:
+# typedef enum gq_event_type {
+#     GQ_EVENT_NOP = 0x00,
+#     GQ_EVENT_BUTTON_A,
+#     GQ_EVENT_BUTTON_B,
+#     GQ_EVENT_BUTTON_L,
+#     GQ_EVENT_BUTTON_R,
+#     GQ_EVENT_BUTTON_CLICK,
+#     GQ_EVENT_BGDONE,
+#     GQ_EVENT_ENTER,
+#     GQ_EVENT_COUNT
+# } gq_event_type;
+
+class EventType(IntEnum):
+    ENTER = 0x00
+    BUTTON_A = 0x01
+    BUTTON_B = 0x02
+    BUTTON_L = 0x03
+    BUTTON_R = 0x04
+    BUTTON_CLICK = 0x05
+    BGDONE = 0x06
+
 # typedef struct gq_stage {
-#     uint16_t id;                      // Numerical ID of the stage (sequential, 0-based)
-#     t_gq_pointer anim_bg_pointer;     // Pointer to the background animation (NULL if none)
-#     t_gq_pointer menu_pointer;        // Pointer to the menu definition for this stage
-#     t_gq_pointer events_code_pointer; // Pointer to the events code
-#     uint32_t events_code_size;        // Size of the events code
-# } gq_stage;
-GqStage = namedtuple('GqStage', 'id anim_bg_pointer menu_pointer events_code_pointer events_code_size')
-GQ_STAGE_FORMAT = f'<H{T_GQ_POINTER_FORMAT}{T_GQ_POINTER_FORMAT}{T_GQ_POINTER_FORMAT}I'
+#     uint16_t id;                                 // Numerical ID of the stage (sequential, 0-based)
+#     t_gq_pointer anim_bg_pointer;                // Pointer to the background animation (NULL if none)
+#     t_gq_pointer menu_pointer;                   // Pointer to the menu definition for this stage
+#     t_gq_pointer event_commands[GQ_EVENT_COUNT]; // Event commands
+# } __attribute__((packed)) gq_stage;
+GqStage = namedtuple('GqStage', 'id anim_bg_pointer menu_pointer event_commands')
+GQ_STAGE_FORMAT = f'<H{T_GQ_POINTER_FORMAT}{T_GQ_POINTER_FORMAT}{len(EventType)}{T_GQ_POINTER_FORMAT}'
+# GQ_STAGE_FORMAT = f'<H{T_GQ_POINTER_FORMAT}{T_GQ_POINTER_FORMAT}{T_GQ_POINTER_FORMAT}I'
 GQ_STAGE_SIZE = struct.calcsize(GQ_STAGE_FORMAT)

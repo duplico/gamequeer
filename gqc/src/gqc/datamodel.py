@@ -12,6 +12,7 @@ from rich import print
 from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn
 
 from . import structs
+from .structs import EventType
 from .anim import make_animation
 import hashlib
 
@@ -87,23 +88,52 @@ class Game:
         )
         return struct.pack(structs.GQ_HEADER_FORMAT, *header)
 
+class CommandType(IntEnum):
+    PLAY = 1
+    GOSTAGE = 2
+
+class Command:
+    def __init__(self, command_type : CommandType, command_args : Iterable):
+        self.command_type = command_type
+        self.command_args = command_args
+        
+    def __repr__(self) -> str:
+        return f"Command({self.command_type}, {self.command_args})"
+
+class Event:
+    def __init__(self, event_type : EventType, event_statements : Iterable):
+        self.event_type = event_type
+        self.event_statements = event_statements
+        # TODO: addr
+
+    def __repr__(self) -> str:
+        return f"Event({self.event_type}, {self.event_statements})"
+
 class Stage:
     stage_table = {}
     link_table = dict() # OrderedDict not needed to remember order since Python 3.7
 
-    def __init__(self, name : str, bganim : str = None, menu : str = None, event_statements : Iterable = []):
+    def __init__(self, name : str, bganim : str = None, menu : str = None, events : Iterable = []):
         self.addr = 0x00000000 # Set at link time
         self.id = len(Stage.stage_table)
         self.resolved = False
         self.name = name
         self.bganim_name = bganim
         self.menu_name = menu
-        self.event_statements = event_statements
         self.unresolved_symbols = []
 
         if name in Stage.stage_table:
             raise ValueError(f"Stage {name} already defined")
         Stage.stage_table[name] = self
+
+        self.events = dict()
+        self.events_resolved = None
+        
+        for event in events:
+            if event.event_type not in self.events:
+                self.events[event.event_type] = event
+            else:
+                raise ValueError(f"Event {event.event_type} already defined in stage {name}")
 
         self.resolve()
 
@@ -143,17 +173,30 @@ class Stage:
         return structs.GQ_STAGE_SIZE
 
     def __repr__(self) -> str:
-        return f"Stage({self.name})"
+        return f"Stage({self.name}, events={self.events})"
     
     def to_bytes(self):
+        # TODO: Maybe only calculate the events once?
+        event_pointers = []
+        for event_type in EventType:
+            # TODO: These seem to happen in order in CPython 3.10, but need to confirm
+            # TODO: Need to resolve the addr of all the events rather than just setting
+            #       them all to null
+            if event_type in self.events:
+                # TODO: Not this - resolve the address of the event code first
+                event_pointers.append(0x00)
+            else:
+                event_pointers.append(0x00)
+
+        # TODO: Figure out a better way to pack the following:
         stage = structs.GqStage(
             id=self.id,
             anim_bg_pointer=self.bganim.addr if self.bganim else 0,
             menu_pointer=0,
-            events_code_pointer=0,
-            events_code_size=0
+            event_commands=event_pointers
         )
-        return struct.pack(structs.GQ_STAGE_FORMAT, *stage)
+        print(stage)
+        return struct.pack(structs.GQ_STAGE_FORMAT, stage.id, stage.anim_bg_pointer, stage.menu_pointer, *stage.event_commands)
 
 class Variable:
     var_table = {}
@@ -227,6 +270,7 @@ class Variable:
 
 # TODO: Set up globals or a singleton or something containing the base path etc.
 
+# TODO: Use this:
 class FrameEncoding(IntEnum):
     UNCOMPRESSED = 0x01
     RLE4 = 0x41
