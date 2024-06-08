@@ -86,13 +86,14 @@ class EventType(IntEnum):
     BUTTON_R = 0x04
     BUTTON_CLICK = 0x05
     BGDONE = 0x06
+    MENU = 0x07
 
 # TODO: Verify with the C source
 class OpCode(IntEnum):
     NOP = 0x00
     DONE = 0x01
-    PLAYBG = 0x02
-    GOSTAGE = 0x03
+    GOSTAGE = 0x02
+    PLAYBG = 0x03
 
 # Bytecode format:
 # typedef struct gq_op {

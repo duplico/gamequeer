@@ -126,12 +126,15 @@ class Command:
         return structs.GQ_OP_SIZE
 
     def __repr__(self) -> str:
-        return f"Command({self.command_type} {self.command_flags}, {self.arg1} {self.arg2})"
+        return f"Command({self.command_type.name}:{self.command_flags} {self.arg1} {self.arg2});"
 
 class CommandDone(Command):
     def __init__(self):
         super().__init__(CommandType.DONE)
         self.resolved = True
+
+    def __repr__(self) -> str:
+        return "DONE"
 
 class CommandGoStage(Command):
     def __init__(self, instring, loc, stage : str):
@@ -148,6 +151,9 @@ class CommandGoStage(Command):
         
         return resolved
 
+    def __repr__(self) -> str:
+        return f"GOSTAGE {self.arg1}"
+
 class CommandPlayBg(Command):
     def __init__(self, instring, loc, bganim : str):
         super().__init__(CommandType.PLAYBG, instring, loc, arg1=bganim)
@@ -161,6 +167,9 @@ class CommandPlayBg(Command):
             resolved = True
         
         return resolved
+    
+    def __repr__(self) -> str:
+        return f"PLAYBG {self.arg1}"
 
 class Event:
     event_table = []
@@ -171,9 +180,8 @@ class Event:
         self.addr = 0x00000000 # Set at link time
 
         self.event_statements = event_statements
-        if self.event_statements:
-            # Only add a DONE command if there are other commands in the event
-            self.event_statements.append(CommandDone())
+        # TODO: Don't emit an event object if the statements are empty?
+        self.event_statements.append(CommandDone())
         # TODO: don't generate anything for an empty event
 
     def set_addr(self, addr : int, namespace : int = structs.GQ_PTR_NS_CART):
@@ -191,7 +199,7 @@ class Event:
         return sum(statement.size() for statement in self.event_statements)
 
     def __repr__(self) -> str:
-        return f"Event({self.event_type}, {self.event_statements})"
+        return f"Event({self.event_type.name}, {self.event_statements})"
 
 class Stage:
     stage_table = {}

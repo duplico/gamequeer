@@ -74,9 +74,15 @@ def parse_event_definition(instring, loc, toks):
             'B' : EventType.BUTTON_B,
             '->' : EventType.BUTTON_R,
             '<-' : EventType.BUTTON_L,
+            '-' : EventType.BUTTON_CLICK
         }
         event_type = event_inputs[toks[2]]
         event_statements = toks[3]
+    elif toks[1] == 'menu':
+        raise NotImplementedError("Menu events not yet implemented")
+    elif toks[1] == 'enter':
+        event_type = EventType.ENTER
+        event_statements = toks[2]
     
     return Event(event_type, event_statements)
 

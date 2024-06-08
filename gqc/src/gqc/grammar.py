@@ -48,8 +48,8 @@ stage_option = stage_bganim | stage_menu | stage_event
 stage_bganim = "bganim" identifier ";"
 stage_menu = "menu" identifier ";" | "menu" identifier "prompt" STRING ";"
 stage_event = "event" event_type event_statements
-event_type = "input" "(" event_input_button ")" | "bgdone" | "menu"
-event_input_button = "A" | "B" | "<-" | "->"
+event_type = "input" "(" event_input_button ")" | "bgdone" | "menu" | "enter"
+event_input_button = "A" | "B" | "<-" | "->" | "-"
 event_statements = event_statement | "{" event_statement* "}"
 event_statement = play | gostage
 play = "play" "bganim" identifier ";"
@@ -127,8 +127,8 @@ def build_game_parser():
     event_statement.set_parse_action(parse_command)
 
     # Event types
-    event_input_button = pp.Keyword("A") | pp.Keyword("B") | pp.Keyword("<-") | pp.Keyword("->")
-    event_type = pp.Keyword("input") - pp.Suppress("(") - event_input_button - pp.Suppress(")") | pp.Keyword("bgdone") | pp.Keyword("menu")
+    event_input_button = pp.Keyword("A") | pp.Keyword("B") | pp.Keyword("<-") | pp.Keyword("->") | pp.Keyword("-")
+    event_type = pp.Keyword("input") - pp.Suppress("(") - event_input_button - pp.Suppress(")") | pp.Keyword("bgdone") | pp.Keyword("menu") | pp.Keyword("enter")
 
     # General stage definition and options
     stage_bganim = pp.Group(pp.Keyword("bganim") - identifier - pp.Suppress(";"))

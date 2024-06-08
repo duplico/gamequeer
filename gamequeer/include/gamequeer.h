@@ -16,8 +16,9 @@
 #define GQ_PTR_NS_FBUF 0x04
 #define GQ_PTR_BUILTIN 0x80
 
-#define GQ_PTR_NS(POINTER) ((POINTER & GQ_PTR_NS_MASK) >> 24)
-#define GQ_PTR(NS, ADDR)   ((NS << 24) | ADDR)
+#define GQ_PTR_NS(POINTER)     ((POINTER & GQ_PTR_NS_MASK) >> 24)
+#define GQ_PTR(NS, ADDR)       ((NS << 24) | ADDR)
+#define GQ_PTR_ISNULL(POINTER) (GQ_PTR_NS(POINTER) == GQ_PTR_NS_NULL)
 
 #define GQ_SCREEN_W 128
 #define GQ_SCREEN_H 128
@@ -58,16 +59,21 @@ typedef struct gq_anim_frame {
 } __attribute__((packed)) gq_anim_frame;
 
 typedef enum gq_event_type {
-    GQ_EVENT_NOP = 0x00,
+    GQ_EVENT_ENTER = 0x00,
     GQ_EVENT_BUTTON_A,
     GQ_EVENT_BUTTON_B,
     GQ_EVENT_BUTTON_L,
     GQ_EVENT_BUTTON_R,
     GQ_EVENT_BUTTON_CLICK,
     GQ_EVENT_BGDONE,
-    GQ_EVENT_ENTER,
+    GQ_EVENT_MENU,
     GQ_EVENT_COUNT
 } gq_event_type;
+
+extern uint16_t s_gq_event;
+#define GQ_EVENT_GET(event_type) ((0x0001 << event_type) & s_gq_event)
+#define GQ_EVENT_SET(event_type) s_gq_event |= (0x0001 << event_type)
+#define GQ_EVENT_CLR(event_type) s_gq_event &= ~(0x0001 << event_type)
 
 typedef struct gq_event {
     t_gq_pointer commands_pointer; // Pointer to the commands
@@ -81,13 +87,15 @@ typedef struct gq_stage {
 } __attribute__((packed)) gq_stage;
 
 extern Graphics_Context g_sContext;
-extern uint8_t s_clicked;
+extern uint8_t bg_animating;
 
 uint8_t load_game();
 uint8_t load_stage(t_gq_pointer stage_ptr);
 uint8_t load_animation(t_gq_pointer anim_ptr);
 uint8_t load_frame(t_gq_pointer frame_ptr);
 uint8_t next_frame();
+
+uint16_t handle_events();
 void show_curr_frame();
 
 #endif

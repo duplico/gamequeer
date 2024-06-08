@@ -77,7 +77,7 @@ StageCommand:
 // Stage definitions
 
 EventType:
-    eventType='input' button=INPUTBUTTON | eventType='bgdone' | eventType='menu';
+    eventType='input' button=INPUTBUTTON | eventType='bgdone' | eventType='menu' | eventType='enter';
 StageEvent:
     'event' EventType (StageCommand | '{' StageCommand* '}');
 StageMenu:
