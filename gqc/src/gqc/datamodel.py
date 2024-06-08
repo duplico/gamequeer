@@ -376,6 +376,7 @@ class Animation:
     # TODO: deduplicate the resolution of defaults here:
     # TODO: change source from a str to a pathlib.Path
     # TODO: accept a size parameter
+    # TODO: Make sure the frame count fits in a 16-bit integer
     def __init__(self, name : str, source : str, dithering : str = 'none', frame_rate : int = 25):
         self.frame_pointer = 0x00000000
         self.addr = 0x00000000

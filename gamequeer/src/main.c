@@ -36,9 +36,7 @@ int main(int argc, char *argv[]) {
     // TODO: Load the starting animation
     while (1) {
         // Perform the current animation step
-        if (bg_animating && next_frame()) {
-            show_curr_frame();
-        }
+        anim_tick();
 
         // TODO: Perform the current menu step
 

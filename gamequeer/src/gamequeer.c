@@ -8,8 +8,9 @@
 
 gq_header game;
 uint8_t bg_animating = 0;
-gq_anim anim_current;
-gq_anim_frame frame_current;
+
+gq_anim_onscreen current_animations[MAX_CONCURRENT_ANIMATIONS];
+
 gq_stage stage_current;
 
 uint32_t curr_frame;
@@ -18,21 +19,6 @@ uint8_t *frame_data;
 // TODO: Move
 const uint32_t palette_bw[] = {0x000000, 0xffffff};
 const uint32_t palette_wb[] = {0xffffff, 0x000000};
-
-/**
- * @brief Loads a frame description (but not the data buffer).
- *
- * @param frame_ptr A pointer to the frame to be loaded.
- * @return The status of the frame loading operation (0 for success, non-zero for failure).
- */
-uint8_t load_frame(t_gq_pointer frame_ptr) {
-    // Load the current frame
-    if (!gq_memcpy_ram((uint8_t *) &frame_current, frame_ptr, sizeof(gq_anim_frame))) {
-        return 0;
-    }
-
-    return 1;
-}
 
 /**
  * @brief Loads a new stage.
@@ -48,7 +34,7 @@ uint8_t load_stage(t_gq_pointer stage_ptr) {
 
     if (stage_current.anim_bg_pointer) {
         // If this stage has an animation, load it.
-        if (!load_animation(stage_current.anim_bg_pointer)) {
+        if (!load_animation(0, stage_current.anim_bg_pointer)) {
             return 0;
         }
     } else {
@@ -74,56 +60,96 @@ uint8_t load_game() {
     return 1;
 }
 
-uint8_t load_animation(t_gq_pointer anim_ptr) {
+uint8_t load_animation(uint8_t index, t_gq_pointer anim_ptr) {
+    // TODO: Assert index < MAX_CONCURRENT_ANIMATIONS
+    gq_anim_onscreen *anim = &current_animations[index];
+
     // Load the animation header
-    if (!gq_memcpy_ram((uint8_t *) &anim_current, anim_ptr, sizeof(gq_anim))) {
+    if (!gq_memcpy_ram((uint8_t *) &anim->anim, anim_ptr, sizeof(gq_anim))) {
+        anim->in_use = 0;
         return 0;
     }
 
-    // Set the current frame to the first frame
-    if (!gq_memcpy_ram((uint8_t *) &frame_current, anim_current.frame_pointer, sizeof(gq_anim_frame))) {
-        return 0;
-    }
-
-    curr_frame   = 0;
-    bg_animating = 1;
+    // Set up the parameters of the animation
+    anim->x      = 0; // TODO: Set
+    anim->y      = 0; // TODO: Set
+    anim->in_use = 1;
+    anim->frame  = 0;
+    anim->ticks  = 0; // Set to 0 to draw the first frame immediately.
 
     return 1;
 }
 
-void show_curr_frame() {
-    // Load the frame data
-    frame_data = (uint8_t *) malloc(frame_current.data_size);
-    if (!gq_memcpy_ram(frame_data, frame_current.data_pointer, frame_current.data_size)) {
+void draw_animations() {
+    gq_anim_frame frame_current;
+
+    for (uint8_t i = 0; i < MAX_CONCURRENT_ANIMATIONS; i++) {
+        if (!current_animations[i].in_use) {
+            continue;
+        }
+
+        // Load the current frame
+        if (!gq_memcpy_ram(
+                (uint8_t *) &frame_current,
+                current_animations[i].anim.frame_pointer + current_animations[i].frame * sizeof(gq_anim_frame),
+                sizeof(gq_anim_frame))) {
+            // TODO: Handle errors
+            continue;
+        }
+
+        // Draw the frame on the screen
+        Graphics_Image img;
+        img.bPP       = frame_current.bPP;
+        img.xSize     = current_animations[i].anim.width;
+        img.ySize     = current_animations[i].anim.height;
+        img.numColors = 2;
+        img.pPalette  = palette_bw;
+
+        // Load the frame data
+        frame_data = (uint8_t *) malloc(frame_current.data_size);
+        if (!gq_memcpy_ram(frame_data, frame_current.data_pointer, frame_current.data_size)) {
+            free(frame_data);
+            return;
+        }
+
+        img.pPixel = frame_data;
+
+        Graphics_drawImage(&g_sContext, &img, current_animations[i].x, current_animations[i].y);
         free(frame_data);
-        return;
     }
-
-    Graphics_Image img;
-    img.bPP       = frame_current.bPP;
-    img.xSize     = anim_current.width;
-    img.ySize     = anim_current.height;
-    img.numColors = 2;
-    img.pPalette  = palette_bw;
-    img.pPixel    = frame_data;
-
-    Graphics_drawImage(&g_sContext, &img, 0, 0);
-    free(frame_data);
 }
 
-uint8_t next_frame() {
-    // TODO: Assert bg_animating.
-    curr_frame++;
-    if (curr_frame >= anim_current.frame_count) {
-        curr_frame   = 0;
-        bg_animating = 0;
-        GQ_EVENT_SET(GQ_EVENT_BGDONE);
-        return 0; // Done
+void anim_tick() {
+    // Should be called by the 100 Hz system tick
+    uint8_t need_to_redraw = 0;
+
+    for (uint8_t i = 0; i < MAX_CONCURRENT_ANIMATIONS; i++) {
+        if (!current_animations[i].in_use) {
+            continue;
+        }
+
+        if (current_animations[i].ticks > 0) {
+            current_animations[i].ticks--;
+            continue;
+        }
+
+        // If we're here, it's time for this animation to go to the next frame.
+        current_animations[i].frame++;
+        if (current_animations[i].frame >= current_animations[i].anim.frame_count) {
+            // Animation is complete
+            // TODO: Handle events for other animations
+            current_animations[i].in_use = 0;
+            if (i == 0) {
+                // Background animation done, fire event.
+                GQ_EVENT_SET(GQ_EVENT_BGDONE);
+            }
+        }
+        need_to_redraw = 1;
     }
 
-    t_gq_pointer next_frame_ptr = anim_current.frame_pointer + curr_frame * sizeof(gq_anim_frame);
-    load_frame(next_frame_ptr);
-    return curr_frame;
+    if (need_to_redraw) {
+        draw_animations();
+    }
 }
 
 void run_code(t_gq_pointer code_ptr) {
@@ -148,7 +174,7 @@ void run_code(t_gq_pointer code_ptr) {
                 break;
             case GQ_OP_PLAYBG:
                 // TODO: bounds checking or whatever:
-                load_animation(cmd.arg1);
+                load_animation(0, cmd.arg1);
                 break;
         }
 

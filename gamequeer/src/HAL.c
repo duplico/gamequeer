@@ -115,6 +115,9 @@ void HAL_event_poll() {
 }
 
 void HAL_sleep() {
-    // TODO: Figure out how to emulate the badge sleep behavior
-    usleep(30000);
+    // Rather than entering a full sleep mode, we'll busy wait for
+    //  10 ms, creating our 100 Hz system tick for the game engine.
+    // TODO: Do something different rather than busy-waiting, in order
+    //       to make sure the timing is more accurate.
+    usleep(10000);
 }
