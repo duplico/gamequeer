@@ -11,7 +11,9 @@ animations {
         frame_rate = 25;
     }
 
-    george2 <- "selfie.mp4";
+    george2 <- "selfie.mp4" {
+        frame_rate = 28;
+    }
 }
 
 stage start {

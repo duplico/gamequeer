@@ -45,7 +45,7 @@ typedef struct gq_header {
 typedef struct gq_anim {
     uint16_t id;                // Numerical ID of the animation (sequential, 0-based)
     uint16_t frame_count;       // Number of frames
-    uint16_t frame_rate;        // TODO
+    uint16_t ticks_per_frame;   // TODO
     uint16_t flags;             // TODO
     uint8_t width;              // Width of the animation
     uint8_t height;             // Height of the animation
