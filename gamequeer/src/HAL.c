@@ -97,20 +97,24 @@ void HAL_event_poll() {
     c = gfx_getKey(); // returns 0 if no key pressed, 1,2,3 for mouse buttons, or ascii code of keyboard character
     switch (c) {
         case 'a': // "left"
+            GQ_EVENT_SET(GQ_EVENT_BUTTON_L);
             break;
         case 'd': // "right"
+            GQ_EVENT_SET(GQ_EVENT_BUTTON_R);
             break;
         case 'k': // "a"
+            GQ_EVENT_SET(GQ_EVENT_BUTTON_A);
             break;
         case 'l': // "b"
+            GQ_EVENT_SET(GQ_EVENT_BUTTON_B);
             break;
         case ' ': // "click"
-            s_clicked = 1;
+            GQ_EVENT_SET(GQ_EVENT_BUTTON_CLICK);
             break;
     }
 }
 
 void HAL_sleep() {
     // TODO: Figure out how to emulate the badge sleep behavior
-    usleep(40000);
+    usleep(30000);
 }

@@ -12,8 +12,7 @@
 
 Graphics_Context g_sContext;
 
-uint8_t s_clicked   = 0;
-uint8_t s_anim_done = 0;
+uint16_t s_gq_event = 0;
 
 void init() {
     Graphics_setForegroundColor(&g_sContext, ClrWhite);
@@ -37,28 +36,18 @@ int main(int argc, char *argv[]) {
     // TODO: Load the starting animation
     while (1) {
         // Perform the current animation step
-        if (next_frame()) {
+        if (bg_animating && next_frame()) {
             show_curr_frame();
-        } else {
-            s_anim_done = 1;
         }
+
+        // TODO: Perform the current menu step
+
+        // TODO: Perform the current lighting cue step
 
         // Perform polling for other event sources
         HAL_event_poll();
 
-        ////////// Handle events //////////
-        // Animation done
-        if (s_anim_done) {
-            // Handle the animation done event.
-            // TODO: implement
-            s_anim_done = 0;
-        }
-        // Button pressed (A, B, left, right, click)
-        if (s_clicked) {
-            // Handle the click; quit the game.
-            exit(0);
-            s_clicked = 0;
-        }
+        handle_events();
 
         HAL_sleep();
     }

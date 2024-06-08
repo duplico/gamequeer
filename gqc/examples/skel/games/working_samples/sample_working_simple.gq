@@ -6,12 +6,30 @@ game {
 }
 
 animations {
-    george <- "default.mp4" {
+    george <- "carhop.mp4" {
         dithering := "sierra2_4a";
         frame_rate = 25;
     }
+
+    george2 <- "selfie.mp4";
 }
 
 stage start {
-    bganim george;
+    // bganim george;
+
+    event enter {
+        play bganim george;
+    }
+
+    event bgdone {
+        gostage selfie;
+    }
+}
+
+stage selfie {
+    bganim george2;
+
+    event bgdone {
+        gostage start;
+    }
 }
