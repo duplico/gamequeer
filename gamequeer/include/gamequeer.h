@@ -26,6 +26,8 @@
 #define CART_FLASH_SIZE_MBYTES 16
 #define SAVE_FLASH_SIZE_MBYTES 16
 
+#define MAX_CONCURRENT_ANIMATIONS 4
+
 typedef uint32_t t_gq_pointer;
 
 // TODO: Is packing like this unsafe on ARM?
@@ -45,12 +47,21 @@ typedef struct gq_header {
 typedef struct gq_anim {
     uint16_t id;                // Numerical ID of the animation (sequential, 0-based)
     uint16_t frame_count;       // Number of frames
-    uint16_t frame_rate;        // TODO
+    uint16_t ticks_per_frame;   // TODO
     uint16_t flags;             // TODO
     uint8_t width;              // Width of the animation
     uint8_t height;             // Height of the animation
     t_gq_pointer frame_pointer; // Pointer to the first gq_anim_frame
 } __attribute__((packed)) gq_anim;
+
+typedef struct gq_anim_onscreen {
+    uint16_t ticks;  // Number of ticks until the next frame
+    uint16_t frame;  // Current frame
+    uint16_t in_use; // Whether the animation is in use
+    uint8_t x;       // X position of the animation
+    uint8_t y;       // Y position of the animation
+    gq_anim anim;    // Animation playing
+} __attribute__((packed)) gq_anim_onscreen;
 
 typedef struct gq_anim_frame {
     uint8_t bPP;               // Bits per pixel and compression flags
@@ -91,11 +102,9 @@ extern uint8_t bg_animating;
 
 uint8_t load_game();
 uint8_t load_stage(t_gq_pointer stage_ptr);
-uint8_t load_animation(t_gq_pointer anim_ptr);
-uint8_t load_frame(t_gq_pointer frame_ptr);
-uint8_t next_frame();
+uint8_t load_animation(uint8_t index, t_gq_pointer anim_ptr);
+void anim_tick();
 
 uint16_t handle_events();
-void show_curr_frame();
 
 #endif

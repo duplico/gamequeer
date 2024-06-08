@@ -376,13 +376,14 @@ class Animation:
     # TODO: deduplicate the resolution of defaults here:
     # TODO: change source from a str to a pathlib.Path
     # TODO: accept a size parameter
+    # TODO: Make sure the frame count fits in a 16-bit integer
     def __init__(self, name : str, source : str, dithering : str = 'none', frame_rate : int = 25):
         self.frame_pointer = 0x00000000
         self.addr = 0x00000000
         self.name = name
         self.source = source
-        self.frame_rate = frame_rate
         self.dithering = dithering
+        self.ticks_per_frame = 100 // frame_rate
 
         self.id = Animation.next_id
         Animation.next_id += 1
@@ -397,6 +398,11 @@ class Animation:
             
             self.frames = []
             
+            # TODO: Additional frame rate validation
+            if 100 % frame_rate != 0:
+                print(f"[red][bold]WARNING[/bold][/red]: [blue][italic]{self.name}[/italic][/blue] frame rate {frame_rate} not a factor of 100; setting to {100 / self.ticks_per_frame}")
+                frame_rate = 100 / self.ticks_per_frame
+
             make_animation_kwargs = dict()
             if dithering:
                 make_animation_kwargs['dithering'] = dithering
@@ -466,7 +472,7 @@ class Animation:
         with open(self.src_path, 'rb') as file:
             contents = file.read()
             sha256_hash = hashlib.sha256(contents)
-        sha256_hash.update(str(self.frame_rate).encode('ascii'))
+        sha256_hash.update(str(self.ticks_per_frame).encode('ascii'))
         sha256_hash.update(self.dithering.encode('ascii'))
         # sha256_hash.update(size.encode('ascii')) TODO: Re-add
         from . import __version__
@@ -487,13 +493,13 @@ class Animation:
         return structs.GQ_ANIM_SIZE
 
     def __repr__(self) -> str:
-        return f"Animation('{self.name}', '{self.source}', {repr(self.frame_rate)}, {repr(self.dithering)})"
+        return f"Animation('{self.name}', '{self.source}', {100/self.ticks_per_frame}, {repr(self.dithering)})"
     
     def to_bytes(self):
         anim_struct = structs.GqAnim(
             id=self.id,
             frame_count=len(self.frames),
-            frame_rate=self.frame_rate,
+            ticks_per_frame=self.ticks_per_frame,
             flags=0,
             width=self.frames[0].width,
             height=self.frames[0].height,

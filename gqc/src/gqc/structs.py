@@ -46,13 +46,13 @@ GQ_HEADER_SIZE = struct.calcsize(GQ_HEADER_FORMAT)
 # typedef struct gq_anim {
 #     uint16_t id;                // Numerical ID of the animation (sequential, 0-based)
 #     uint16_t frame_count;       // Number of frames
-#     uint16_t frame_rate;        // TODO
+#     uint16_t ticks_per_frame;   // TODO
 #     uint16_t flags;             // TODO
 #     uint8_t width;              // Width of the animation
 #     uint8_t height;             // Height of the animation
 #     t_gq_pointer frame_pointer; // Pointer to the first gq_anim_frame
 # } gq_anim;
-GqAnim = namedtuple('GqAnim', 'id frame_count frame_rate flags width height frame_pointer')
+GqAnim = namedtuple('GqAnim', 'id frame_count ticks_per_frame flags width height frame_pointer')
 GQ_ANIM_FORMAT = f'<HHHHBB{T_GQ_POINTER_FORMAT}'
 GQ_ANIM_SIZE = struct.calcsize(GQ_ANIM_FORMAT)
 
