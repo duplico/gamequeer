@@ -39,6 +39,7 @@ typedef struct gq_header {
     uint16_t anim_count;          // Number of animations
     uint16_t stage_count;         // Number of stages
     t_gq_pointer starting_stage;  // Pointer to the starting stage
+    t_gq_pointer startup_code;    // Pointer to the startup code.
     uint16_t flags;               // TODO
     uint16_t crc16;               // CRC16 checksum of the header
 } __attribute__((packed)) gq_header;

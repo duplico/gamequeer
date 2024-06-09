@@ -5,7 +5,9 @@
 #include <stdint.h>
 
 typedef enum gq_op_flags {
-    GQ_OPF_NONE = 0
+    GQ_OPF_NONE     = 0,
+    GQ_OPF_TYPE_INT = 1,
+    GQ_OPF_TYPE_STR = 2,
 } gq_opcode_flags;
 
 typedef enum gq_op_code {
@@ -14,6 +16,7 @@ typedef enum gq_op_code {
     GQ_OP_GOSTAGE = 0x02,
     GQ_OP_PLAYBG  = 0x03,
     GQ_OP_CUE     = 0x04, // TODO: Not implemented yet in gqc
+    GQ_OP_SETVAR  = 0x05,
     GQ_OP_COUNT
 } gq_op_code;
 

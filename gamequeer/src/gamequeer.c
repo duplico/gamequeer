@@ -20,6 +20,9 @@ uint8_t *frame_data;
 const uint32_t palette_bw[] = {0x000000, 0xffffff};
 const uint32_t palette_wb[] = {0xffffff, 0x000000};
 
+// TODO: Move
+void run_code(t_gq_pointer code_ptr);
+
 /**
  * @brief Loads a new stage.
  *
@@ -56,6 +59,9 @@ uint8_t load_game() {
     if (!load_stage(game.starting_stage)) {
         return 0;
     }
+
+    // Run the initialization commands
+    run_code(game.startup_code);
 
     return 1;
 }
@@ -176,6 +182,7 @@ void run_code(t_gq_pointer code_ptr) {
                 // TODO: bounds checking or whatever:
                 load_animation(0, cmd.arg1);
                 break;
+                // TODO: Add the setvar implementation
         }
 
         code_ptr += sizeof(gq_op);

@@ -6,6 +6,7 @@ from tabulate import tabulate
 from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn
 
 from .datamodel import Game, Stage, Variable, Animation, Frame, FrameData, Event
+from .datamodel import Command, CommandDone
 
 from . import structs
 
@@ -70,12 +71,6 @@ def create_symbol_table(table_dest = sys.stdout):
     for var in list(Variable.storageclass_table['persistent'].values()):
         var.set_addr(vars_ptr_start + vars_ptr_offset)
         vars_ptr_offset += var.size()
-    
-    # Next, allocate memory on-heap for the volatile variables.
-    # TODO: Generate code for initializing the volatile variables.
-    for var in list(Variable.storageclass_table['volatile'].values()):
-        var.set_addr(heap_ptr_start + heap_ptr_offset, namespace=structs.GQ_PTR_NS_HEAP)
-        heap_ptr_offset += var.size()
 
     # TODO: Menus
 
@@ -97,6 +92,34 @@ def create_symbol_table(table_dest = sys.stdout):
         stage.set_addr(stage_ptr_start + stage_ptr_offset)
         stage_ptr_offset += structs.GQ_STAGE_SIZE
 
+    init_ptr_start = events_ptr_start + events_ptr_offset
+    init_ptr_offset = 0
+    init_table = dict()
+    Game.game.startup_code_ptr = init_ptr_start
+
+    # Allocate our volatile variables on the heap, and their initialization code.
+    for var in list(Variable.storageclass_table['volatile'].values()):
+        # Heap memory allocation
+        var.set_addr(heap_ptr_start + heap_ptr_offset, namespace=structs.GQ_PTR_NS_HEAP)
+        heap_ptr_offset += var.size()
+
+        # Initialization code allocation.
+        init_cmd = var.get_init_command()
+        init_cmd.set_addr(init_ptr_start + init_ptr_offset)
+        init_table[init_cmd.addr] = init_cmd
+        init_ptr_offset += init_cmd.size()
+    
+    # Terminate the init code with a DONE
+    done_cmd = CommandDone()
+    done_cmd.set_addr(init_ptr_start + init_ptr_offset)
+    init_table[done_cmd.addr] = done_cmd
+    init_ptr_offset += done_cmd.size()
+
+    # Now, do one more pass to try to resolve any unresolved symbols in commands.
+    for cmd in Command.command_list:
+        if not cmd.resolve():
+            raise ValueError(f"Unresolved symbol in command {cmd}")
+
     symbol_table = {
         '.game' : Game.link_table,
         '.anim' : Animation.link_table,
@@ -105,6 +128,7 @@ def create_symbol_table(table_dest = sys.stdout):
         '.framedata' : FrameData.link_table,
         '.var' : Variable.link_table,
         '.event' : Event.link_table,
+        '.init' : init_table,
         '.heap' : Variable.heap_table
     }
 
@@ -137,6 +161,9 @@ def create_symbol_table(table_dest = sys.stdout):
 
     # Return the machine-readable symbol table for use in final code generation.
     return symbol_table
+
+# TODO: Generate initialization commands and add the pointer to them to the game
+#       metadata header.
 
 def generate_code(parsed, symbol_table : dict):
     output = bytes()
