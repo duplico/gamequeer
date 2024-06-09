@@ -2,7 +2,7 @@ import pyparsing as pp
 
 from .parser import parse_variable_definition, parse_variable_definition_storageclass
 from .parser import parse_animation_definition, parse_stage_definition, parse_game_definition
-from .parser import parse_event_definition, parse_command
+from .parser import parse_event_definition, parse_command, parse_assignment
 
 """
 Grammar for GQC language
@@ -51,10 +51,16 @@ stage_event = "event" event_type event_statements
 event_type = "input" "(" event_input_button ")" | "bgdone" | "menu" | "enter"
 event_input_button = "A" | "B" | "<-" | "->" | "-"
 event_statements = event_statement | "{" event_statement* "}"
-event_statement = play | gostage
+event_statement = play | gostage | assignment_statement
 play = "play" "bganim" identifier ";"
 gostage = "gostage" identifier ";"
+
+assignment_statement = int_assignment | string_assignment
+int_assignment = identifier "=" identifier ";"
+string_assignment = identifier ":=" identifier ";"
 """
+
+# TODO: Add support for literals
 
 VAR_STRING_MAXLEN = 21
 
@@ -121,7 +127,13 @@ def build_game_parser():
     play = pp.Group(pp.Keyword("play") - pp.Keyword("bganim") - identifier - pp.Suppress(";"))
     gostage = pp.Group(pp.Keyword("gostage") - identifier - pp.Suppress(";"))
 
-    event_statement = play | gostage
+    int_assignment = pp.Group(identifier - pp.Keyword("=") - identifier - pp.Suppress(";"))
+    string_assignment = pp.Group(identifier - pp.Keyword(":=") - identifier - pp.Suppress(";"))
+    assignment_statement = int_assignment | string_assignment
+
+    assignment_statement.add_parse_action(parse_assignment)
+
+    event_statement = play | gostage | assignment_statement
     event_statements = pp.Group(event_statement | pp.Suppress("{") - pp.ZeroOrMore(event_statement) - pp.Suppress("}"))
 
     event_statement.set_parse_action(parse_command)

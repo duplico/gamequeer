@@ -6,6 +6,7 @@ from tabulate import tabulate
 from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn
 
 from .datamodel import Game, Stage, Variable, Animation, Frame, FrameData, Event
+from .datamodel import Command, CommandDone
 
 from . import structs
 
@@ -17,9 +18,13 @@ def create_symbol_table(table_dest = sys.stdout):
     # frames (fixed size by count)
     # frame data (variable size)
     # variable area (variable size)
+    # initialization code (variable size)
     # events code (variable size)
 
     frame_count = sum([len(anim.frames) for anim in Animation.anim_table.values()])
+
+    heap_ptr_start = structs.gq_ptr_apply_ns(structs.GQ_PTR_NS_HEAP, 0x000000)
+    heap_ptr_offset = 0
 
     cart_ptr_start = structs.gq_ptr_apply_ns(structs.GQ_PTR_NS_CART, 0x000000)
     header_ptr_start = cart_ptr_start
@@ -60,9 +65,10 @@ def create_symbol_table(table_dest = sys.stdout):
     
     # Now that the frame data table is complete, we can calculate the starting
     #  locations of the variable tables.
+    # First, allocate memory on-cart for the persistent variables
     vars_ptr_start = frame_data_ptr_start + frame_data_ptr_offset
     vars_ptr_offset = 0
-    for var in list(Variable.storageclass_table['persistent'].values()) + list(Variable.storageclass_table['volatile'].values()):
+    for var in list(Variable.storageclass_table['persistent'].values()):
         var.set_addr(vars_ptr_start + vars_ptr_offset)
         vars_ptr_offset += var.size()
 
@@ -86,6 +92,34 @@ def create_symbol_table(table_dest = sys.stdout):
         stage.set_addr(stage_ptr_start + stage_ptr_offset)
         stage_ptr_offset += structs.GQ_STAGE_SIZE
 
+    init_ptr_start = events_ptr_start + events_ptr_offset
+    init_ptr_offset = 0
+    init_table = dict()
+    Game.game.startup_code_ptr = init_ptr_start
+
+    # Allocate our volatile variables on the heap, and their initialization code.
+    for var in list(Variable.storageclass_table['volatile'].values()):
+        # Heap memory allocation
+        var.set_addr(heap_ptr_start + heap_ptr_offset, namespace=structs.GQ_PTR_NS_HEAP)
+        heap_ptr_offset += var.size()
+
+        # Initialization code allocation.
+        init_cmd = var.get_init_command()
+        init_cmd.set_addr(init_ptr_start + init_ptr_offset)
+        init_table[init_cmd.addr] = init_cmd
+        init_ptr_offset += init_cmd.size()
+    
+    # Terminate the init code with a DONE
+    done_cmd = CommandDone()
+    done_cmd.set_addr(init_ptr_start + init_ptr_offset)
+    init_table[done_cmd.addr] = done_cmd
+    init_ptr_offset += done_cmd.size()
+
+    # Now, do one more pass to try to resolve any unresolved symbols in commands.
+    for cmd in Command.command_list:
+        if not cmd.resolve():
+            raise ValueError(f"Unresolved symbol in command {cmd}")
+
     symbol_table = {
         '.game' : Game.link_table,
         '.anim' : Animation.link_table,
@@ -94,6 +128,8 @@ def create_symbol_table(table_dest = sys.stdout):
         '.framedata' : FrameData.link_table,
         '.var' : Variable.link_table,
         '.event' : Event.link_table,
+        '.init' : init_table,
+        '.heap' : Variable.heap_table
     }
 
     # Emit a human readable summary of the symbol table.
@@ -126,6 +162,9 @@ def create_symbol_table(table_dest = sys.stdout):
     # Return the machine-readable symbol table for use in final code generation.
     return symbol_table
 
+# TODO: Generate initialization commands and add the pointer to them to the game
+#       metadata header.
+
 def generate_code(parsed, symbol_table : dict):
     output = bytes()
 
@@ -136,10 +175,18 @@ def generate_code(parsed, symbol_table : dict):
     # Count the total number of symbols to be processed
     symbol_count = sum([len(table) for table in symbol_table.values()])
 
+    next_expected_addr = structs.gq_ptr_apply_ns(structs.GQ_PTR_NS_CART, 0x000000)
+
     with Progress(TextColumn("[progress.description]{task.description}"), BarColumn(), TaskProgressColumn(), TimeElapsedColumn()) as progress:
         task = progress.add_task(f"Generating code", total=symbol_count)
         for table in symbol_table.values():
-            for symbol in table.values():
+            for addr, symbol in table.items():
+                if structs.gq_ptr_get_ns(addr) != structs.GQ_PTR_NS_CART:
+                    # Only emit code for the cartridge.
+                    continue
+                if addr != next_expected_addr:
+                    raise ValueError(f"Symbol at address {addr:#0{10}x} is not contiguous with the previous symbol.")
+                next_expected_addr += symbol.size()
                 output += symbol.to_bytes()
                 progress.update(task, advance=1)
     

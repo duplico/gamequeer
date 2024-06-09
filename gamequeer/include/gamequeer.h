@@ -7,6 +7,7 @@
 #define GQ_MAGIC_SIZE 4
 #define GQ_MAGIC      "GQ01"
 #define GQ_STR_SIZE   22
+#define GQ_INT_SIZE   4
 
 #define GQ_PTR_NS_MASK 0xFF000000
 #define GQ_PTR_NS_NULL 0x00
@@ -14,9 +15,11 @@
 #define GQ_PTR_NS_SAVE 0x02
 #define GQ_PTR_NS_FRAM 0x03
 #define GQ_PTR_NS_FBUF 0x04
+#define GQ_PTR_NS_HEAP 0x05
 #define GQ_PTR_BUILTIN 0x80
 
 #define GQ_PTR_NS(POINTER)     ((POINTER & GQ_PTR_NS_MASK) >> 24)
+#define GQ_PTR_ADDR(POINTER)   (POINTER & ~GQ_PTR_NS_MASK)
 #define GQ_PTR(NS, ADDR)       ((NS << 24) | ADDR)
 #define GQ_PTR_ISNULL(POINTER) (GQ_PTR_NS(POINTER) == GQ_PTR_NS_NULL)
 
@@ -27,6 +30,7 @@
 #define SAVE_FLASH_SIZE_MBYTES 16
 
 #define MAX_CONCURRENT_ANIMATIONS 4
+#define GQ_HEAP_SIZE              0x200
 
 typedef uint32_t t_gq_pointer;
 
@@ -38,6 +42,7 @@ typedef struct gq_header {
     uint16_t anim_count;          // Number of animations
     uint16_t stage_count;         // Number of stages
     t_gq_pointer starting_stage;  // Pointer to the starting stage
+    t_gq_pointer startup_code;    // Pointer to the startup code.
     uint16_t flags;               // TODO
     uint16_t crc16;               // CRC16 checksum of the header
 } __attribute__((packed)) gq_header;
@@ -99,6 +104,7 @@ typedef struct gq_stage {
 
 extern Graphics_Context g_sContext;
 extern uint8_t bg_animating;
+extern uint8_t gq_heap[GQ_HEAP_SIZE];
 
 uint8_t load_game();
 uint8_t load_stage(t_gq_pointer stage_ptr);

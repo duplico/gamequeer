@@ -15,6 +15,7 @@ GQ_PTR_NS_CART = 0x01
 GQ_PTR_NS_SAVE = 0x02
 GQ_PTR_NS_FRAM = 0x03
 GQ_PTR_NS_FBUF = 0x04
+GQ_PTR_NS_HEAP = 0x05
 GQ_PTR_BUILTIN = 0x80
 
 GQ_MAGIC_SIZE = 4
@@ -36,11 +37,12 @@ def gq_ptr_get_addr(ptr):
 #     uint16_t anim_count;          // Number of animations
 #     uint16_t stage_count;         // Number of stages
 #     t_gq_pointer starting_stage;  // Pointer to the starting stage
+#     t_gq_pointer startup_code;    // Pointer to the startup code.
 #     uint16_t flags;               // TODO
 #     uint16_t crc16;               // CRC16 checksum of the header
 # } gq_header;
-GqHeader = namedtuple('GqHeader', 'magic id title anim_count stage_count starting_stage_ptr flags crc16')
-GQ_HEADER_FORMAT = f'<{GQ_MAGIC_SIZE}sH{GQ_STR_SIZE}sHH{T_GQ_POINTER_FORMAT}HH'
+GqHeader = namedtuple('GqHeader', 'magic id title anim_count stage_count starting_stage_ptr startup_code_ptr flags crc16')
+GQ_HEADER_FORMAT = f'<{GQ_MAGIC_SIZE}sH{GQ_STR_SIZE}sHH{T_GQ_POINTER_FORMAT}{T_GQ_POINTER_FORMAT}HH'
 GQ_HEADER_SIZE = struct.calcsize(GQ_HEADER_FORMAT)
 
 # typedef struct gq_anim {
@@ -88,12 +90,19 @@ class EventType(IntEnum):
     BGDONE = 0x06
     MENU = 0x07
 
-# TODO: Verify with the C source
+# TODO: read this from the C header instead
 class OpCode(IntEnum):
     NOP = 0x00
     DONE = 0x01
     GOSTAGE = 0x02
     PLAYBG = 0x03
+    CUE = 0x04
+    SETVAR = 0x05
+
+class OpFlags(IntEnum):
+    NONE = 0x00
+    TYPE_INT = 0x01
+    TYPE_STR = 0x02
 
 # Bytecode format:
 # typedef struct gq_op {

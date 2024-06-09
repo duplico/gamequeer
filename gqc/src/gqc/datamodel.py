@@ -35,6 +35,8 @@ class Game:
         self.starting_stage = None
         self.starting_stage_name = starting_stage
 
+        self.startup_code_ptr = None
+
         if Game.game is not None:
             raise ValueError("Game already defined")
         Game.game = self
@@ -86,6 +88,7 @@ class Game:
             anim_count=len(Animation.anim_table),
             stage_count=len(Stage.stage_table),
             starting_stage_ptr=self.starting_stage.addr,
+            startup_code_ptr=self.startup_code_ptr,
             flags=0,
             crc16=0
         )
@@ -94,21 +97,31 @@ class Game:
 # TODO: Module for Commands?
 
 class Command:
+    command_list = []
+
     def __init__(self, command_type : CommandType, instring = None, loc = None,  flags : int = 0, arg1 : int = 0, arg2 : int = 0):
         self.instring = instring
         self.loc = loc
+        self.addr = 0x00000000 # TODO
         
         self.command_type = command_type
         self.command_flags = flags
         self.arg1 = arg1
         self.arg2 = arg2
         self.resolved = False
+
+        Command.command_list.append(self)
     
     def resolve(self):
         # TODO: Probably not this:
         self.resolved = True
         return True
     
+    def set_addr(self, addr : int, namespace : int = structs.GQ_PTR_NS_CART):
+        # TODO: Add a check to ensure that the namespace byte isn't already
+        #       set in the address.
+        self.addr = structs.gq_ptr_apply_ns(namespace, addr)
+
     def to_bytes(self):
         if not self.resolve():
             # TODO: Raise a GqError here, or otherwise show the location of the error in source
@@ -138,38 +151,88 @@ class CommandDone(Command):
 
 class CommandGoStage(Command):
     def __init__(self, instring, loc, stage : str):
-        super().__init__(CommandType.GOSTAGE, instring, loc, arg1=stage)
+        super().__init__(CommandType.GOSTAGE, instring, loc)
+        self.stage_name = stage
     
     def resolve(self):
         if self.resolved:
             return True
 
         # TODO: Extract constant for NULL:
-        if self.arg1 in Stage.stage_table and Stage.stage_table[self.arg1].addr != 0x00000000:
-            self.arg1 = Stage.stage_table[self.arg1].addr
-            resolved = True
+        if self.stage_name in Stage.stage_table and Stage.stage_table[self.stage_name].addr != 0x00000000:
+            self.arg1 = Stage.stage_table[self.stage_name].addr
+            self.resolved = True
         
-        return resolved
+        return self.resolved
 
     def __repr__(self) -> str:
         return f"GOSTAGE {self.arg1}"
 
 class CommandPlayBg(Command):
     def __init__(self, instring, loc, bganim : str):
-        super().__init__(CommandType.PLAYBG, instring, loc, arg1=bganim)
+        super().__init__(CommandType.PLAYBG, instring, loc)
+        self.anim_name = bganim
     
     def resolve(self):
         if self.resolved:
             return True
 
-        if self.arg1 in Animation.anim_table and Animation.anim_table[self.arg1].addr != 0x00000000:
-            self.arg1 = Animation.anim_table[self.arg1].addr
-            resolved = True
+        if self.anim_name in Animation.anim_table and Animation.anim_table[self.anim_name].addr != 0x00000000:
+            self.arg1 = Animation.anim_table[self.anim_name].addr
+            self.resolved = True
         
-        return resolved
+        return self.resolved
     
     def __repr__(self) -> str:
         return f"PLAYBG {self.arg1}"
+
+class CommandSetVar(Command):
+    def __init__(self, instring, loc, dst : str, src : str, datatype : str):
+        super().__init__(CommandType.SETVAR, instring, loc, arg1=None, arg2=None)
+        self.src_name = src
+        self.dst_name = dst
+        self.datatype = datatype
+
+        if self.datatype == "str":
+            self.command_flags = structs.OpFlags.TYPE_STR
+        elif self.datatype == "int":
+            self.command_flags = structs.OpFlags.TYPE_INT
+        else:
+            raise ValueError(f"Invalid datatype {self.datatype}")
+
+        self.resolve()
+    
+    def resolve(self):
+        if self.resolved:
+            return True
+
+        resolved = True
+
+        # TODO: Test for null differently:
+        # TODO: Test for valid memory namespaces:
+        if self.dst_name in Variable.var_table and Variable.var_table[self.dst_name].addr != 0x00000000:
+            self.arg1 = Variable.var_table[self.dst_name].addr
+        else:
+            resolved = False
+        
+        if self.src_name in Variable.var_table and Variable.var_table[self.src_name].addr != 0x00000000:
+            self.arg2 = Variable.var_table[self.src_name].addr
+        else:
+            resolved = False
+        
+        # Rudimentary type checking:
+        if self.src_name in Variable.var_table and self.dst_name in Variable.var_table:
+            if Variable.var_table[self.src_name].datatype != self.datatype:
+                raise ValueError(f"Variable {self.src_name} is of type {Variable.var_table[self.src_name].datatype}, not {self.datatype}")
+            if Variable.var_table[self.dst_name].datatype != self.datatype:
+                raise ValueError(f"Variable {self.dst_name} is of type {Variable.var_table[self.dst_name].datatype}, not {self.datatype}")
+
+        self.resolved = resolved
+        
+        return self.resolved
+    
+    def __repr__(self) -> str:
+        return f"SETVAR {self.dst_name} {self.src_name}"
 
 class Event:
     event_table = []
@@ -293,15 +356,14 @@ class Variable:
     var_table = {}
     storageclass_table = dict(persistent={}, volatile={})
     link_table = dict() # OrderedDict not needed to remember order since Python 3.7
+    heap_table = dict()
 
-    def __init__(self, datatype : str, name : str, value, storageclass : str =None):
+    def __init__(self, datatype : str, name : str, value, storageclass : str = None):
         self.addr = 0x00000000 # Set at link time
+        self.init_from = None
         self.datatype = datatype
         self.name = name
         self.value = value
-
-        # TODO: set when the section is finished parsing
-        self.storageclass = None
 
         if name in Variable.var_table:
             raise ValueError(f"Duplicate definition of {name}")
@@ -318,6 +380,9 @@ class Variable:
 
         # TODO: needed?
         Game.game.add_variable(self)
+        
+        if storageclass:
+            self.set_storageclass(storageclass)
 
     def __str__(self) -> str:
         return "<{} {} {} = {}>@{}".format(
@@ -335,6 +400,13 @@ class Variable:
         assert storageclass in ["volatile", "persistent"]
         self.storageclass = storageclass
         Variable.storageclass_table[storageclass][self.name] = self
+
+        # If this variable is volatile, create a persistent variable to use
+        #  for initialization purposes.
+        # TODO: De-duplicate init vars
+        if storageclass == "volatile":
+            init_var = Variable(self.datatype, f'{self.name}.init', self.value, storageclass="persistent")
+            self.init_from = init_var
     
     def to_bytes(self):
         if self.datatype == "int":
@@ -347,6 +419,12 @@ class Variable:
         else:
             raise ValueError(f"Invalid datatype {self.datatype}")
     
+    def get_init_command(self):
+        if self.storageclass != 'volatile':
+            raise ValueError(f"Persistent variable {self.name} cannot be added to init table.")
+        
+        return CommandSetVar(None, None, self.name, self.init_from.name, self.datatype)
+
     def size(self):
         if self.datatype == "int":
             return 4
@@ -357,9 +435,12 @@ class Variable:
     
     def set_addr(self, addr : int, namespace : int = structs.GQ_PTR_NS_CART):
         self.addr = structs.gq_ptr_apply_ns(namespace, addr)
-        Variable.link_table[self.addr] = self
-
-# TODO: Set up globals or a singleton or something containing the base path etc.
+        if namespace == structs.GQ_PTR_NS_CART:
+            Variable.link_table[self.addr] = self
+        elif namespace == structs.GQ_PTR_NS_HEAP:
+            Variable.heap_table[self.addr] = self
+        else:
+            raise ValueError("Invalid or unsupported namespace")
 
 # TODO: Use this:
 class FrameEncoding(IntEnum):

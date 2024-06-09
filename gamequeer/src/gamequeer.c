@@ -15,10 +15,14 @@ gq_stage stage_current;
 
 uint32_t curr_frame;
 uint8_t *frame_data;
+uint8_t gq_heap[GQ_HEAP_SIZE]; // TODO: Consider dynamically allocating?
 
 // TODO: Move
 const uint32_t palette_bw[] = {0x000000, 0xffffff};
 const uint32_t palette_wb[] = {0xffffff, 0x000000};
+
+// TODO: Move
+void run_code(t_gq_pointer code_ptr);
 
 /**
  * @brief Loads a new stage.
@@ -56,6 +60,9 @@ uint8_t load_game() {
     if (!load_stage(game.starting_stage)) {
         return 0;
     }
+
+    // Run the initialization commands
+    run_code(game.startup_code);
 
     return 1;
 }
@@ -175,6 +182,13 @@ void run_code(t_gq_pointer code_ptr) {
             case GQ_OP_PLAYBG:
                 // TODO: bounds checking or whatever:
                 load_animation(0, cmd.arg1);
+                break;
+            case GQ_OP_SETVAR:
+                if (cmd.flags & GQ_OPF_TYPE_INT) {
+                    gq_memcpy(cmd.arg1, cmd.arg2, GQ_INT_SIZE);
+                } else if (cmd.flags & GQ_OPF_TYPE_STR) {
+                    gq_memcpy(cmd.arg1, cmd.arg2, GQ_STR_SIZE);
+                }
                 break;
         }
 
