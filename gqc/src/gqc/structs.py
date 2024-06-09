@@ -89,12 +89,18 @@ class EventType(IntEnum):
     BGDONE = 0x06
     MENU = 0x07
 
-# TODO: Verify with the C source
+# TODO: read this from the C header instead
 class OpCode(IntEnum):
     NOP = 0x00
     DONE = 0x01
     GOSTAGE = 0x02
     PLAYBG = 0x03
+    SETVAR = 0x04
+
+class OpFlags(IntEnum):
+    NONE = 0x00
+    TYPE_INT = 0x01
+    TYPE_STR = 0x02
 
 # Bytecode format:
 # typedef struct gq_op {

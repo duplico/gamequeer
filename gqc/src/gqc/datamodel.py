@@ -171,6 +171,52 @@ class CommandPlayBg(Command):
     def __repr__(self) -> str:
         return f"PLAYBG {self.arg1}"
 
+class CommandSetVar(Command):
+    def __init__(self, instring, loc, dst : str, src : str, datatype : str):
+        super().__init__(CommandType.SETVAR, instring, loc, arg1=dst, arg2=src)
+        self.datatype = datatype
+
+        if self.datatype == "str":
+            self.command_flags = structs.OpFlags.TYPE_STR
+        elif self.datatype == "int":
+            self.command_flags = structs.OpFlags.TYPE_INT
+        else:
+            raise ValueError(f"Invalid datatype {self.datatype}")
+
+        self.resolve()
+    
+    def resolve(self):
+        if self.resolved:
+            return True
+
+        resolved = True
+
+        # TODO: Test for null differently:
+        # TODO: Test for valid memory namespaces:
+        if self.arg1 in Variable.var_table and Variable.var_table[self.arg1].addr != 0x00000000:
+            self.arg1 = Variable.var_table[self.arg1].addr
+        else:
+            resolved = False
+        
+        if self.arg2 in Variable.var_table and Variable.var_table[self.arg2].addr != 0x00000000:
+            self.arg2 = Variable.var_table[self.arg2].addr
+        else:
+            resolved = False
+        
+        # Rudimentary type checking:
+        if self.arg1 in Variable.var_table and self.arg2 in Variable.var_table:
+            if Variable.var_table[self.arg1].datatype != self.datatype:
+                raise ValueError(f"Variable {self.arg1} is of type {Variable.var_table[self.arg1].datatype}, not {self.datatype}")
+            if Variable.var_table[self.arg2].datatype != self.datatype:
+                raise ValueError(f"Variable {self.arg2} is of type {Variable.var_table[self.arg2].datatype}, not {self.datatype}")
+
+        self.resolved = resolved
+        
+        return self.resolved
+    
+    def __repr__(self) -> str:
+        return f"SETVAR {self.arg1} {self.arg2}"
+
 class Event:
     event_table = []
     link_table = dict()

@@ -71,8 +71,16 @@ CmdGoStage:
 CmdPlayBgAnim:
     'play' 'bganim' anim=ID ';';
 
+CmdAssignmentInt:
+    dst=ID '=' src=ID ';';
+CmdAssignmentStr:
+    dst=ID ':=' src=ID ';';
+
+CmdAssignment:
+    CmdAssignmentInt | CmdAssignmentStr;
+
 StageCommand:
-    CmdGoStage | CmdPlayBgAnim;
+    CmdGoStage | CmdPlayBgAnim | CmdAssignment;
 
 // Stage definitions
 

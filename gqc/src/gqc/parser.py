@@ -4,6 +4,7 @@ import pyparsing as pp
 
 from .datamodel import Animation, Game, Stage, Variable, Event
 from .datamodel import Command, CommandDone, CommandPlayBg, CommandGoStage
+from .datamodel import CommandSetVar
 from .structs import EventType
 
 class GqcParseError(Exception):
@@ -147,6 +148,21 @@ def parse_variable_definition_storageclass(instring, loc, toks):
     # TODO: Needed?
     # return Variable.link_table[storageclass]
 
+def parse_assignment(instring, loc, toks):
+    toks = toks[0]
+
+    dst = toks[0]
+    if toks[1] == "=":
+        datatype = "int"
+    elif toks[1] == ":=":
+        datatype = "str"
+    else:
+        raise GqcParseError(f"Invalid assignment operator {toks[1]}", instring, loc)
+    
+    src = toks[2]
+
+    return ['setvar', dst, src, datatype]
+
 def parse_command(instring, loc, toks):
     toks = toks[0]
 
@@ -159,6 +175,8 @@ def parse_command(instring, loc, toks):
             raise GqcParseError(f"Invalid play subcommand {command}", instring, loc)
     elif command == "gostage":
         return CommandGoStage(instring, loc, toks[1])
+    elif command == 'setvar':
+        return CommandSetVar(instring, loc, toks[1], toks[2], toks[3])
     else:
         raise GqcParseError(f"Invalid command {command}", instring, loc)
 
