@@ -14,6 +14,7 @@
 #define GQ_PTR_NS_SAVE 0x02
 #define GQ_PTR_NS_FRAM 0x03
 #define GQ_PTR_NS_FBUF 0x04
+#define GQ_PTR_NS_HEAP 0x05
 #define GQ_PTR_BUILTIN 0x80
 
 #define GQ_PTR_NS(POINTER)     ((POINTER & GQ_PTR_NS_MASK) >> 24)

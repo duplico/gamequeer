@@ -5,6 +5,14 @@ game {
     starting_stage = start;
 }
 
+volatile {
+    int badge_id = 0;
+}
+
+persistent {
+    int badges_seen = 0;
+}
+
 animations {
     george <- "carhop.mp4" {
         dithering := "sierra2_4a";

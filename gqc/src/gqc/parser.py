@@ -133,7 +133,13 @@ def parse_variable_definition_storageclass(instring, loc, toks):
         raise GqcParseError(f"Invalid storage class: {storageclass}", instring, loc)
     
     if Variable.storageclass_table[storageclass]:
-        raise GqcParseError(f"Storage class {storageclass} already defined", instring, loc)
+        non_init_vars_present = False
+        for var in Variable.storageclass_table[storageclass].values():
+            if not var.name.endswith(".init"):
+                non_init_vars_present = True
+                break
+        if non_init_vars_present:
+            raise GqcParseError(f"Storage class {storageclass} already defined", instring, loc)
     
     for var in toks[1]:
         var.set_storageclass(storageclass)

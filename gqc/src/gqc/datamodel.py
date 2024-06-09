@@ -293,15 +293,14 @@ class Variable:
     var_table = {}
     storageclass_table = dict(persistent={}, volatile={})
     link_table = dict() # OrderedDict not needed to remember order since Python 3.7
+    heap_table = dict()
 
-    def __init__(self, datatype : str, name : str, value, storageclass : str =None):
+    def __init__(self, datatype : str, name : str, value, storageclass : str = None):
         self.addr = 0x00000000 # Set at link time
+        self.init_from = None
         self.datatype = datatype
         self.name = name
         self.value = value
-
-        # TODO: set when the section is finished parsing
-        self.storageclass = None
 
         if name in Variable.var_table:
             raise ValueError(f"Duplicate definition of {name}")
@@ -318,6 +317,9 @@ class Variable:
 
         # TODO: needed?
         Game.game.add_variable(self)
+        
+        if storageclass:
+            self.set_storageclass(storageclass)
 
     def __str__(self) -> str:
         return "<{} {} {} = {}>@{}".format(
@@ -335,6 +337,13 @@ class Variable:
         assert storageclass in ["volatile", "persistent"]
         self.storageclass = storageclass
         Variable.storageclass_table[storageclass][self.name] = self
+
+        # If this variable is volatile, create a persistent variable to use
+        #  for initialization purposes.
+        # TODO: De-duplicate init vars
+        if storageclass == "volatile":
+            init_var = Variable(self.datatype, f'{self.name}.init', self.value, storageclass="persistent")
+            self.init_from = init_var
     
     def to_bytes(self):
         if self.datatype == "int":
@@ -357,9 +366,12 @@ class Variable:
     
     def set_addr(self, addr : int, namespace : int = structs.GQ_PTR_NS_CART):
         self.addr = structs.gq_ptr_apply_ns(namespace, addr)
-        Variable.link_table[self.addr] = self
-
-# TODO: Set up globals or a singleton or something containing the base path etc.
+        if namespace == structs.GQ_PTR_NS_CART:
+            Variable.link_table[self.addr] = self
+        elif namespace == structs.GQ_PTR_NS_HEAP:
+            Variable.heap_table[self.addr] = self
+        else:
+            raise ValueError("Invalid or unsupported namespace")
 
 # TODO: Use this:
 class FrameEncoding(IntEnum):

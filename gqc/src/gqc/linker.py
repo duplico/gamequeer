@@ -17,9 +17,13 @@ def create_symbol_table(table_dest = sys.stdout):
     # frames (fixed size by count)
     # frame data (variable size)
     # variable area (variable size)
+    # initialization code (variable size)
     # events code (variable size)
 
     frame_count = sum([len(anim.frames) for anim in Animation.anim_table.values()])
+
+    heap_ptr_start = structs.gq_ptr_apply_ns(structs.GQ_PTR_NS_HEAP, 0x000000)
+    heap_ptr_offset = 0
 
     cart_ptr_start = structs.gq_ptr_apply_ns(structs.GQ_PTR_NS_CART, 0x000000)
     header_ptr_start = cart_ptr_start
@@ -60,11 +64,18 @@ def create_symbol_table(table_dest = sys.stdout):
     
     # Now that the frame data table is complete, we can calculate the starting
     #  locations of the variable tables.
+    # First, allocate memory on-cart for the persistent variables
     vars_ptr_start = frame_data_ptr_start + frame_data_ptr_offset
     vars_ptr_offset = 0
-    for var in list(Variable.storageclass_table['persistent'].values()) + list(Variable.storageclass_table['volatile'].values()):
+    for var in list(Variable.storageclass_table['persistent'].values()):
         var.set_addr(vars_ptr_start + vars_ptr_offset)
         vars_ptr_offset += var.size()
+    
+    # Next, allocate memory on-heap for the volatile variables.
+    # TODO: Generate code for initializing the volatile variables.
+    for var in list(Variable.storageclass_table['volatile'].values()):
+        var.set_addr(heap_ptr_start + heap_ptr_offset, namespace=structs.GQ_PTR_NS_HEAP)
+        heap_ptr_offset += var.size()
 
     # TODO: Menus
 
@@ -94,6 +105,7 @@ def create_symbol_table(table_dest = sys.stdout):
         '.framedata' : FrameData.link_table,
         '.var' : Variable.link_table,
         '.event' : Event.link_table,
+        '.heap' : Variable.heap_table
     }
 
     # Emit a human readable summary of the symbol table.
@@ -136,10 +148,18 @@ def generate_code(parsed, symbol_table : dict):
     # Count the total number of symbols to be processed
     symbol_count = sum([len(table) for table in symbol_table.values()])
 
+    next_expected_addr = structs.gq_ptr_apply_ns(structs.GQ_PTR_NS_CART, 0x000000)
+
     with Progress(TextColumn("[progress.description]{task.description}"), BarColumn(), TaskProgressColumn(), TimeElapsedColumn()) as progress:
         task = progress.add_task(f"Generating code", total=symbol_count)
         for table in symbol_table.values():
-            for symbol in table.values():
+            for addr, symbol in table.items():
+                if structs.gq_ptr_get_ns(addr) != structs.GQ_PTR_NS_CART:
+                    # Only emit code for the cartridge.
+                    continue
+                if addr != next_expected_addr:
+                    raise ValueError(f"Symbol at address {addr:#0{10}x} is not contiguous with the previous symbol.")
+                next_expected_addr += symbol.size()
                 output += symbol.to_bytes()
                 progress.update(task, advance=1)
     
