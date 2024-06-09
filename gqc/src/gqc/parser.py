@@ -161,7 +161,7 @@ def parse_assignment(instring, loc, toks):
     
     src = toks[2]
 
-    return ['setvar', dst, src, datatype]
+    return [['setvar', dst, src, datatype]]
 
 def parse_command(instring, loc, toks):
     toks = toks[0]

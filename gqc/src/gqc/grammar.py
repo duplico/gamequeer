@@ -2,7 +2,7 @@ import pyparsing as pp
 
 from .parser import parse_variable_definition, parse_variable_definition_storageclass
 from .parser import parse_animation_definition, parse_stage_definition, parse_game_definition
-from .parser import parse_event_definition, parse_command
+from .parser import parse_event_definition, parse_command, parse_assignment
 
 """
 Grammar for GQC language
@@ -131,7 +131,7 @@ def build_game_parser():
     string_assignment = pp.Group(identifier - pp.Keyword(":=") - identifier - pp.Suppress(";"))
     assignment_statement = int_assignment | string_assignment
 
-    # TODO: Add parse action
+    assignment_statement.add_parse_action(parse_assignment)
 
     event_statement = play | gostage | assignment_statement
     event_statements = pp.Group(event_statement | pp.Suppress("{") - pp.ZeroOrMore(event_statement) - pp.Suppress("}"))
