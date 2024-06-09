@@ -35,7 +35,7 @@ gqc/dist/gqc-0.0.1.tar.gz gqc/dist/gqc-0.0.1-py3-none-any.whl: builder-build
 
 # TODO: version number should be a variable
 # TODO: We should really be packaging this into the container
-gq-game-language/gq-game-language-0.0.1.vsix: builder-build
+gq-game-language/gq-game-language-0.0.1.vsix: builder-build gq-game-language/src/language/game-queer-game-language.langium
 	$(DOCKER_CMD) /bin/bash -c "cd gq-game-language && npm install langium && npm run langium:generate && npm run build && vsce package --allow-missing-repository"
 
 ### Build targets in root build directory
