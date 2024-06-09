@@ -15,6 +15,7 @@ gq_stage stage_current;
 
 uint32_t curr_frame;
 uint8_t *frame_data;
+uint8_t gq_heap[GQ_HEAP_SIZE]; // TODO: Consider dynamically allocating?
 
 // TODO: Move
 const uint32_t palette_bw[] = {0x000000, 0xffffff};
@@ -182,7 +183,13 @@ void run_code(t_gq_pointer code_ptr) {
                 // TODO: bounds checking or whatever:
                 load_animation(0, cmd.arg1);
                 break;
-                // TODO: Add the setvar implementation
+            case GQ_OP_SETVAR:
+                if (cmd.flags & GQ_OPF_TYPE_INT) {
+                    gq_memcpy(cmd.arg1, cmd.arg2, GQ_INT_SIZE);
+                } else if (cmd.flags & GQ_OPF_TYPE_STR) {
+                    gq_memcpy(cmd.arg1, cmd.arg2, GQ_STR_SIZE);
+                }
+                break;
         }
 
         code_ptr += sizeof(gq_op);

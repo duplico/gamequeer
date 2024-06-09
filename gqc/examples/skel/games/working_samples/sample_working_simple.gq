@@ -6,7 +6,7 @@ game {
 }
 
 volatile {
-    int badge_id = 0;
+    int badge_id = 29;
 }
 
 persistent {

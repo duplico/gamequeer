@@ -14,13 +14,15 @@ uint8_t flash_fram[512];
 uint8_t read_byte(t_gq_pointer ptr) {
     switch (GQ_PTR_NS(ptr)) {
         case GQ_PTR_NS_CART:
-            return flash_cart[ptr & ~GQ_PTR_NS_MASK];
+            return flash_cart[GQ_PTR_ADDR(ptr)];
         case GQ_PTR_NS_SAVE:
-            return flash_save[ptr & ~GQ_PTR_NS_MASK];
+            return flash_save[GQ_PTR_ADDR(ptr)];
         case GQ_PTR_NS_FRAM:
-            return flash_fram[ptr & ~GQ_PTR_NS_MASK];
+            return flash_fram[GQ_PTR_ADDR(ptr)];
         case GQ_PTR_NS_FBUF:
             return 0; // TODO: Implement framebuffer
+        case GQ_PTR_NS_HEAP:
+            return gq_heap[GQ_PTR_ADDR(ptr)];
         default:
             return 0;
     }
@@ -29,16 +31,19 @@ uint8_t read_byte(t_gq_pointer ptr) {
 uint8_t write_byte(t_gq_pointer ptr, uint8_t value) {
     switch (GQ_PTR_NS(ptr)) {
         case GQ_PTR_NS_CART:
-            flash_cart[ptr & ~GQ_PTR_NS_MASK] = value;
+            flash_cart[GQ_PTR_ADDR(ptr)] = value;
             return 1;
         case GQ_PTR_NS_SAVE:
-            flash_save[ptr & ~GQ_PTR_NS_MASK] = value;
+            flash_save[GQ_PTR_ADDR(ptr)] = value;
             return 1;
         case GQ_PTR_NS_FRAM:
-            flash_fram[ptr & ~GQ_PTR_NS_MASK] = value;
+            flash_fram[GQ_PTR_ADDR(ptr)] = value;
             return 1;
         case GQ_PTR_NS_FBUF:
             return 0; // TODO: Implement framebuffer
+        case GQ_PTR_NS_HEAP:
+            gq_heap[GQ_PTR_ADDR(ptr)] = value;
+            return 1;
         default:
             return 0;
     }
