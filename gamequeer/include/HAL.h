@@ -12,6 +12,8 @@ uint8_t gq_memcpy_ram(uint8_t *dest, t_gq_pointer src, uint32_t size);
 
 void HAL_init(int argc, char *argv[]);
 
+void HAL_update_leds();
+
 void HAL_event_poll();
 void HAL_sleep();
 

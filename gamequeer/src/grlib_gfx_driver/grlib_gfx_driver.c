@@ -1,11 +1,6 @@
 #include "gfx.h"
 #include "grlib.h"
-
-#define OLED_VERTICAL_MAX   128
-#define OLED_HORIZONTAL_MAX 128
-
-#define LEDS_W 20
-#define LEDS_H (OLED_VERTICAL_MAX / 5)
+#include "grlib_gfx.h"
 
 void gfx_driver_init(char *window_title) {
     gfx_open(OLED_HORIZONTAL_MAX + LEDS_W * 2, OLED_VERTICAL_MAX, window_title);
@@ -87,7 +82,8 @@ static void gfx_driver_flush(void *displayData) {
 
 static void gfx_driver_clearDisplay(void *displayData, uint16_t value) {
     uint8_t color_val = value ? 0xFF : 0x00;
-    gfx_clear_color(color_val, color_val, color_val);
+    gfx_color(color_val, color_val, color_val);
+    gfx_fillrect(LEDS_W, 0, OLED_HORIZONTAL_MAX, OLED_VERTICAL_MAX);
 }
 
 const Graphics_Display g_gfx = {

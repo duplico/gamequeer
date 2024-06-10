@@ -64,6 +64,13 @@ uint8_t load_game() {
     // Run the initialization commands
     run_code(game.startup_code);
 
+    for (uint8_t i = 0; i < 5; i++) {
+        gq_leds[i].r = 0x1000;
+        gq_leds[i].g = 0x2000;
+        gq_leds[i].b = 0x0000;
+    }
+    HAL_update_leds();
+
     return 1;
 }
 

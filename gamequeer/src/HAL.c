@@ -65,6 +65,16 @@ uint8_t gq_memcpy_ram(uint8_t *dest, t_gq_pointer src, uint32_t size) {
     return 1;
 }
 
+void HAL_update_leds() {
+    for (uint8_t i = 0; i < 5; i++) {
+        gfx_color(gq_leds[i].r >> 8, gq_leds[i].g >> 8, gq_leds[i].b >> 8);
+        gfx_fillrect(0, i * LEDS_H, LEDS_W, i * LEDS_H + LEDS_H);
+        gfx_fillrect(
+            LEDS_W + OLED_HORIZONTAL_MAX, i * LEDS_H, LEDS_W + OLED_HORIZONTAL_MAX + LEDS_W, i * LEDS_H + LEDS_H);
+    }
+    gfx_flush();
+}
+
 void HAL_init(int argc, char *argv[]) {
     gfx_driver_init("Gamequeer");
     Graphics_initContext(&g_sContext, &g_gfx);
