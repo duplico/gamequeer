@@ -4,8 +4,11 @@
 #define OLED_VERTICAL_MAX   128
 #define OLED_HORIZONTAL_MAX 128
 
+#define LEDS_W 20
+#define LEDS_H (OLED_VERTICAL_MAX / 5)
+
 void gfx_driver_init(char *window_title) {
-    gfx_open(OLED_HORIZONTAL_MAX, OLED_VERTICAL_MAX, window_title);
+    gfx_open(OLED_HORIZONTAL_MAX + LEDS_W * 2, OLED_VERTICAL_MAX, window_title);
 }
 
 static void gfx_driver_pixelDraw(void *displayData, int16_t x, int16_t y, uint16_t value) {
@@ -14,7 +17,7 @@ static void gfx_driver_pixelDraw(void *displayData, int16_t x, int16_t y, uint16
     else
         gfx_color(0, 0, 0);
 
-    gfx_point(x, y);
+    gfx_point(x + LEDS_W, y);
 }
 
 static void gfx_driver_pixelDrawMultiple(
