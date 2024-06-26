@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/time.h>
 #include <unistd.h>
 
 #include "gamequeer.h"
@@ -120,9 +121,47 @@ void HAL_event_poll() {
 }
 
 void HAL_sleep() {
-    // Rather than entering a full sleep mode, we'll busy wait for
-    //  10 ms, creating our 100 Hz system tick for the game engine.
-    // TODO: Do something different rather than busy-waiting, in order
-    //       to make sure the timing is more accurate.
-    usleep(10000);
+    static uint8_t first_loop           = 1;
+    static int32_t time_diff_us         = 0;
+    static int32_t time_diff_us_catchup = 0;
+    static struct timeval pre_event_loop, post_event_loop;
+
+    // Although the actual badge/console uses an timer to use an interrupt-driven
+    //  system tick, we'll simulate it here with a busy wait.
+    //  Every time we exit this function, we'll record the "pre" event loop time,
+    //  and every time we enter, we'll record a "post" event loop time.
+    //  We'll use that to keep our time loop as close to 10ms as possible.
+
+    // But if it's the first loop, just exit immediately.
+    if (first_loop) {
+        first_loop = 0;
+        gettimeofday(&pre_event_loop, NULL);
+        return;
+    }
+    gettimeofday(&post_event_loop, NULL);
+
+    // The difference, in usecs, between the start of the last event loop and
+    //  its end (measured based on when it entered and exited this function):
+    time_diff_us = (post_event_loop.tv_sec - pre_event_loop.tv_sec) * 1000000 +
+        (post_event_loop.tv_usec - pre_event_loop.tv_usec);
+
+    if (time_diff_us < 10000) {
+        // If the last event loop handler took less than 10ms, sleep for the difference
+        uint32_t sleep_time = 10000 - time_diff_us;
+        if (sleep_time > time_diff_us_catchup) {
+            sleep_time -= time_diff_us_catchup;
+            time_diff_us_catchup = 0;
+        } else {
+            time_diff_us_catchup -= sleep_time;
+            sleep_time = 0;
+        }
+        usleep(sleep_time);
+    } else {
+        // Otherwise, don't sleep at all, but remember how much we were off by
+        time_diff_us_catchup += time_diff_us - 10000;
+    }
+
+    // Now that we're done sleeping, it's time to enter a new event loop.
+    //  Record the time that happened.
+    gettimeofday(&pre_event_loop, NULL);
 }
