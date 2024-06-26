@@ -1,11 +1,9 @@
 #include "gfx.h"
 #include "grlib.h"
-
-#define OLED_VERTICAL_MAX   128
-#define OLED_HORIZONTAL_MAX 128
+#include "grlib_gfx.h"
 
 void gfx_driver_init(char *window_title) {
-    gfx_open(OLED_HORIZONTAL_MAX, OLED_VERTICAL_MAX, window_title);
+    gfx_open(OLED_HORIZONTAL_MAX + LEDS_W * 2, OLED_VERTICAL_MAX, window_title);
 }
 
 static void gfx_driver_pixelDraw(void *displayData, int16_t x, int16_t y, uint16_t value) {
@@ -14,7 +12,7 @@ static void gfx_driver_pixelDraw(void *displayData, int16_t x, int16_t y, uint16
     else
         gfx_color(0, 0, 0);
 
-    gfx_point(x, y);
+    gfx_point(x + LEDS_W, y);
 }
 
 static void gfx_driver_pixelDrawMultiple(
@@ -84,7 +82,8 @@ static void gfx_driver_flush(void *displayData) {
 
 static void gfx_driver_clearDisplay(void *displayData, uint16_t value) {
     uint8_t color_val = value ? 0xFF : 0x00;
-    gfx_clear_color(color_val, color_val, color_val);
+    gfx_color(color_val, color_val, color_val);
+    gfx_fillrect(LEDS_W, 0, OLED_HORIZONTAL_MAX, OLED_VERTICAL_MAX);
 }
 
 const Graphics_Display g_gfx = {

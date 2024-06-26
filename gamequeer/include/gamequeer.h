@@ -74,6 +74,38 @@ typedef struct gq_anim_frame {
     uint32_t data_size;        // Size of the frame data
 } __attribute__((packed)) gq_anim_frame;
 
+typedef struct rgbcolor16_t {
+    uint16_t r;
+    uint16_t g;
+    uint16_t b;
+} __attribute__((packed)) rgbcolor16_t;
+
+typedef struct rgbcolor8_t {
+    uint8_t r;
+    uint8_t g;
+    uint8_t b;
+} __attribute__((packed)) rgbcolor8_t;
+
+// NOTE: This is specifically not packed, because it doesn't need to be
+//       saved, so we'll just keep it in its native bit alignment.
+typedef struct rgbdelta_t {
+    int_fast32_t r;
+    int_fast32_t g;
+    int_fast32_t b;
+} rgbdelta_t;
+
+typedef struct gq_ledcue_frame_t {
+    uint16_t duration; // Duration of the frame in ticks
+    uint16_t flags;    // Flags for the frame
+    rgbcolor16_t leds[5];
+} __attribute__((packed)) gq_ledcue_frame_t;
+
+typedef struct gq_ledcue_t {
+    uint16_t frame_count; // Number of frames
+    uint16_t flags;       // Flags for the cue
+    t_gq_pointer frames;  // Pointer to the first frame
+} __attribute__((packed)) gq_ledcue_t;
+
 typedef enum gq_event_type {
     GQ_EVENT_ENTER = 0x00,
     GQ_EVENT_BUTTON_A,
@@ -105,6 +137,7 @@ typedef struct gq_stage {
 extern Graphics_Context g_sContext;
 extern uint8_t bg_animating;
 extern uint8_t gq_heap[GQ_HEAP_SIZE];
+extern rgbcolor16_t gq_leds[5];
 
 uint8_t load_game();
 uint8_t load_stage(t_gq_pointer stage_ptr);
