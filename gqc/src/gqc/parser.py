@@ -5,7 +5,7 @@ import pyparsing as pp
 
 from .datamodel import Animation, Game, Stage, Variable, Event
 from .datamodel import Command, CommandDone, CommandPlayBg, CommandGoStage
-from .datamodel import CommandSetVar
+from .datamodel import CommandSetVar, CommandCue, LightCue
 from .structs import EventType
 
 class GqcParseError(Exception):
@@ -191,6 +191,10 @@ def parse_command(instring, loc, toks):
             return CommandPlayBg(instring, loc, toks[2])
         else:
             raise GqcParseError(f"Invalid play subcommand {command}", instring, loc)
+    elif command == "cue":
+        if toks[1] not in LightCue.cue_table:
+            raise GqcParseError(f"Undefined cue {toks[1]}", instring, loc)
+        return CommandCue(instring, loc, toks[1])
     elif command == "gostage":
         return CommandGoStage(instring, loc, toks[1])
     elif command == 'setvar':

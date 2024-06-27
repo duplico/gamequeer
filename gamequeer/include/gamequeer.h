@@ -130,6 +130,7 @@ typedef struct gq_event {
 typedef struct gq_stage {
     uint16_t id;                                 // Numerical ID of the stage (sequential, 0-based)
     t_gq_pointer anim_bg_pointer;                // Pointer to the background animation (NULL if none)
+    t_gq_pointer cue_bg_pointer;                 // Pointer to the background lighting cue (NULL if none)
     t_gq_pointer menu_pointer;                   // Pointer to the menu definition for this stage
     t_gq_pointer event_commands[GQ_EVENT_COUNT]; // Event commands
 } __attribute__((packed)) gq_stage;

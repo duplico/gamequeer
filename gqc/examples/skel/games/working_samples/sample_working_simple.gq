@@ -31,6 +31,7 @@ lightcues {
 
 stage start {
     // bganim george;
+    bgcue test;
 
     event enter {
         play bganim george;
@@ -38,6 +39,7 @@ stage start {
 
     event bgdone {
         badge_id = badges_seen;
+        cue test2;
         gostage selfie;
     }
 }

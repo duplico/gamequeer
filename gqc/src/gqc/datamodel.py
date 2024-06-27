@@ -188,6 +188,24 @@ class CommandPlayBg(Command):
     def __repr__(self) -> str:
         return f"PLAYBG {self.arg1}"
 
+class CommandCue(Command):
+    def __init__(self, instring, loc, cue : str):
+        super().__init__(CommandType.CUE, instring, loc)
+        self.cue_name = cue
+    
+    def resolve(self):
+        if self.resolved:
+            return True
+
+        if self.cue_name in LightCue.cue_table and LightCue.cue_table[self.cue_name].addr != 0x00000000:
+            self.arg1 = LightCue.cue_table[self.cue_name].addr
+            self.resolved = True
+        
+        return self.resolved
+    
+    def __repr__(self) -> str:
+        return f"CUE {self.arg1}"
+
 class CommandSetVar(Command):
     def __init__(self, instring, loc, dst : str, src : str, datatype : str):
         super().__init__(CommandType.SETVAR, instring, loc, arg1=None, arg2=None)
@@ -270,12 +288,13 @@ class Stage:
     stage_table = {}
     link_table = dict() # OrderedDict not needed to remember order since Python 3.7
 
-    def __init__(self, name : str, bganim : str = None, menu : str = None, events : Iterable = []):
+    def __init__(self, name : str, bganim : str = None, bgcue : str = None, menu : str = None, events : Iterable = []):
         self.addr = 0x00000000 # Set at link time
         self.id = len(Stage.stage_table)
         self.resolved = False
         self.name = name
         self.bganim_name = bganim
+        self.bgcue_name = bgcue
         self.menu_name = menu
         self.unresolved_symbols = []
 
@@ -314,6 +333,15 @@ class Stage:
             self.unresolved_symbols.append(self.bganim_name)
             resolved = False
 
+        # Attempt to resolve background cue
+        if self.bgcue_name is None:
+            self.bgcue = None
+        elif self.bgcue_name in LightCue.cue_table:
+            self.bgcue = LightCue.cue_table[self.bgcue_name]
+        else:
+            self.unresolved_symbols.append(self.bgcue_name)
+            resolved = False
+
         # TODO: Attempt to resolve menu
 
         # Event statements resolve themselves at code generation time
@@ -349,10 +377,11 @@ class Stage:
         stage = structs.GqStage(
             id=self.id,
             anim_bg_pointer=self.bganim.addr if self.bganim else 0,
+            cue_bg_pointer=self.bgcue.addr if self.bgcue else 0,
             menu_pointer=0,
             event_commands=event_pointers
         )
-        return struct.pack(structs.GQ_STAGE_FORMAT, stage.id, stage.anim_bg_pointer, stage.menu_pointer, *stage.event_commands)
+        return struct.pack(structs.GQ_STAGE_FORMAT, stage.id, stage.anim_bg_pointer, stage.cue_bg_pointer, stage.menu_pointer, *stage.event_commands)
 
 class Variable:
     var_table = {}

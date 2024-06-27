@@ -146,10 +146,10 @@ GQ_OP_SIZE = struct.calcsize(GQ_OP_FORMAT)
 # typedef struct gq_stage {
 #     uint16_t id;                                 // Numerical ID of the stage (sequential, 0-based)
 #     t_gq_pointer anim_bg_pointer;                // Pointer to the background animation (NULL if none)
+#     t_gq_pointer cue_bg_pointer;                 // Pointer to the background lighting cue (NULL if none)
 #     t_gq_pointer menu_pointer;                   // Pointer to the menu definition for this stage
 #     t_gq_pointer event_commands[GQ_EVENT_COUNT]; // Event commands
 # } __attribute__((packed)) gq_stage;
-GqStage = namedtuple('GqStage', 'id anim_bg_pointer menu_pointer event_commands')
-GQ_STAGE_FORMAT = f'<H{T_GQ_POINTER_FORMAT}{T_GQ_POINTER_FORMAT}{len(EventType)}{T_GQ_POINTER_FORMAT}'
-# GQ_STAGE_FORMAT = f'<H{T_GQ_POINTER_FORMAT}{T_GQ_POINTER_FORMAT}{T_GQ_POINTER_FORMAT}I'
+GqStage = namedtuple('GqStage', 'id anim_bg_pointer cue_bg_pointer menu_pointer event_commands')
+GQ_STAGE_FORMAT = f'<H{T_GQ_POINTER_FORMAT}{T_GQ_POINTER_FORMAT}{T_GQ_POINTER_FORMAT}{len(EventType)}{T_GQ_POINTER_FORMAT}'
 GQ_STAGE_SIZE = struct.calcsize(GQ_STAGE_FORMAT)
