@@ -6,6 +6,7 @@ import pathlib
 from collections import namedtuple
 import pickle
 
+import webcolors
 from PIL import Image
 import pyparsing as pp
 from rich import print
@@ -20,6 +21,7 @@ import hashlib
 # TODO: Turn the datamodel module into a directory
 
 FrameOnDisk = namedtuple('FrameOnDisk', ['compression_type_name', 'width', 'height', 'bytes'])
+CueColor = namedtuple('CueColor', ['name', 'r', 'g', 'b'])
 
 class Game:
     link_table = dict() # OrderedDict not needed to remember order since Python 3.7
@@ -752,3 +754,60 @@ class FrameData:
     
     def __repr__(self) -> str:
         return f"FrameData({self.frame.width}x{self.frame.height}:{self.frame.compression_type_name})"
+
+class LightCue:
+    def __init__(self, colors : list[CueColor]):
+        self.frames = []
+        self.colors = dict()
+
+        for color in colors:
+            if color.name in self.colors:
+                raise ValueError(f"Duplicate color {color.name}")
+            self.colors[color.name] = color
+    
+    def serialize(self, out_path : pathlib.Path):
+        with open(out_path, 'wb') as file:
+            pickle.dump(self, file)
+    
+    def deserialize(self, in_path : pathlib.Path):
+        with open(in_path, 'rb') as file:
+            c = pickle.load(file)
+        self.frames = c.frames
+        self.colors = c.colors
+
+class LightCueFrame:
+    def __init__(self, colors : list[str], duration : int, transition : str = 'smooth'):
+        self.colors = colors
+        self.duration = duration
+        self.transition = transition
+        self.lightcue = None
+        self.resolved = False
+    
+    def add_to_cue(self, cue : LightCue):
+        self.lightcue = cue
+        self.lightcue.frames.append(self)
+        self.resolve()
+    
+    def resolve(self):
+        if not self.lightcue:
+            return False
+        if self.resolved:
+            return True
+        
+        resolved_colors = []
+        for color_name in self.colors:
+            if color_name in self.lightcue.colors:
+                resolved_colors.append(self.lightcue.colors[color_name])
+            else:
+                try:
+                    color = webcolors.name_to_rgb(color_name)
+                    resolved_colors.append(CueColor(color_name, color.red, color.green, color.blue))
+                except ValueError:
+                    raise ValueError(f"Unresolvable color name {color_name} somewhere in this file.")
+        
+        self.colors = resolved_colors
+        self.resolved = True
+        return True
+
+    def __repr__(self):
+        return f"LightCueFrame({self.colors}, {self.duration}, {self.transition})"

@@ -7,7 +7,7 @@ import click
 from rich.progress import Progress
 
 from . import parser
-from . import anim
+from . import anim, cues
 from . import makefile_src
 from . import linker
 from .datamodel import Game
@@ -26,6 +26,13 @@ def gqc_cli():
 def mkanim(out_path : pathlib.Path, src_path : pathlib.Path, dither : str, frame_rate : int):
     with Progress() as progress:
         anim.make_animation(progress, src_path, out_path, dither, frame_rate)
+
+@gqc_cli.command()
+@click.option('--out-path', '-o', type=click.Path(file_okay=False, dir_okay=True, writable=True, path_type=pathlib.Path), required=True)
+@click.option('--src-path', '-i', type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True, path_type=pathlib.Path), required=True)
+def mkcue(out_path : pathlib.Path, src_path : pathlib.Path):
+    with Progress() as progress:
+        cues.make_cue(progress, src_path, out_path)
 
 @gqc_cli.command()
 @click.option('--no-mem-map', '-n', is_flag=True)

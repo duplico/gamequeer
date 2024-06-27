@@ -7,3 +7,4 @@ build >= 1.2
 pillow >= 10.3
 tabulate >= 0.9
 rich >= 13.7
+webcolors>=24.6.0
