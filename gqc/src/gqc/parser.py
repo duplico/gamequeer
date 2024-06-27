@@ -1,4 +1,5 @@
 import sys
+import pathlib
 
 import pyparsing as pp
 
@@ -147,6 +148,23 @@ def parse_variable_definition_storageclass(instring, loc, toks):
     
     # TODO: Needed?
     # return Variable.link_table[storageclass]
+
+def parse_lightcue_definition_section(instring, loc, toks):
+    # Import here to avoid circular import
+    from .cues import parse_cue
+    toks = toks[0]
+
+    for cue in toks:
+        cue_name = cue[0]
+        cue_source = pathlib.Path() / 'assets' / 'lighting' / cue[1]
+
+        with open(cue_source, 'r') as f:
+            parsed_cue = parse_cue(f)
+        
+        try:
+            parsed_cue.set_name(cue_name)
+        except ValueError as ve:
+            raise GqcParseError(str(ve), instring, loc)
 
 def parse_assignment(instring, loc, toks):
     toks = toks[0]

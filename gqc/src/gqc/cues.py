@@ -1,7 +1,6 @@
 import sys
 import pathlib
 import webcolors
-import pickle
 
 import pyparsing as pp
 from rich.progress import Progress
@@ -9,7 +8,7 @@ from rich.progress import Progress
 from .parser import GqcParseError
 from .datamodel import CueColor, LightCueFrame, LightCue
 
-def parse_cue(text):
+def parse_cue(text) -> LightCue:
     # Import here to avoid circular import
     from gqc import grammar_gqcue
 
@@ -17,8 +16,6 @@ def parse_cue(text):
 
     try:
         parsed = gqc_cue.parse_file(text, parseAll=True)
-        # TODO: Either do something with parsed or don't accept the return value.
-        # print(parsed)
     except pp.ParseBaseException as pe:
         print(pe.explain(), file=sys.stderr)
         exit(1)

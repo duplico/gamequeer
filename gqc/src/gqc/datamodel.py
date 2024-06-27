@@ -756,15 +756,28 @@ class FrameData:
         return f"FrameData({self.frame.width}x{self.frame.height}:{self.frame.compression_type_name})"
 
 class LightCue:
+    link_table = dict() # OrderedDict not needed to remember order since Python 3.7
+    cue_table = dict()
+
     def __init__(self, colors : list[CueColor]):
         self.frames = []
         self.colors = dict()
+        self.name = None
 
         for color in colors:
             if color.name in self.colors:
                 raise ValueError(f"Duplicate color {color.name}")
             self.colors[color.name] = color
     
+    def set_name(self, name : str):
+        if self.name != None:
+            raise ValueError("Cue already named")
+        self.name = name
+        
+        if self.name in LightCue.cue_table:
+            raise ValueError(f"Duplicate cue {name}")
+        LightCue.cue_table[self.name] = self
+
     def serialize(self, out_path : pathlib.Path):
         with open(out_path, 'wb') as file:
             pickle.dump(self, file)
@@ -775,11 +788,32 @@ class LightCue:
         self.frames = c.frames
         self.colors = c.colors
 
+    def set_addr(self, addr : int, namespace : int = structs.GQ_PTR_NS_CART):
+        self.addr = structs.gq_ptr_apply_ns(namespace, addr)
+        LightCue.link_table[self.addr] = self
+    
+    def to_bytes(self):
+        cue_struct = structs.GqLedCue(
+            frame_count=len(self.frames),
+            flags=0,
+            frames=self.frames[0].addr
+        )
+        return struct.pack(structs.GQ_LEDCUE_FORMAT, *cue_struct)
+    
+    def size(self):
+        return structs.GQ_LEDCUE_SIZE
+    
+    def __repr__(self):
+        return f"LightCue(name={self.name})"
+
 class LightCueFrame:
+    link_table = dict() # OrderedDict not needed to remember order since Python 3.7
+
     def __init__(self, colors : list[str], duration : int, transition : str = 'smooth'):
         self.colors = colors
         self.duration = duration
         self.transition = transition
+        # TODO: Handle packing transition into flags
         self.lightcue = None
         self.resolved = False
     
@@ -808,6 +842,26 @@ class LightCueFrame:
         self.colors = resolved_colors
         self.resolved = True
         return True
+    
+    def set_addr(self, addr : int, namespace : int = structs.GQ_PTR_NS_CART):
+        self.addr = structs.gq_ptr_apply_ns(namespace, addr)
+        LightCueFrame.link_table[self.addr] = self
+    
+    def to_bytes(self):
+        frame_colors = []
+        for color in self.colors:
+            frame_colors.append(color.r)
+            frame_colors.append(color.g)
+            frame_colors.append(color.b)
+        frame_struct = structs.GqLedCueFrame(
+            self.duration,
+            0, # TODO
+            *frame_colors
+        )
+        return struct.pack(structs.GQ_LEDCUE_FRAME_FORMAT, *frame_struct)
+    
+    def size(self):
+        return structs.GQ_LEDCUE_FRAME_SIZE
 
     def __repr__(self):
         return f"LightCueFrame({self.colors}, {self.duration}, {self.transition})"

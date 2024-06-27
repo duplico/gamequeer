@@ -24,6 +24,11 @@ animations {
     }
 }
 
+lightcues {
+    test <- "test.gqcue";
+    test2 <- "test.gqcue";
+}
+
 stage start {
     // bganim george;
 

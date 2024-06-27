@@ -2,7 +2,7 @@ import pyparsing as pp
 
 from .parser import parse_variable_definition, parse_variable_definition_storageclass
 from .parser import parse_animation_definition, parse_stage_definition, parse_game_definition
-from .parser import parse_event_definition, parse_command, parse_assignment
+from .parser import parse_event_definition, parse_command, parse_assignment, parse_lightcue_definition_section
 
 """
 Grammar for GQC language
@@ -113,7 +113,8 @@ def build_game_parser():
     animation_assignment.set_parse_action(parse_animation_definition)
 
     # Light cue sections
-    lightcue_definition_section = pp.Group(pp.Keyword("lightcues") - file_assignments)
+    lightcue_definition_section = pp.Suppress("lightcues") - file_assignments
+    lightcue_definition_section.set_parse_action(parse_lightcue_definition_section)
 
     # Menu sections
     menu_option = pp.Group(integer - pp.Suppress(":") - string - pp.Suppress(";"))

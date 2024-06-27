@@ -67,6 +67,33 @@ GqAnimFrame = namedtuple('GqAnimFrame', 'bPP data_pointer data_size')
 GQ_ANIM_FRAME_FORMAT = f'<B{T_GQ_POINTER_FORMAT}I'
 GQ_ANIM_FRAME_SIZE = struct.calcsize(GQ_ANIM_FRAME_FORMAT)
 
+# typedef struct rgbcolor16_t {
+#     uint16_t r;
+#     uint16_t g;
+#     uint16_t b;
+# } __attribute__((packed)) rgbcolor16_t;
+RgbColor16 = namedtuple('RgbColor16', 'r g b')
+RGB_COLOR16_FORMAT = '<HHH'
+RGB_COLOR16_SIZE = struct.calcsize(RGB_COLOR16_FORMAT)
+
+# typedef struct gq_ledcue_frame_t {
+#     uint16_t duration; // Duration of the frame in ticks
+#     uint16_t flags;    // Flags for the frame
+#     rgbcolor16_t leds[5];
+# } __attribute__((packed)) gq_ledcue_frame_t;
+GqLedCueFrame = namedtuple('GqLedCueFrame', 'duration flags r0 g0 b0 r1 g1 b1 r2 g2 b2 r3 g3 b3 r4 g4 b4')
+GQ_LEDCUE_FRAME_FORMAT = f'<HH{"HHH" * 5}' # TODO: pack these elsewhere
+GQ_LEDCUE_FRAME_SIZE = struct.calcsize(GQ_LEDCUE_FRAME_FORMAT)
+
+# typedef struct gq_ledcue_t {
+#     uint16_t frame_count; // Number of frames
+#     uint16_t flags;       // Flags for the cue
+#     t_gq_pointer frames;  // Pointer to the first frame
+# } __attribute__((packed)) gq_ledcue_t;
+GqLedCue = namedtuple('GqLedCue', 'frame_count flags frames')
+GQ_LEDCUE_FORMAT = f'<HH{T_GQ_POINTER_FORMAT}'
+GQ_LEDCUE_SIZE = struct.calcsize(GQ_LEDCUE_FORMAT)
+
 # Event types from gamequeer.h:
 # typedef enum gq_event_type {
 #     GQ_EVENT_NOP = 0x00,
