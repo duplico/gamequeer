@@ -3,6 +3,7 @@ import pyparsing as pp
 from .parser import parse_variable_definition, parse_variable_definition_storageclass
 from .parser import parse_animation_definition, parse_stage_definition, parse_game_definition
 from .parser import parse_event_definition, parse_command, parse_assignment
+from .parser import parse_menu_definition
 
 """
 Grammar for GQC language
@@ -28,7 +29,7 @@ animation_definition_section = "animations" animation_assignments
 animation_assignments = animation_assignment | "{" animation_assignment* "}"
 animation_assignment = identifier <-:" file_source ";" | identifier <-:" file_source animation_options
 animation_options = animation_option | "{" animation_option* "}"
-animation_option = "frame_rate" "=" integer ";" | "dithering" ":=" string ";"
+animation_option = "frame_rate" "=" integer ";" | "dithering" ":=" string ";" | "x" "=" integer ";" | "y" "=" integer ";"
 
 lightcue_definition_section = "lightcues" file_assignments
 
@@ -104,7 +105,7 @@ def build_game_parser():
     file_assignments = pp.Group(file_assignment | pp.Suppress("{") - pp.ZeroOrMore(file_assignment) - pp.Suppress("}"))
 
     # Animation sections
-    animation_option = pp.Group(pp.Keyword("frame_rate") - pp.Suppress("=") - integer - pp.Suppress(";") | pp.Keyword("dithering") - pp.Suppress(":=") - string - pp.Suppress(";"))
+    animation_option = pp.Group(pp.Keyword("frame_rate") - pp.Suppress("=") - integer - pp.Suppress(";") | pp.Keyword("dithering") - pp.Suppress(":=") - string - pp.Suppress(";")) | pp.Group(pp.Keyword("x") - pp.Suppress("=") - integer - pp.Suppress(";") | pp.Keyword("y") - pp.Suppress("=") - integer - pp.Suppress(";"))
     animation_options = pp.Group(pp.Suppress(";") | animation_option | pp.Suppress("{") - pp.ZeroOrMore(animation_option) - pp.Suppress("}"))
     animation_assignment = pp.Group(identifier - pp.Suppress("<-") - file_source - animation_options)
     animation_assignments = pp.Group(animation_assignment | pp.Suppress("{") - pp.ZeroOrMore(animation_assignment) - pp.Suppress("}"))
@@ -118,9 +119,11 @@ def build_game_parser():
     # Menu sections
     menu_option = pp.Group(integer - pp.Suppress(":") - string - pp.Suppress(";"))
     menu_options = pp.Group(menu_option | pp.Suppress("{") - pp.ZeroOrMore(menu_option) - pp.Suppress("}"))
-    menu_definition = pp.Group(identifier - menu_options)
+    menu_definition = identifier - menu_options
     menu_definitions = pp.Group(menu_definition | pp.Suppress("{") - pp.ZeroOrMore(menu_definition) - pp.Suppress("}"))
     menu_definition_section = pp.Group(pp.Keyword("menus") - menu_definitions)
+
+    menu_definition.set_parse_action(parse_menu_definition)
 
     ### Stage sections ###
     # Commands

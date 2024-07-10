@@ -7,10 +7,23 @@ game {
 
 volatile {
     int badge_id = 29;
+    str game_name := "Test";
 }
 
 persistent {
     int badges_seen = 0;
+}
+
+menus {
+    restart {
+        1: "Yes";
+        0: "Also yes";
+    }
+
+    OkCancel {
+        1: "OK";
+        0: "Cancel";
+    }
 }
 
 animations {

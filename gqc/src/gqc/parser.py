@@ -2,7 +2,7 @@ import sys
 
 import pyparsing as pp
 
-from .datamodel import Animation, Game, Stage, Variable, Event
+from .datamodel import Animation, Game, Stage, Variable, Event, Menu
 from .datamodel import Command, CommandDone, CommandPlayBg, CommandGoStage
 from .datamodel import CommandSetVar
 from .structs import EventType
@@ -111,6 +111,17 @@ def parse_animation_definition(instring, loc, toks):
 
     try:
         return Animation(name, source, **kwargs)
+    except ValueError as ve:
+        raise GqcParseError(str(ve), instring, loc)
+
+def parse_menu_definition(instring, loc, toks):
+    menu_name = toks[0]
+    menu_options = dict()
+    for val, label in toks[1]:
+        menu_options[label] = val
+    
+    try:
+        return Menu(menu_name, menu_options)
     except ValueError as ve:
         raise GqcParseError(str(ve), instring, loc)
 
