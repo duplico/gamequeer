@@ -149,6 +149,7 @@ void anim_tick() {
 
         // If we're here, it's time for this animation to go to the next frame.
         current_animations[i].frame++;
+        current_animations[i].ticks = current_animations[i].anim.ticks_per_frame;
         if (current_animations[i].frame >= current_animations[i].anim.frame_count) {
             // Animation is complete
             // TODO: Handle events for other animations
