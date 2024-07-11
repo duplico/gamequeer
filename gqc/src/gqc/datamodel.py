@@ -784,10 +784,10 @@ class Menu:
     def size(self):
         # TODO: The int size should be a constant (the 4)
         size_per_option = structs.GQ_STR_SIZE + 4
-        return len(self.options) * size_per_option
+        return 4 + len(self.options) * size_per_option
     
     def to_bytes(self):
-        bytes_out = b''
+        bytes_out = len(self.options).to_bytes(len(self.options), 'little')
 
         for label, value in self.options.items():
             # TODO: function for this:
