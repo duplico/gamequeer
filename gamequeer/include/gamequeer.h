@@ -146,6 +146,6 @@ uint8_t load_stage(t_gq_pointer stage_ptr);
 uint8_t load_animation(uint8_t index, t_gq_pointer anim_ptr);
 void anim_tick();
 
-uint16_t handle_events();
+void handle_events();
 
 #endif

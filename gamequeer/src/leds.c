@@ -8,6 +8,9 @@ rgbcolor16_t gq_leds[5] = {
     0,
 };
 
+// TODO: Move this
+#define LEDS_SUBTICKS 4
+
 uint8_t leds_animating = 0;
 gq_ledcue_frame_t leds_cue_frame_curr;
 rgbcolor16_t leds_cue_color_next[5];
@@ -23,7 +26,7 @@ void led_setup_frame() {
 
     // Load the current frame into leds_cue_frame_curr:
     gq_memcpy_ram(
-        &leds_cue_frame_curr,
+        (uint8_t *) &leds_cue_frame_curr,
         leds_cue.frames + leds_cue_frame_index * sizeof(gq_ledcue_frame_t),
         sizeof(gq_ledcue_frame_t));
 
@@ -34,7 +37,7 @@ void led_setup_frame() {
         // otherwise, we need to go back to the start if we're looping.
         gq_ledcue_frame_t leds_cue_frame_next;
         gq_memcpy_ram(
-            &leds_cue_frame_next,
+            (uint8_t *) &leds_cue_frame_next,
             leds_cue.frames + ((leds_cue_frame_index + 1) % leds_cue.frame_count) * sizeof(gq_ledcue_frame_t),
             sizeof(gq_ledcue_frame_t));
         for (uint8_t i = 0; i < 5; i++) {
@@ -50,13 +53,11 @@ void led_setup_frame() {
 }
 
 void led_play_cue(t_gq_pointer cue_ptr) {
-    gq_memcpy_ram(&leds_cue, cue_ptr, sizeof(gq_ledcue_t));
+    gq_memcpy_ram((uint8_t *) &leds_cue, cue_ptr, sizeof(gq_ledcue_t));
     leds_animating       = 1;
     leds_cue_frame_index = 0;
     led_setup_frame();
 }
-
-#define LEDS_SUBTICKS 4
 
 void led_tick() {
     uint8_t need_to_redraw = 0;

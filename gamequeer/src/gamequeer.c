@@ -198,6 +198,11 @@ void run_code(t_gq_pointer code_ptr) {
                     gq_memcpy(cmd.arg1, cmd.arg2, GQ_STR_SIZE);
                 }
                 break;
+            case GQ_OP_CUE:
+                // TODO
+                break;
+            default:
+                break;
         }
 
         code_ptr += sizeof(gq_op);
@@ -205,7 +210,7 @@ void run_code(t_gq_pointer code_ptr) {
 }
 
 // TODO: Allow a mask?
-uint16_t handle_events() {
+void handle_events() {
     for (uint16_t event_type = 0x0000; event_type < GQ_EVENT_COUNT; event_type++) {
         if (GQ_EVENT_GET(event_type)) {
             // Check whether this event type is used in the current stage.
