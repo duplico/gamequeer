@@ -836,15 +836,18 @@ class LightCue:
         return f"LightCue(name={self.name})"
 
 class LightCueFrame:
+    ALLOWED_TRANSITIONS = ['smooth', 'none']
     link_table = dict() # OrderedDict not needed to remember order since Python 3.7
 
-    def __init__(self, colors : list[str], duration : int, transition : str = 'smooth'):
+    def __init__(self, colors : list[str], duration : int, transition : str = 'none'):
         self.colors = colors
         self.duration = duration
         self.transition = transition
-        # TODO: Handle packing transition into flags
         self.lightcue = None
         self.resolved = False
+
+        if self.transition not in LightCueFrame.ALLOWED_TRANSITIONS:
+            raise ValueError(f"Invalid transition {self.transition}; options are {LightCueFrame.ALLOWED_TRANSITIONS}")
     
     def add_to_cue(self, cue : LightCue):
         self.lightcue = cue

@@ -4,6 +4,7 @@ import webcolors
 
 import pyparsing as pp
 from rich.progress import Progress
+from rich import print
 
 from .parser import GqcParseError
 from .datamodel import CueColor, LightCueFrame, LightCue
@@ -44,6 +45,7 @@ def parse_color_definition(instring, loc, toks):
 def parse_cue_frame(instring, loc, toks):
     colors = []
     kwargs = dict()
+    
     for tok in toks:
         if tok[0] == 'colors':
             # Note: The number of colors is enforced by pyparsing
@@ -51,10 +53,17 @@ def parse_cue_frame(instring, loc, toks):
                 # TODO: Check that the color is defined, and look it up?
                 colors.append(color)
         elif tok[0] not in kwargs:
-            kwargs[tok[0]] = tok[1]
+            val = tok[1]
+            if tok[0] == 'duration' and tok[1] % 4 != 0:
+                val = (val//4) * 4
+                print(f"[red][bold]WARNING[/bold][/red]: duration {tok[1]} not a multiple of 4; rounding to {val}", file=sys.stderr)
+            kwargs[tok[0]] = val
         else:
             raise GqcParseError(f"Duplicate frame parameter {tok[0]}", instring, loc)
-    return LightCueFrame(colors, **kwargs)
+    try:
+        return LightCueFrame(colors, **kwargs)
+    except ValueError as e:
+        raise GqcParseError(str(e), instring, loc)
 
 def parse_lightcue_definition(instring, loc, toks):
     if len(toks) == 1:

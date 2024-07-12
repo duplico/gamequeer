@@ -17,7 +17,7 @@ frame {
 
 
 frame {
-    duration = 150;
+    duration = 152;
     transition := "smooth";
     colors {
         orange,

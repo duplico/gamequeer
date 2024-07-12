@@ -2,6 +2,7 @@ import sys
 import pathlib
 
 import pyparsing as pp
+from rich import print
 
 from .datamodel import Animation, Game, Stage, Variable, Event
 from .datamodel import Command, CommandDone, CommandPlayBg, CommandGoStage
@@ -158,6 +159,7 @@ def parse_lightcue_definition_section(instring, loc, toks):
         cue_name = cue[0]
         cue_source = pathlib.Path() / 'assets' / 'lighting' / cue[1]
 
+        print(f"[blue]Light cue [italic]{cue_name}[/italic][/blue] from [underline]{cue_source}[/underline]")
         with open(cue_source, 'r') as f:
             parsed_cue = parse_cue(f)
         try:
@@ -208,8 +210,6 @@ def parse(text):
     gqc_game = grammar.build_game_parser()
     try:
         parsed = gqc_game.parse_file(text, parseAll=True)
-        # TODO: Either do something with parsed or don't accept the return value.
-        # print(parsed)
     except pp.ParseBaseException as pe:
         print(pe.explain(), file=sys.stderr)
         exit(1)
