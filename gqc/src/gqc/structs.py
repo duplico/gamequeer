@@ -103,16 +103,15 @@ class LedCueFrameFlags(IntEnum):
     NONE = 0x00
     TRANSITION_SMOOTH = 0x01
 
-# Event types from gamequeer.h:
 # typedef enum gq_event_type {
-#     GQ_EVENT_NOP = 0x00,
+#     GQ_EVENT_ENTER = 0x00,
 #     GQ_EVENT_BUTTON_A,
 #     GQ_EVENT_BUTTON_B,
 #     GQ_EVENT_BUTTON_L,
 #     GQ_EVENT_BUTTON_R,
 #     GQ_EVENT_BUTTON_CLICK,
 #     GQ_EVENT_BGDONE,
-#     GQ_EVENT_ENTER,
+#     GQ_EVENT_MENU,
 #     GQ_EVENT_COUNT
 # } gq_event_type;
 

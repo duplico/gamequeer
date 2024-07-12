@@ -3,7 +3,7 @@ import pyparsing as pp
 from .parser import parse_variable_definition, parse_variable_definition_storageclass
 from .parser import parse_animation_definition, parse_stage_definition, parse_game_definition
 from .parser import parse_event_definition, parse_command, parse_assignment, parse_lightcue_definition_section
-from .parser import parse_menu_definition
+from .parser import parse_menu_definition, parse_bound_menu
 
 """
 Grammar for GQC language
@@ -152,12 +152,13 @@ def build_game_parser():
     # General stage definition and options
     stage_bganim = pp.Group(pp.Keyword("bganim") - identifier - pp.Suppress(";"))
     stage_bgcue = pp.Group(pp.Keyword("bgcue") - identifier - pp.Suppress(";"))
-    stage_menu = pp.Group(pp.Keyword("menu") - identifier - pp.Suppress(";") | pp.Keyword("menu") - identifier - pp.Keyword("prompt") - string - pp.Suppress(";"))
+    stage_menu = pp.Suppress("menu") - identifier - pp.Optional(pp.Suppress("prompt") - string) - pp.Suppress(";")
     stage_event = pp.Group(pp.Keyword("event") - event_type - event_statements)
     stage_option = stage_bganim | stage_bgcue | stage_menu | stage_event
     stage_options = pp.Group(stage_option | pp.Suppress("{") - pp.ZeroOrMore(stage_option) - pp.Suppress("}"))
     stage_definition_section = pp.Group(pp.Suppress("stage") - identifier - stage_options)
 
+    stage_menu.set_parse_action(parse_bound_menu)
     stage_event.set_parse_action(parse_event_definition)
 
     stage_definition_section.set_parse_action(parse_stage_definition)

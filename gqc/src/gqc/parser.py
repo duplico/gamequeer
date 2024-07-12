@@ -43,6 +43,14 @@ def parse_game_definition(instring, loc, toks):
     except ValueError as ve:
         raise GqcParseError(str(ve), instring, loc)
 
+def parse_bound_menu(instring, loc, toks):
+    menu_name = toks[0]
+    menu_prompt = ''
+    if len(toks) == 2:
+        menu_prompt = toks[1]
+    
+    return Stage.BoundMenu(menu_name, menu_prompt)
+
 def parse_stage_definition(instring, loc, toks):
     toks = toks[0]
 
@@ -55,6 +63,10 @@ def parse_stage_definition(instring, loc, toks):
     for stage_option in toks[1]:
         if isinstance(stage_option, Event):
             stage_kwargs['events'].append(stage_option)
+        elif isinstance(stage_option, Stage.BoundMenu):
+            if 'menu' in stage_kwargs:
+                raise GqcParseError(f"Duplicate menu definition for stage {name}", instring, loc)
+            stage_kwargs['menu'] = stage_option
         elif stage_option[0] in stage_kwargs:
             raise GqcParseError(f"Duplicate option {stage_option[0]} for stage {name}", instring, loc)
         else:

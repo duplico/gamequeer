@@ -267,15 +267,16 @@ class Event:
 class Stage:
     stage_table = {}
     link_table = dict() # OrderedDict not needed to remember order since Python 3.7
+    BoundMenu = namedtuple('BoundMenu', ['menu_name', 'menu_prompt'])
 
-    def __init__(self, name : str, bganim : str = None, bgcue : str = None, menu : str = None, events : Iterable = []):
+    def __init__(self, name : str, bganim : str = None, bgcue : str = None, menu : 'Stage.BoundMenu' = None, events : Iterable = []):
         self.addr = 0x00000000 # Set at link time
         self.id = len(Stage.stage_table)
         self.resolved = False
         self.name = name
         self.bganim_name = bganim
         self.bgcue_name = bgcue
-        self.menu_name = menu
+        self.menu_def = menu
         self.unresolved_symbols = []
 
         if name in Stage.stage_table:
@@ -322,7 +323,14 @@ class Stage:
             self.unresolved_symbols.append(self.bgcue_name)
             resolved = False
 
-        # TODO: Attempt to resolve menu
+        # Attempt to resolve menu
+        if self.menu_def is None:
+            self.menu = None
+        elif self.menu_def.menu_name in Menu.menu_table:
+            self.menu = Menu.menu_table[self.menu_def.menu_name]
+        else:
+            self.unresolved_symbols.append(self.menu_def.menu_name)
+            resolved = False
 
         # Event statements resolve themselves at code generation time
 
@@ -358,7 +366,7 @@ class Stage:
             id=self.id,
             anim_bg_pointer=self.bganim.addr if self.bganim else 0,
             cue_bg_pointer=self.bgcue.addr if self.bgcue else 0,
-            menu_pointer=0,
+            menu_pointer=self.menu.addr if self.menu else 0,
             event_commands=event_pointers
         )
         return struct.pack(structs.GQ_STAGE_FORMAT, stage.id, stage.anim_bg_pointer, stage.cue_bg_pointer, stage.menu_pointer, *stage.event_commands)
