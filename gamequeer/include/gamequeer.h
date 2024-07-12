@@ -140,13 +140,13 @@ typedef struct gq_stage {
 } __attribute__((packed)) gq_stage;
 
 typedef struct gq_menu_option {
-    char label[GQ_STR_SIZE]; // Text of the menu entry
-    t_gq_int value;          // Value of the menu entry
+    char label[GQ_STR_SIZE]; // Text of the menu option
+    t_gq_int value;          // Value of the menu option
 } __attribute__((packed)) gq_menu_option;
 
 typedef struct gq_menu {
-    t_gq_int entry_count;     // Number of entries in the menu
-    gq_menu_option options[]; // Entries in the menu
+    t_gq_int option_count;    // Number of options in the menu
+    gq_menu_option options[]; // options in the menu
 } __attribute__((packed)) gq_menu;
 
 extern Graphics_Context g_sContext;

@@ -17,12 +17,53 @@ uint32_t curr_frame;
 uint8_t *frame_data;
 uint8_t gq_heap[GQ_HEAP_SIZE]; // TODO: Consider dynamically allocating?
 
+uint8_t menu_active            = 0;
+uint8_t menu_option_selected   = 0;
+t_gq_int GQ_BUILTIN_menu_value = 0;
+// TODO: Add all the other built-ins
+
+gq_menu *menu_current; // TODO: we need a cap on menu sizes.
+
 // TODO: Move
 const uint32_t palette_bw[] = {0x000000, 0xffffff};
 const uint32_t palette_wb[] = {0xffffff, 0x000000};
 
 // TODO: Move
 void run_code(t_gq_pointer code_ptr);
+
+void menu_load(t_gq_pointer menu_ptr, t_gq_pointer menu_prompt) {
+    // TODO: assert !menu_active
+    t_gq_int menu_option_count;
+    t_gq_pointer menu_size;
+
+    // Determine the size of the current menu based on its option count.
+    gq_memcpy_ram((uint8_t *) &menu_option_count, menu_ptr, GQ_INT_SIZE);
+    menu_size = GQ_INT_SIZE + menu_option_count * sizeof(gq_menu_option);
+
+    // Load the menu into RAM.
+    menu_current = (gq_menu *) malloc(menu_size);
+    gq_memcpy_ram((uint8_t *) menu_current, menu_ptr, menu_size);
+
+    // Initialize the menu options and activate it.
+    menu_option_selected = 0;
+    menu_active          = 1;
+
+    // TODO: flag to the main loop indicating we need to redraw.
+}
+
+void menu_close() {
+    // TODO: make sure we prevent stage changes while a menu is open,
+    //       OR we close the menu on a stage change. Maybe both.
+
+    if (!menu_active) {
+        return;
+    }
+
+    menu_active = 0;
+    free(menu_current);
+
+    // TODO: flag to the main loop indicating we need to redraw.
+}
 
 /**
  * @brief Loads a new stage.
@@ -51,6 +92,11 @@ uint8_t load_stage(t_gq_pointer stage_ptr) {
     } else if (leds_animating && leds_cue.bgcue) {
         // If we're currently playing a background cue, stop it.
         led_stop();
+    }
+
+    if (stage_current.menu_pointer) {
+        // If this stage has a menu, load it.
+        menu_load(stage_current.menu_pointer, 0);
     }
 
     // Set stage entry event flag
@@ -102,9 +148,11 @@ uint8_t load_animation(uint8_t index, t_gq_pointer anim_ptr) {
     return 1;
 }
 
+// TODO: rename this function because it draws the entire screen stack, not just the animations.
 void draw_animations() {
     gq_anim_frame frame_current;
 
+    // First, draw the animation stack
     for (uint8_t i = 0; i < MAX_CONCURRENT_ANIMATIONS; i++) {
         if (!current_animations[i].in_use) {
             continue;
@@ -139,6 +187,20 @@ void draw_animations() {
         Graphics_drawImage(&g_sContext, &img, current_animations[i].x, current_animations[i].y);
         free(frame_data);
     }
+
+    // Next, draw any labels
+    // TODO: Implement
+
+    // Then, draw the menu, if there is one.
+    if (menu_active) {
+        // TODO: make this look better.
+        for (uint8_t i = 0; i < menu_current->option_count; i++) {
+            Graphics_drawString(&g_sContext, menu_current->options[i].label, -1, 15, i * 10, 0);
+            if (i == menu_option_selected) {
+                Graphics_drawString(&g_sContext, ">", -1, 6, i * 10, 0);
+            }
+        }
+    }
 }
 
 void anim_tick() {
@@ -171,6 +233,7 @@ void anim_tick() {
     }
 
     if (need_to_redraw) {
+        // TODO: Call this based on an event from the main loop, instead?
         draw_animations();
     }
 }
@@ -221,12 +284,45 @@ void run_code(t_gq_pointer code_ptr) {
 void handle_events() {
     for (uint16_t event_type = 0x0000; event_type < GQ_EVENT_COUNT; event_type++) {
         if (GQ_EVENT_GET(event_type)) {
+            GQ_EVENT_CLR(event_type);
+            // If we're in a menu, hijack button events to navigate the menu.
+            if (menu_active) {
+                switch (event_type) {
+                    case GQ_EVENT_BUTTON_A:
+                        // Select the current menu option
+                        // TODO: should this be a click instead?
+                        GQ_BUILTIN_menu_value = menu_current->options[menu_option_selected].value;
+                        menu_close();
+                        break;
+                    case GQ_EVENT_BUTTON_B:
+                        // Cancel the menu
+                        // TODO: does this have meaning?
+                        menu_close();
+                        break;
+                    case GQ_EVENT_BUTTON_L:
+                        // Move the selection up
+                        if (menu_option_selected > 0) {
+                            menu_option_selected--;
+                        }
+                        break;
+                    case GQ_EVENT_BUTTON_R:
+                        // Move the selection down
+                        if (menu_option_selected < menu_current->option_count - 1) {
+                            menu_option_selected++;
+                        }
+                        break;
+                    default:
+                        goto unblocked_events;
+                        break;
+                }
+                continue;
+            }
+
+        unblocked_events:
             // Check whether this event type is used in the current stage.
             if (!GQ_PTR_ISNULL(stage_current.event_commands[event_type])) {
                 run_code(stage_current.event_commands[event_type]);
             }
-
-            GQ_EVENT_CLR(event_type);
         }
     }
 }
