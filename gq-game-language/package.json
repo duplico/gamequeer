@@ -33,6 +33,7 @@
         "typescript": "~5.1.6"
     },
     "displayName": "gq-game-language",
+    "publisher": "duplico",
     "engines": {
         "vscode": "^1.67.0"
     },
