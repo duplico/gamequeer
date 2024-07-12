@@ -7,7 +7,7 @@ import click
 from rich.progress import Progress
 
 from . import parser
-from . import anim
+from . import anim, cues
 from . import makefile_src
 from . import linker
 from .datamodel import Game
@@ -28,6 +28,13 @@ def mkanim(out_path : pathlib.Path, src_path : pathlib.Path, dither : str, frame
         anim.make_animation(progress, src_path, out_path, dither, frame_rate)
 
 @gqc_cli.command()
+@click.option('--out-path', '-o', type=click.Path(file_okay=False, dir_okay=True, writable=True, path_type=pathlib.Path), required=True)
+@click.option('--src-path', '-i', type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True, path_type=pathlib.Path), required=True)
+def mkcue(out_path : pathlib.Path, src_path : pathlib.Path):
+    with Progress() as progress:
+        cues.make_cue(progress, src_path, out_path)
+
+@gqc_cli.command()
 @click.option('--no-mem-map', '-n', is_flag=True)
 @click.option('--out-dir', '-o', type=click.Path(file_okay=False, dir_okay=True, writable=True, path_type=pathlib.Path), default=None)
 @click.argument('input', type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True, path_type=pathlib.Path), required=True)
@@ -46,6 +53,9 @@ def compile(input : pathlib.Path, no_mem_map : bool, out_dir : pathlib.Path):
     #  │   └── lightcues/
     #  ├── map.txt
     #  └── <game_name>.gqgame
+
+    # Load all our builtin variables
+    linker.create_reserved_variables()
 
     # Parse the game file, implemented almost entirely in side effects
     with open(input, 'r') as f:

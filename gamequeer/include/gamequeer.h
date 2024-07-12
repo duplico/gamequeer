@@ -98,13 +98,15 @@ typedef struct rgbdelta_t {
 
 typedef struct gq_ledcue_frame_t {
     uint16_t duration; // Duration of the frame in ticks
-    uint16_t flags;    // Flags for the frame
-    rgbcolor16_t leds[5];
+    // Flags for the frame:
+    uint8_t transition_smooth : 1; // Smoothly fade to the next frame
+    rgbcolor8_t leds[5];
 } __attribute__((packed)) gq_ledcue_frame_t;
 
 typedef struct gq_ledcue_t {
     uint16_t frame_count; // Number of frames
-    uint16_t flags;       // Flags for the cue
+    uint8_t loop  : 1;    // Whether the cue loops indefinitely
+    uint8_t bgcue : 1;    // Whether the cue was invoked as a background cue
     t_gq_pointer frames;  // Pointer to the first frame
 } __attribute__((packed)) gq_ledcue_t;
 
@@ -132,6 +134,7 @@ typedef struct gq_event {
 typedef struct gq_stage {
     uint16_t id;                                 // Numerical ID of the stage (sequential, 0-based)
     t_gq_pointer anim_bg_pointer;                // Pointer to the background animation (NULL if none)
+    t_gq_pointer cue_bg_pointer;                 // Pointer to the background lighting cue (NULL if none)
     t_gq_pointer menu_pointer;                   // Pointer to the menu definition for this stage
     t_gq_pointer event_commands[GQ_EVENT_COUNT]; // Event commands
 } __attribute__((packed)) gq_stage;
@@ -150,12 +153,16 @@ extern Graphics_Context g_sContext;
 extern uint8_t bg_animating;
 extern uint8_t gq_heap[GQ_HEAP_SIZE];
 extern rgbcolor16_t gq_leds[5];
+extern gq_ledcue_t leds_cue;
+extern uint8_t leds_animating;
 
 uint8_t load_game();
 uint8_t load_stage(t_gq_pointer stage_ptr);
 uint8_t load_animation(uint8_t index, t_gq_pointer anim_ptr);
 void anim_tick();
-
-uint16_t handle_events();
+void led_tick();
+void led_play_cue(t_gq_pointer cue_ptr, uint8_t background);
+void led_stop();
+void handle_events();
 
 #endif

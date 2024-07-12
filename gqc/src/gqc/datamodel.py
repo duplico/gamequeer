@@ -6,6 +6,7 @@ import pathlib
 from collections import namedtuple
 import pickle
 
+import webcolors
 from PIL import Image
 import pyparsing as pp
 from rich import print
@@ -20,6 +21,7 @@ import hashlib
 # TODO: Turn the datamodel module into a directory
 
 FrameOnDisk = namedtuple('FrameOnDisk', ['compression_type_name', 'width', 'height', 'bytes'])
+CueColor = namedtuple('CueColor', ['name', 'r', 'g', 'b'])
 
 class Game:
     link_table = dict() # OrderedDict not needed to remember order since Python 3.7
@@ -29,8 +31,6 @@ class Game:
     def __init__(self, id : int, title : str, author : str, starting_stage : str = 'start'):
         self.addr = 0x00000000 # Set at link time
         self.stages = []
-        self.animations = []
-        self.variables = []
 
         self.starting_stage = None
         self.starting_stage_name = starting_stage
@@ -49,24 +49,6 @@ class Game:
         self.stages.append(stage)
         if stage.name == self.starting_stage_name:
             self.starting_stage = stage
-
-    def add_animation(self, animation):
-        self.animations.append(animation)
-
-    def add_variable(self, variable):
-        self.variables.append(variable)
-
-    # TODO: Replace
-    def pprint(self):
-        print("Stages:")
-        for stage in self.stages:
-            print(stage)
-        print("Animations:")
-        for anim in self.animations:
-            print(anim)
-        print("Variables:")
-        for var in self.variables:
-            print(var)
     
     def __repr__(self) -> str:
         return f"Game({self.id}, {repr(self.title)}, {repr(self.author)})"
@@ -186,6 +168,24 @@ class CommandPlayBg(Command):
     def __repr__(self) -> str:
         return f"PLAYBG {self.arg1}"
 
+class CommandCue(Command):
+    def __init__(self, instring, loc, cue : str):
+        super().__init__(CommandType.CUE, instring, loc)
+        self.cue_name = cue
+    
+    def resolve(self):
+        if self.resolved:
+            return True
+
+        if self.cue_name in LightCue.cue_table and LightCue.cue_table[self.cue_name].addr != 0x00000000:
+            self.arg1 = LightCue.cue_table[self.cue_name].addr
+            self.resolved = True
+        
+        return self.resolved
+    
+    def __repr__(self) -> str:
+        return f"CUE {self.arg1}"
+
 class CommandSetVar(Command):
     def __init__(self, instring, loc, dst : str, src : str, datatype : str):
         super().__init__(CommandType.SETVAR, instring, loc, arg1=None, arg2=None)
@@ -268,12 +268,13 @@ class Stage:
     stage_table = {}
     link_table = dict() # OrderedDict not needed to remember order since Python 3.7
 
-    def __init__(self, name : str, bganim : str = None, menu : str = None, events : Iterable = []):
+    def __init__(self, name : str, bganim : str = None, bgcue : str = None, menu : str = None, events : Iterable = []):
         self.addr = 0x00000000 # Set at link time
         self.id = len(Stage.stage_table)
         self.resolved = False
         self.name = name
         self.bganim_name = bganim
+        self.bgcue_name = bgcue
         self.menu_name = menu
         self.unresolved_symbols = []
 
@@ -312,6 +313,15 @@ class Stage:
             self.unresolved_symbols.append(self.bganim_name)
             resolved = False
 
+        # Attempt to resolve background cue
+        if self.bgcue_name is None:
+            self.bgcue = None
+        elif self.bgcue_name in LightCue.cue_table:
+            self.bgcue = LightCue.cue_table[self.bgcue_name]
+        else:
+            self.unresolved_symbols.append(self.bgcue_name)
+            resolved = False
+
         # TODO: Attempt to resolve menu
 
         # Event statements resolve themselves at code generation time
@@ -328,7 +338,7 @@ class Stage:
         return structs.GQ_STAGE_SIZE
 
     def __repr__(self) -> str:
-        return f"Stage({self.name}, events={self.events})"
+        return f"Stage({self.name}, bganim={self.bganim_name}, bgcue={self.bgcue_name}, events={self.events})"
     
     def to_bytes(self):
         # TODO: Maybe only calculate the events once?
@@ -347,14 +357,15 @@ class Stage:
         stage = structs.GqStage(
             id=self.id,
             anim_bg_pointer=self.bganim.addr if self.bganim else 0,
+            cue_bg_pointer=self.bgcue.addr if self.bgcue else 0,
             menu_pointer=0,
             event_commands=event_pointers
         )
-        return struct.pack(structs.GQ_STAGE_FORMAT, stage.id, stage.anim_bg_pointer, stage.menu_pointer, *stage.event_commands)
+        return struct.pack(structs.GQ_STAGE_FORMAT, stage.id, stage.anim_bg_pointer, stage.cue_bg_pointer, stage.menu_pointer, *stage.event_commands)
 
 class Variable:
     var_table = {}
-    storageclass_table = dict(persistent={}, volatile={})
+    storageclass_table = dict(persistent={}, volatile={}, builtin={})
     link_table = dict() # OrderedDict not needed to remember order since Python 3.7
     heap_table = dict()
 
@@ -364,11 +375,25 @@ class Variable:
         self.datatype = datatype
         self.name = name
         self.value = value
+        self.storageclass = None
 
         if name in Variable.var_table:
-            raise ValueError(f"Duplicate definition of {name}")
+            if Variable.var_table[name].storageclass == 'builtin':
+                raise ValueError(f"Cannot redefine builtin variable {name}")
+            else:
+                raise ValueError(f"Duplicate definition of {name}")
         Variable.var_table[name] = self
+        
+        if storageclass:
+            self.set_storageclass(storageclass)
 
+        # Skip type validation for builtins
+        if storageclass == "builtin":
+            return
+
+        # If this variable is not a builtin (reserved keyword), validate the value.
+        #  Builtin variables are reserved for internal use, and their values are
+        #  irrelevant except at runtime.
         if datatype == "int":
             if not isinstance(value, int):
                 raise ValueError(f"Invalid value {value} for int variable {name}")
@@ -377,12 +402,6 @@ class Variable:
                 raise ValueError(f"Invalid value {value} for str variable {name}")
             if len(value) > structs.GQ_STR_SIZE-1:
                 raise ValueError(f"String {name} length {len(value)} exceeds maximum of {structs.GQ_STR_SIZE-1}")
-
-        # TODO: needed?
-        Game.game.add_variable(self)
-        
-        if storageclass:
-            self.set_storageclass(storageclass)
 
     def __str__(self) -> str:
         return "<{} {} {} = {}>@{}".format(
@@ -397,7 +416,7 @@ class Variable:
         return f"Variable({repr(self.datatype)}, {repr(self.name)}, {self.value}, storageclass={repr(self.storageclass)})"
 
     def set_storageclass(self, storageclass):
-        assert storageclass in ["volatile", "persistent"]
+        assert storageclass in ["volatile", "persistent", "builtin"]
         self.storageclass = storageclass
         Variable.storageclass_table[storageclass][self.name] = self
 
@@ -442,6 +461,9 @@ class Variable:
             Variable.link_table[self.addr] = self
         elif namespace == structs.GQ_PTR_NS_HEAP:
             Variable.heap_table[self.addr] = self
+        elif namespace == structs.GQ_PTR_BUILTIN:
+            # Builtin variables are not linked into the symbol table
+            pass
         else:
             raise ValueError("Invalid or unsupported namespace")
 
@@ -799,3 +821,121 @@ class Menu:
     def set_addr(self, addr : int, namespace : int = structs.GQ_PTR_NS_CART):
         self.addr = structs.gq_ptr_apply_ns(namespace, addr)
         Menu.link_table[self.addr] = self
+class LightCue:
+    link_table = dict() # OrderedDict not needed to remember order since Python 3.7
+    cue_table = dict()
+
+    def __init__(self, colors : list[CueColor]):
+        self.frames = []
+        self.colors = dict()
+        self.name = None
+
+        for color in colors:
+            if color.name in self.colors:
+                raise ValueError(f"Duplicate color {color.name}")
+            self.colors[color.name] = color
+    
+    def set_name(self, name : str):
+        if self.name != None:
+            raise ValueError("Cue already named")
+        self.name = name
+        
+        if self.name in LightCue.cue_table:
+            raise ValueError(f"Duplicate cue {name}")
+        LightCue.cue_table[self.name] = self
+
+    def serialize(self, out_path : pathlib.Path):
+        with open(out_path, 'wb') as file:
+            pickle.dump(self, file)
+    
+    def deserialize(self, in_path : pathlib.Path):
+        with open(in_path, 'rb') as file:
+            c = pickle.load(file)
+        self.frames = c.frames
+        self.colors = c.colors
+
+    def set_addr(self, addr : int, namespace : int = structs.GQ_PTR_NS_CART):
+        self.addr = structs.gq_ptr_apply_ns(namespace, addr)
+        LightCue.link_table[self.addr] = self
+    
+    def to_bytes(self):
+        cue_struct = structs.GqLedCue(
+            frame_count=len(self.frames),
+            flags=0,
+            frames=self.frames[0].addr
+        )
+        return struct.pack(structs.GQ_LEDCUE_FORMAT, *cue_struct)
+    
+    def size(self):
+        return structs.GQ_LEDCUE_SIZE
+    
+    def __repr__(self):
+        return f"LightCue(name={self.name})"
+
+class LightCueFrame:
+    ALLOWED_TRANSITIONS = ['none', 'smooth']
+    link_table = dict() # OrderedDict not needed to remember order since Python 3.7
+
+    def __init__(self, colors : list[str], duration : int, transition : str = 'none'):
+        self.colors = colors
+        self.duration = duration
+        self.transition = transition
+        self.lightcue = None
+        self.resolved = False
+
+        if self.transition not in LightCueFrame.ALLOWED_TRANSITIONS:
+            raise ValueError(f"Invalid transition {self.transition}; options are {LightCueFrame.ALLOWED_TRANSITIONS}")
+    
+    def add_to_cue(self, cue : LightCue):
+        self.lightcue = cue
+        self.lightcue.frames.append(self)
+        self.resolve()
+    
+    def resolve(self):
+        if not self.lightcue:
+            return False
+        if self.resolved:
+            return True
+        
+        resolved_colors = []
+        for color_name in self.colors:
+            if color_name in self.lightcue.colors:
+                resolved_colors.append(self.lightcue.colors[color_name])
+            else:
+                try:
+                    color = webcolors.name_to_rgb(color_name)
+                    resolved_colors.append(CueColor(color_name, color.red, color.green, color.blue))
+                except ValueError:
+                    raise ValueError(f"Unresolvable color name {color_name} somewhere in this file.")
+        
+        self.colors = resolved_colors
+        self.resolved = True
+        return True
+    
+    def set_addr(self, addr : int, namespace : int = structs.GQ_PTR_NS_CART):
+        self.addr = structs.gq_ptr_apply_ns(namespace, addr)
+        LightCueFrame.link_table[self.addr] = self
+    
+    def to_bytes(self):
+        flags = 0x00
+        
+        if self.transition == "smooth":
+            flags |= structs.LedCueFrameFlags.TRANSITION_SMOOTH
+
+        frame_colors = []
+        for color in self.colors:
+            frame_colors.append(color.r)
+            frame_colors.append(color.g)
+            frame_colors.append(color.b)
+        frame_struct = structs.GqLedCueFrame(
+            self.duration,
+            flags,
+            *frame_colors
+        )
+        return struct.pack(structs.GQ_LEDCUE_FRAME_FORMAT, *frame_struct)
+    
+    def size(self):
+        return structs.GQ_LEDCUE_FRAME_SIZE
+
+    def __repr__(self):
+        return f"LightCueFrame({self.colors}, {self.duration}, {self.transition})"

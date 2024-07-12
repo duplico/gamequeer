@@ -70,6 +70,8 @@ CmdGoStage:
     'gostage' stage=ID ';';
 CmdPlayBgAnim:
     'play' 'bganim' anim=ID ';';
+CmdPlayCue:
+    'cue' cue=ID ';';
 
 CmdAssignmentInt:
     dst=ID '=' src=ID ';';
@@ -80,7 +82,7 @@ CmdAssignment:
     CmdAssignmentInt | CmdAssignmentStr;
 
 StageCommand:
-    CmdGoStage | CmdPlayBgAnim | CmdAssignment;
+    CmdGoStage | CmdPlayBgAnim | CmdPlayCue | CmdAssignment;
 
 // Stage definitions
 
@@ -92,9 +94,11 @@ StageMenu:
     'menu' menu=ID (prompt=STRING)? ';';
 StageBgAnim:
     'bganim' anim=ID ';';
+StageBgCue:
+    'bgcue' cue=ID ';';
 
 StageOption:
-    StageEvent | StageMenu | StageBgAnim;
+    StageEvent | StageMenu | StageBgAnim | StageBgCue;
 
 StageDefinition:
     'stage' name=ID (StageOption | '{' StageOption* '}');

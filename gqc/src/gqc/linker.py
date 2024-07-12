@@ -6,9 +6,14 @@ from tabulate import tabulate
 from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn
 
 from .datamodel import Game, Stage, Variable, Animation, Frame, FrameData, Event, Menu
-from .datamodel import Command, CommandDone
+from .datamodel import Command, CommandDone, LightCue, LightCueFrame
 
 from . import structs
+
+def create_reserved_variables():
+    for gq_var in structs.GQ_RESERVED_VARIABLES:
+        var = Variable(gq_var.type, gq_var.name, gq_var.description, 'builtin')
+        var.set_addr(gq_var.addr, namespace=structs.GQ_PTR_BUILTIN)
 
 def create_symbol_table(table_dest = sys.stdout):
     # Output order:
@@ -64,10 +69,23 @@ def create_symbol_table(table_dest = sys.stdout):
         anim.set_addr(anim_ptr_start + anim_ptr_offset)
         anim_ptr_offset += structs.GQ_ANIM_SIZE
     
+    # The lighting cues and their frames are placed next.
+    cues_ptr_start = frame_data_ptr_start + frame_data_ptr_offset
+    cues_ptr_offset = 0
+    cuedata_ptr_start = cues_ptr_start + len(LightCue.cue_table) * structs.GQ_LEDCUE_SIZE
+    cuedata_ptr_offset = 0
+    for cue in LightCue.cue_table.values():
+        cue.set_addr(cues_ptr_start + cues_ptr_offset)
+        cues_ptr_offset += cue.size()
+
+        for frame in cue.frames:
+            frame.set_addr(cuedata_ptr_start + cuedata_ptr_offset)
+            cuedata_ptr_offset += frame.size()
+
     # Now that the frame data table is complete, we can calculate the starting
     #  locations of the variable tables.
     # First, allocate memory on-cart for the persistent variables
-    vars_ptr_start = frame_data_ptr_start + frame_data_ptr_offset
+    vars_ptr_start = cuedata_ptr_start + cuedata_ptr_offset
     vars_ptr_offset = 0
     for var in list(Variable.storageclass_table['persistent'].values()):
         var.set_addr(vars_ptr_start + vars_ptr_offset)
@@ -132,6 +150,8 @@ def create_symbol_table(table_dest = sys.stdout):
         '.stage' : Stage.link_table,
         '.frame' : Frame.link_table,
         '.framedata' : FrameData.link_table,
+        '.cues' : LightCue.link_table,
+        '.cuedata' : LightCueFrame.link_table,
         '.var' : Variable.link_table,
         '.menu' : Menu.link_table,
         '.event' : Event.link_table,

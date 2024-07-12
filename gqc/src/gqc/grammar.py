@@ -2,7 +2,7 @@ import pyparsing as pp
 
 from .parser import parse_variable_definition, parse_variable_definition_storageclass
 from .parser import parse_animation_definition, parse_stage_definition, parse_game_definition
-from .parser import parse_event_definition, parse_command, parse_assignment
+from .parser import parse_event_definition, parse_command, parse_assignment, parse_lightcue_definition_section
 from .parser import parse_menu_definition
 
 """
@@ -45,15 +45,17 @@ menu_option = INT ":" STRING ";"
 
 stage_definition_section = "stage" identifier stage_options
 stage_options = stage_option | "{" stage_option* "}"
-stage_option = stage_bganim | stage_menu | stage_event
+stage_option = stage_bganim | stage_bgcue | stage_menu | stage_event
 stage_bganim = "bganim" identifier ";"
+stage_bgcue = "bgcue" identifier ";"
 stage_menu = "menu" identifier ";" | "menu" identifier "prompt" STRING ";"
 stage_event = "event" event_type event_statements
 event_type = "input" "(" event_input_button ")" | "bgdone" | "menu" | "enter"
 event_input_button = "A" | "B" | "<-" | "->" | "-"
 event_statements = event_statement | "{" event_statement* "}"
-event_statement = play | gostage | assignment_statement
+event_statement = play | cue | gostage | assignment_statement
 play = "play" "bganim" identifier ";"
+cue = "cue" identifier ";"
 gostage = "gostage" identifier ";"
 
 assignment_statement = int_assignment | string_assignment
@@ -114,7 +116,8 @@ def build_game_parser():
     animation_assignment.set_parse_action(parse_animation_definition)
 
     # Light cue sections
-    lightcue_definition_section = pp.Group(pp.Keyword("lightcues") - file_assignments)
+    lightcue_definition_section = pp.Suppress("lightcues") - file_assignments
+    lightcue_definition_section.set_parse_action(parse_lightcue_definition_section)
 
     # Menu sections
     menu_option = pp.Group(integer - pp.Suppress(":") - string - pp.Suppress(";"))
@@ -128,6 +131,7 @@ def build_game_parser():
     ### Stage sections ###
     # Commands
     play = pp.Group(pp.Keyword("play") - pp.Keyword("bganim") - identifier - pp.Suppress(";"))
+    cue = pp.Group(pp.Keyword("cue") - identifier - pp.Suppress(";"))
     gostage = pp.Group(pp.Keyword("gostage") - identifier - pp.Suppress(";"))
 
     int_assignment = pp.Group(identifier - pp.Keyword("=") - identifier - pp.Suppress(";"))
@@ -136,7 +140,7 @@ def build_game_parser():
 
     assignment_statement.add_parse_action(parse_assignment)
 
-    event_statement = play | gostage | assignment_statement
+    event_statement = play | cue | gostage | assignment_statement
     event_statements = pp.Group(event_statement | pp.Suppress("{") - pp.ZeroOrMore(event_statement) - pp.Suppress("}"))
 
     event_statement.set_parse_action(parse_command)
@@ -147,9 +151,10 @@ def build_game_parser():
 
     # General stage definition and options
     stage_bganim = pp.Group(pp.Keyword("bganim") - identifier - pp.Suppress(";"))
+    stage_bgcue = pp.Group(pp.Keyword("bgcue") - identifier - pp.Suppress(";"))
     stage_menu = pp.Group(pp.Keyword("menu") - identifier - pp.Suppress(";") | pp.Keyword("menu") - identifier - pp.Keyword("prompt") - string - pp.Suppress(";"))
     stage_event = pp.Group(pp.Keyword("event") - event_type - event_statements)
-    stage_option = stage_bganim | stage_menu | stage_event
+    stage_option = stage_bganim | stage_bgcue | stage_menu | stage_event
     stage_options = pp.Group(stage_option | pp.Suppress("{") - pp.ZeroOrMore(stage_option) - pp.Suppress("}"))
     stage_definition_section = pp.Group(pp.Suppress("stage") - identifier - stage_options)
 

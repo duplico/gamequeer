@@ -231,7 +231,8 @@ int gfx_yClick() {
 // get the X coordinate of the mouse right now
 int gfx_xNow() {
     Window tmp_returnWindow;
-    int root_x, root_y, win_x, win_y, mask_return, result;
+    unsigned int mask_return;
+    int root_x, root_y, win_x, win_y, result;
     result = XQueryPointer(
         gfx_display, gfx_window, &tmp_returnWindow, &tmp_returnWindow, &root_x, &root_y, &win_x, &win_y, &mask_return);
     return win_x;
@@ -239,7 +240,8 @@ int gfx_xNow() {
 // get the Y coordinate of the mouse right now
 int gfx_yNow() {
     Window tmp_returnWindow;
-    int root_x, root_y, win_x, win_y, mask_return, result;
+    unsigned int mask_return;
+    int root_x, root_y, win_x, win_y, result;
     result = XQueryPointer(
         gfx_display, gfx_window, &tmp_returnWindow, &tmp_returnWindow, &root_x, &root_y, &win_x, &win_y, &mask_return);
     return win_y;
@@ -263,6 +265,7 @@ char gfx_getKey() {
         } // flush out any repeat-keys
         return key;
     }
+    return 0;
 }
 /*
 // routine to query the state of a key... (buttons too??) -- untested code, so commented for later revision

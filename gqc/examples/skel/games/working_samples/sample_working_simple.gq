@@ -37,11 +37,22 @@ animations {
     }
 }
 
+lightcues {
+    test <- "test.gqcue";
+    flash <- "flash.gqcue";
+}
+
 stage start {
     // bganim george;
+    bgcue test;
 
     event enter {
         play bganim george;
+        cue flash;
+    }
+
+    event input(A) {
+        cue flash;
     }
 
     event bgdone {

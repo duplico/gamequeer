@@ -41,6 +41,7 @@ int main(int argc, char *argv[]) {
         // TODO: Perform the current menu step
 
         // TODO: Perform the current lighting cue step
+        led_tick();
 
         // Perform polling for other event sources
         HAL_event_poll();
