@@ -5,7 +5,7 @@ from collections import namedtuple
 from tabulate import tabulate
 from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn
 
-from .datamodel import Game, Stage, Variable, Animation, Frame, FrameData, Event
+from .datamodel import Game, Stage, Variable, Animation, Frame, FrameData, Event, Menu
 from .datamodel import Command, CommandDone, LightCue, LightCueFrame
 
 from . import structs
@@ -19,9 +19,10 @@ def create_symbol_table(table_dest = sys.stdout):
     # Output order:
     # header (fixed size)
     # animations (fixed size by count)
-    # stages (fixed size by count) (TODO)
+    # stages (fixed size by count)
     # frames (fixed size by count)
     # frame data (variable size)
+    # menus (variable size)
     # variable area (variable size)
     # initialization code (variable size)
     # events code (variable size)
@@ -90,11 +91,16 @@ def create_symbol_table(table_dest = sys.stdout):
         var.set_addr(vars_ptr_start + vars_ptr_offset)
         vars_ptr_offset += var.size()
 
-    # TODO: Menus
+    menus_ptr_start = vars_ptr_start + vars_ptr_offset
+    menus_ptr_offset = 0
+
+    for menu in Menu.menu_table.values():
+        menu.set_addr(menus_ptr_start + menus_ptr_offset)
+        menus_ptr_offset += menu.size()
 
     # The event table's addresses are calculated as part of the placement of
     #  stages.
-    events_ptr_start = vars_ptr_start + vars_ptr_offset
+    events_ptr_start = menus_ptr_start + menus_ptr_offset
     events_ptr_offset = 0
 
     # The stage table is next, because it depends upon references to the animations and menus, even though
@@ -147,6 +153,7 @@ def create_symbol_table(table_dest = sys.stdout):
         '.cues' : LightCue.link_table,
         '.cuedata' : LightCueFrame.link_table,
         '.var' : Variable.link_table,
+        '.menu' : Menu.link_table,
         '.event' : Event.link_table,
         '.init' : init_table,
         '.heap' : Variable.heap_table
@@ -189,8 +196,6 @@ def generate_code(parsed, symbol_table : dict):
     output = bytes()
 
     # Emit each section in order to the output bytes.
-    # TODO: error if their addresses are non-contiguous.
-    #       or, switch to using Intel Hex format or TI-TXT format.
 
     # Count the total number of symbols to be processed
     symbol_count = sum([len(table) for table in symbol_table.values()])
@@ -205,6 +210,7 @@ def generate_code(parsed, symbol_table : dict):
                     # Only emit code for the cartridge.
                     continue
                 if addr != next_expected_addr:
+                    # TODO: emit a more friendly error than this, since it's a compiler/linker error
                     raise ValueError(f"Symbol at address {addr:#0{10}x} is not contiguous with the previous symbol.")
                 next_expected_addr += symbol.size()
                 output += symbol.to_bytes()

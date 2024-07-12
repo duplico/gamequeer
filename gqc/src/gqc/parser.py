@@ -4,7 +4,7 @@ import pathlib
 import pyparsing as pp
 from rich import print
 
-from .datamodel import Animation, Game, Stage, Variable, Event
+from .datamodel import Animation, Game, Stage, Variable, Event, Menu
 from .datamodel import Command, CommandDone, CommandPlayBg, CommandGoStage
 from .datamodel import CommandSetVar, CommandCue, LightCue
 from .structs import EventType
@@ -43,6 +43,14 @@ def parse_game_definition(instring, loc, toks):
     except ValueError as ve:
         raise GqcParseError(str(ve), instring, loc)
 
+def parse_bound_menu(instring, loc, toks):
+    menu_name = toks[0]
+    menu_prompt = ''
+    if len(toks) == 2:
+        menu_prompt = toks[1]
+    
+    return Stage.BoundMenu(menu_name, menu_prompt)
+
 def parse_stage_definition(instring, loc, toks):
     toks = toks[0]
 
@@ -55,6 +63,10 @@ def parse_stage_definition(instring, loc, toks):
     for stage_option in toks[1]:
         if isinstance(stage_option, Event):
             stage_kwargs['events'].append(stage_option)
+        elif isinstance(stage_option, Stage.BoundMenu):
+            if 'menu' in stage_kwargs:
+                raise GqcParseError(f"Duplicate menu definition for stage {name}", instring, loc)
+            stage_kwargs['menu'] = stage_option
         elif stage_option[0] in stage_kwargs:
             raise GqcParseError(f"Duplicate option {stage_option[0]} for stage {name}", instring, loc)
         else:
@@ -113,6 +125,17 @@ def parse_animation_definition(instring, loc, toks):
 
     try:
         return Animation(name, source, **kwargs)
+    except ValueError as ve:
+        raise GqcParseError(str(ve), instring, loc)
+
+def parse_menu_definition(instring, loc, toks):
+    menu_name = toks[0]
+    menu_options = dict()
+    for val, label in toks[1]:
+        menu_options[label] = val
+    
+    try:
+        return Menu(menu_name, menu_options)
     except ValueError as ve:
         raise GqcParseError(str(ve), instring, loc)
 

@@ -30,6 +30,9 @@ def gq_ptr_get_ns(ptr):
 def gq_ptr_get_addr(ptr):
     return ptr & 0x00FFFFFF
 
+GQ_INT_FORMAT = '<i'
+GQ_INT_SIZE = struct.calcsize(GQ_INT_FORMAT)
+
 # typedef struct gq_header {
 #     uint8_t magic[GQ_MAGIC_SIZE]; // Magic number
 #     uint16_t id;                  // Numerical ID of the game
@@ -103,16 +106,15 @@ class LedCueFrameFlags(IntEnum):
     NONE = 0x00
     TRANSITION_SMOOTH = 0x01
 
-# Event types from gamequeer.h:
 # typedef enum gq_event_type {
-#     GQ_EVENT_NOP = 0x00,
+#     GQ_EVENT_ENTER = 0x00,
 #     GQ_EVENT_BUTTON_A,
 #     GQ_EVENT_BUTTON_B,
 #     GQ_EVENT_BUTTON_L,
 #     GQ_EVENT_BUTTON_R,
 #     GQ_EVENT_BUTTON_CLICK,
 #     GQ_EVENT_BGDONE,
-#     GQ_EVENT_ENTER,
+#     GQ_EVENT_MENU,
 #     GQ_EVENT_COUNT
 # } gq_event_type;
 

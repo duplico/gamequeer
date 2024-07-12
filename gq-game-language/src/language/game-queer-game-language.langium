@@ -91,7 +91,7 @@ EventType:
 StageEvent:
     'event' EventType (StageCommand | '{' StageCommand* '}');
 StageMenu:
-    'menu' menu=ID (prompt=STRING)? ';';
+    'menu' menu=ID ('prompt' prompt=STRING)? ';';
 StageBgAnim:
     'bganim' anim=ID ';';
 StageBgCue:

@@ -267,15 +267,16 @@ class Event:
 class Stage:
     stage_table = {}
     link_table = dict() # OrderedDict not needed to remember order since Python 3.7
+    BoundMenu = namedtuple('BoundMenu', ['menu_name', 'menu_prompt'])
 
-    def __init__(self, name : str, bganim : str = None, bgcue : str = None, menu : str = None, events : Iterable = []):
+    def __init__(self, name : str, bganim : str = None, bgcue : str = None, menu : 'Stage.BoundMenu' = None, events : Iterable = []):
         self.addr = 0x00000000 # Set at link time
         self.id = len(Stage.stage_table)
         self.resolved = False
         self.name = name
         self.bganim_name = bganim
         self.bgcue_name = bgcue
-        self.menu_name = menu
+        self.menu_def = menu
         self.unresolved_symbols = []
 
         if name in Stage.stage_table:
@@ -322,7 +323,14 @@ class Stage:
             self.unresolved_symbols.append(self.bgcue_name)
             resolved = False
 
-        # TODO: Attempt to resolve menu
+        # Attempt to resolve menu
+        if self.menu_def is None:
+            self.menu = None
+        elif self.menu_def.menu_name in Menu.menu_table:
+            self.menu = Menu.menu_table[self.menu_def.menu_name]
+        else:
+            self.unresolved_symbols.append(self.menu_def.menu_name)
+            resolved = False
 
         # Event statements resolve themselves at code generation time
 
@@ -358,7 +366,7 @@ class Stage:
             id=self.id,
             anim_bg_pointer=self.bganim.addr if self.bganim else 0,
             cue_bg_pointer=self.bgcue.addr if self.bgcue else 0,
-            menu_pointer=0,
+            menu_pointer=self.menu.addr if self.menu else 0,
             event_commands=event_pointers
         )
         return struct.pack(structs.GQ_STAGE_FORMAT, stage.id, stage.anim_bg_pointer, stage.cue_bg_pointer, stage.menu_pointer, *stage.event_commands)
@@ -429,12 +437,14 @@ class Variable:
     
     def to_bytes(self):
         if self.datatype == "int":
-            # TODO: Extract constant int size and put it in structs.py
-            return self.value.to_bytes(4, 'little')
+            return self.value.to_bytes(structs.GQ_INT_SIZE, 'little')
         elif self.datatype == "str":
             strlen = len(self.value)
             if strlen > structs.GQ_STR_SIZE-1: # -1 for null terminator
                 raise ValueError(f"String {self.name} length {strlen} exceeds maximum of {structs.GQ_STR_SIZE-1}")
+            # Convert self.value from str to null-padded bytes of length structs.GQ_STR_SIZE:
+            return self.value.encode('ascii').ljust(structs.GQ_STR_SIZE, b'\x00')
+            # TODO: needs return value
         else:
             raise ValueError(f"Invalid datatype {self.datatype}")
     
@@ -446,7 +456,7 @@ class Variable:
 
     def size(self):
         if self.datatype == "int":
-            return 4
+            return structs.GQ_INT_SIZE
         elif self.datatype == "str":
             return structs.GQ_STR_SIZE
         else:
@@ -774,6 +784,49 @@ class FrameData:
     
     def __repr__(self) -> str:
         return f"FrameData({self.frame.width}x{self.frame.height}:{self.frame.compression_type_name})"
+
+class Menu:
+    menu_table = dict()
+    link_table = dict() # OrderedDict not needed to remember order since Python 3.7
+
+    def __init__(self, name : str, options : dict):
+        self.name = name
+        self.options = options
+        self.addr = 0x00000000 # Set at link time
+
+        if len(options) == 0:
+            raise ValueError("At least one menu option is required.")
+
+        if name in Menu.menu_table:
+            raise ValueError(f"Menu {name} already defined")
+        
+        for label in options:
+            # TODO: make a function for validating string sizes:
+            if len(label) > structs.GQ_STR_SIZE-1: # null term
+                raise ValueError("Menu label too long.")
+
+        Menu.menu_table[name] = self
+
+    def __repr__(self) -> str:
+        return f"Menu({self.name}, {self.options})"
+
+    def size(self):
+        size_per_option = structs.GQ_STR_SIZE + structs.GQ_INT_SIZE
+        return structs.GQ_INT_SIZE + len(self.options) * size_per_option
+    
+    def to_bytes(self):
+        bytes_out = len(self.options).to_bytes(structs.GQ_INT_SIZE, 'little')
+
+        for label, value in self.options.items():
+            # TODO: function for this:
+            bytes_out += label.encode('ascii').ljust(structs.GQ_STR_SIZE, b'\x00')
+            bytes_out += value.to_bytes(structs.GQ_INT_SIZE, 'little')
+        
+        return bytes_out
+    
+    def set_addr(self, addr : int, namespace : int = structs.GQ_PTR_NS_CART):
+        self.addr = structs.gq_ptr_apply_ns(namespace, addr)
+        Menu.link_table[self.addr] = self
 
 class LightCue:
     link_table = dict() # OrderedDict not needed to remember order since Python 3.7

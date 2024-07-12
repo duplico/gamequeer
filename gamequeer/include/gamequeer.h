@@ -33,6 +33,8 @@
 #define GQ_HEAP_SIZE              0x200
 
 typedef uint32_t t_gq_pointer;
+// TODO: make every int from the builder use this:
+typedef int32_t t_gq_int;
 
 // TODO: Is packing like this unsafe on ARM?
 typedef struct gq_header {
@@ -136,6 +138,16 @@ typedef struct gq_stage {
     t_gq_pointer menu_pointer;                   // Pointer to the menu definition for this stage
     t_gq_pointer event_commands[GQ_EVENT_COUNT]; // Event commands
 } __attribute__((packed)) gq_stage;
+
+typedef struct gq_menu_option {
+    char label[GQ_STR_SIZE]; // Text of the menu option
+    t_gq_int value;          // Value of the menu option
+} __attribute__((packed)) gq_menu_option;
+
+typedef struct gq_menu {
+    t_gq_int option_count;    // Number of options in the menu
+    gq_menu_option options[]; // options in the menu
+} __attribute__((packed)) gq_menu;
 
 extern Graphics_Context g_sContext;
 extern uint8_t bg_animating;
