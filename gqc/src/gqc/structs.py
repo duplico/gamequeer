@@ -162,3 +162,17 @@ GQ_OP_SIZE = struct.calcsize(GQ_OP_FORMAT)
 GqStage = namedtuple('GqStage', 'id anim_bg_pointer cue_bg_pointer menu_pointer event_commands')
 GQ_STAGE_FORMAT = f'<H{T_GQ_POINTER_FORMAT}{T_GQ_POINTER_FORMAT}{T_GQ_POINTER_FORMAT}{len(EventType)}{T_GQ_POINTER_FORMAT}'
 GQ_STAGE_SIZE = struct.calcsize(GQ_STAGE_FORMAT)
+
+GqReservedVariable = namedtuple('GqReservedVariable', 'name type description addr')
+
+GQ_RESERVED_VARIABLES = [
+    GqReservedVariable('GQ_game_name', 'str', 'Name of the game', 0x000000),
+    GqReservedVariable('GQ_game_id', 'int', 'ID of the game', 0x000004),
+    # TODO: Space available here
+    # GqReservedVariable('GQ_player_handle', 'str', 'Player handle', 0x00000C),
+    # GqReservedVariable('GQ_player_id', 'int', 'Player ID', 0x000010),
+    # GqReservedVariable('GQ_player_seen', 'int', 'Player seen', 0x000014),
+    # GqReservedVariable('GQ_menu_value', 'int', 'Menu selection', 0x000018),
+    # GqReservedVariable('GQ_menu_label', 'str', 'Menu label', 0x00001C),
+    # GqReservedVariable('GQ_text_input', 'str', 'Text input', 0x000020),
+]

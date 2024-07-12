@@ -54,6 +54,9 @@ def compile(input : pathlib.Path, no_mem_map : bool, out_dir : pathlib.Path):
     #  ├── map.txt
     #  └── <game_name>.gqgame
 
+    # Load all our builtin variables
+    linker.create_reserved_variables()
+
     # Parse the game file, implemented almost entirely in side effects
     with open(input, 'r') as f:
         parsed = parser.parse(f)

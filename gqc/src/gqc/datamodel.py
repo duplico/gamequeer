@@ -31,8 +31,6 @@ class Game:
     def __init__(self, id : int, title : str, author : str, starting_stage : str = 'start'):
         self.addr = 0x00000000 # Set at link time
         self.stages = []
-        self.animations = []
-        self.variables = []
 
         self.starting_stage = None
         self.starting_stage_name = starting_stage
@@ -51,24 +49,6 @@ class Game:
         self.stages.append(stage)
         if stage.name == self.starting_stage_name:
             self.starting_stage = stage
-
-    def add_animation(self, animation):
-        self.animations.append(animation)
-
-    def add_variable(self, variable):
-        self.variables.append(variable)
-
-    # TODO: Replace
-    def pprint(self):
-        print("Stages:")
-        for stage in self.stages:
-            print(stage)
-        print("Animations:")
-        for anim in self.animations:
-            print(anim)
-        print("Variables:")
-        for var in self.variables:
-            print(var)
     
     def __repr__(self) -> str:
         return f"Game({self.id}, {repr(self.title)}, {repr(self.author)})"
@@ -385,7 +365,7 @@ class Stage:
 
 class Variable:
     var_table = {}
-    storageclass_table = dict(persistent={}, volatile={})
+    storageclass_table = dict(persistent={}, volatile={}, builtin={})
     link_table = dict() # OrderedDict not needed to remember order since Python 3.7
     heap_table = dict()
 
@@ -395,11 +375,25 @@ class Variable:
         self.datatype = datatype
         self.name = name
         self.value = value
+        self.storageclass = None
 
         if name in Variable.var_table:
-            raise ValueError(f"Duplicate definition of {name}")
+            if Variable.var_table[name].storageclass == 'builtin':
+                raise ValueError(f"Cannot redefine builtin variable {name}")
+            else:
+                raise ValueError(f"Duplicate definition of {name}")
         Variable.var_table[name] = self
+        
+        if storageclass:
+            self.set_storageclass(storageclass)
 
+        # Skip type validation for builtins
+        if storageclass == "builtin":
+            return
+
+        # If this variable is not a builtin (reserved keyword), validate the value.
+        #  Builtin variables are reserved for internal use, and their values are
+        #  irrelevant except at runtime.
         if datatype == "int":
             if not isinstance(value, int):
                 raise ValueError(f"Invalid value {value} for int variable {name}")
@@ -408,12 +402,6 @@ class Variable:
                 raise ValueError(f"Invalid value {value} for str variable {name}")
             if len(value) > structs.GQ_STR_SIZE-1:
                 raise ValueError(f"String {name} length {len(value)} exceeds maximum of {structs.GQ_STR_SIZE-1}")
-
-        # TODO: needed?
-        Game.game.add_variable(self)
-        
-        if storageclass:
-            self.set_storageclass(storageclass)
 
     def __str__(self) -> str:
         return "<{} {} {} = {}>@{}".format(
@@ -428,7 +416,7 @@ class Variable:
         return f"Variable({repr(self.datatype)}, {repr(self.name)}, {self.value}, storageclass={repr(self.storageclass)})"
 
     def set_storageclass(self, storageclass):
-        assert storageclass in ["volatile", "persistent"]
+        assert storageclass in ["volatile", "persistent", "builtin"]
         self.storageclass = storageclass
         Variable.storageclass_table[storageclass][self.name] = self
 
@@ -470,6 +458,9 @@ class Variable:
             Variable.link_table[self.addr] = self
         elif namespace == structs.GQ_PTR_NS_HEAP:
             Variable.heap_table[self.addr] = self
+        elif namespace == structs.GQ_PTR_BUILTIN:
+            # Builtin variables are not linked into the symbol table
+            pass
         else:
             raise ValueError("Invalid or unsupported namespace")
 
