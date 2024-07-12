@@ -887,7 +887,6 @@ class LightCueFrame:
             0, # TODO
             *frame_colors
         )
-        print(frame_struct)
         return struct.pack(structs.GQ_LEDCUE_FRAME_FORMAT, *frame_struct)
     
     def size(self):
