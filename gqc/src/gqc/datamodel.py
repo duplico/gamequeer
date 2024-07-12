@@ -437,8 +437,7 @@ class Variable:
     
     def to_bytes(self):
         if self.datatype == "int":
-            # TODO: Extract constant int size and put it in structs.py
-            return self.value.to_bytes(4, 'little')
+            return self.value.to_bytes(structs.GQ_INT_SIZE, 'little')
         elif self.datatype == "str":
             strlen = len(self.value)
             if strlen > structs.GQ_STR_SIZE-1: # -1 for null terminator
@@ -457,7 +456,7 @@ class Variable:
 
     def size(self):
         if self.datatype == "int":
-            return 4
+            return structs.GQ_INT_SIZE
         elif self.datatype == "str":
             return structs.GQ_STR_SIZE
         else:
@@ -812,23 +811,23 @@ class Menu:
         return f"Menu({self.name}, {self.options})"
 
     def size(self):
-        # TODO: The int size should be a constant (the 4)
-        size_per_option = structs.GQ_STR_SIZE + 4
-        return 4 + len(self.options) * size_per_option
+        size_per_option = structs.GQ_STR_SIZE + structs.GQ_INT_SIZE
+        return structs.GQ_INT_SIZE + len(self.options) * size_per_option
     
     def to_bytes(self):
-        bytes_out = len(self.options).to_bytes(len(self.options), 'little')
+        bytes_out = len(self.options).to_bytes(structs.GQ_INT_SIZE, 'little')
 
         for label, value in self.options.items():
             # TODO: function for this:
             bytes_out += label.encode('ascii').ljust(structs.GQ_STR_SIZE, b'\x00')
-            bytes_out += value.to_bytes(4, 'little')
+            bytes_out += value.to_bytes(structs.GQ_INT_SIZE, 'little')
         
         return bytes_out
     
     def set_addr(self, addr : int, namespace : int = structs.GQ_PTR_NS_CART):
         self.addr = structs.gq_ptr_apply_ns(namespace, addr)
         Menu.link_table[self.addr] = self
+
 class LightCue:
     link_table = dict() # OrderedDict not needed to remember order since Python 3.7
     cue_table = dict()

@@ -30,6 +30,9 @@ def gq_ptr_get_ns(ptr):
 def gq_ptr_get_addr(ptr):
     return ptr & 0x00FFFFFF
 
+GQ_INT_FORMAT = '<i'
+GQ_INT_SIZE = struct.calcsize(GQ_INT_FORMAT)
+
 # typedef struct gq_header {
 #     uint8_t magic[GQ_MAGIC_SIZE]; // Magic number
 #     uint16_t id;                  // Numerical ID of the game
