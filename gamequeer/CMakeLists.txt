@@ -61,3 +61,5 @@ target_include_directories(
     PUBLIC
     include
 )
+
+target_compile_options(${PROJECT_NAME} PUBLIC -Wall -Wextra -Wpedantic)

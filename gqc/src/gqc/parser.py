@@ -1,10 +1,12 @@
 import sys
+import pathlib
 
 import pyparsing as pp
+from rich import print
 
 from .datamodel import Animation, Game, Stage, Variable, Event
 from .datamodel import Command, CommandDone, CommandPlayBg, CommandGoStage
-from .datamodel import CommandSetVar
+from .datamodel import CommandSetVar, CommandCue, LightCue
 from .structs import EventType
 
 class GqcParseError(Exception):
@@ -148,6 +150,23 @@ def parse_variable_definition_storageclass(instring, loc, toks):
     # TODO: Needed?
     # return Variable.link_table[storageclass]
 
+def parse_lightcue_definition_section(instring, loc, toks):
+    # Import here to avoid circular import
+    from .cues import parse_cue
+    toks = toks[0]
+
+    for cue in toks:
+        cue_name = cue[0]
+        cue_source = pathlib.Path() / 'assets' / 'lighting' / cue[1]
+
+        print(f"[blue]Light cue [italic]{cue_name}[/italic][/blue] from [underline]{cue_source}[/underline]")
+        with open(cue_source, 'r') as f:
+            parsed_cue = parse_cue(f)
+        try:
+            parsed_cue.set_name(cue_name)
+        except ValueError as ve:
+            raise GqcParseError(str(ve), instring, loc)
+
 def parse_assignment(instring, loc, toks):
     toks = toks[0]
 
@@ -173,6 +192,10 @@ def parse_command(instring, loc, toks):
             return CommandPlayBg(instring, loc, toks[2])
         else:
             raise GqcParseError(f"Invalid play subcommand {command}", instring, loc)
+    elif command == "cue":
+        if toks[1] not in LightCue.cue_table:
+            raise GqcParseError(f"Undefined cue {toks[1]}", instring, loc)
+        return CommandCue(instring, loc, toks[1])
     elif command == "gostage":
         return CommandGoStage(instring, loc, toks[1])
     elif command == 'setvar':
@@ -187,8 +210,6 @@ def parse(text):
     gqc_game = grammar.build_game_parser()
     try:
         parsed = gqc_game.parse_file(text, parseAll=True)
-        # TODO: Either do something with parsed or don't accept the return value.
-        # print(parsed)
     except pp.ParseBaseException as pe:
         print(pe.explain(), file=sys.stderr)
         exit(1)

@@ -45,6 +45,14 @@ uint8_t load_stage(t_gq_pointer stage_ptr) {
         // TODO: Otherwise, clear the current animation
     }
 
+    if (stage_current.cue_bg_pointer) {
+        // If this stage has a background cue, play it.
+        led_play_cue(stage_current.cue_bg_pointer, 1);
+    } else if (leds_animating && leds_cue.bgcue) {
+        // If we're currently playing a background cue, stop it.
+        led_stop();
+    }
+
     // Set stage entry event flag
     GQ_EVENT_SET(GQ_EVENT_ENTER);
 
@@ -198,6 +206,11 @@ void run_code(t_gq_pointer code_ptr) {
                     gq_memcpy(cmd.arg1, cmd.arg2, GQ_STR_SIZE);
                 }
                 break;
+            case GQ_OP_CUE:
+                led_play_cue(cmd.arg1, 0);
+                break;
+            default:
+                break;
         }
 
         code_ptr += sizeof(gq_op);
@@ -205,7 +218,7 @@ void run_code(t_gq_pointer code_ptr) {
 }
 
 // TODO: Allow a mask?
-uint16_t handle_events() {
+void handle_events() {
     for (uint16_t event_type = 0x0000; event_type < GQ_EVENT_COUNT; event_type++) {
         if (GQ_EVENT_GET(event_type)) {
             // Check whether this event type is used in the current stage.
