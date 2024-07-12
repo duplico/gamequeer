@@ -207,7 +207,7 @@ void run_code(t_gq_pointer code_ptr) {
                 }
                 break;
             case GQ_OP_CUE:
-                // TODO
+                led_play_cue(cmd.arg1, 0);
                 break;
             default:
                 break;

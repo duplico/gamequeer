@@ -19,9 +19,19 @@ gq_ledcue_t leds_cue;
 uint16_t leds_cue_frame_index         = 0;
 uint16_t leds_cue_frame_ticks_elapsed = 0;
 
+gq_ledcue_t leds_cue_bg;
+uint8_t leds_cue_bg_saved                = 0;
+uint16_t leds_cue_bg_frame_index         = 0;
+uint16_t leds_cue_bg_frame_ticks_elapsed = 0;
+
+// TODO: not this:
+void led_setup_frame();
+
 void led_stop() {
     // Stop the animation flag.
     leds_animating = 0;
+    // Unsave any background cue.
+    leds_cue_bg_saved = 1;
 
     // Clear the current LED colors.
     for (uint8_t i = 0; i < 5; i++) {
@@ -30,6 +40,20 @@ void led_stop() {
 
     // Flush the LEDs.
     HAL_update_leds();
+}
+
+void led_anim_done() {
+    // If we just completed a non-background cue, and we have a background cue saved, restore it.
+    if (leds_cue_bg_saved && !leds_cue.bgcue) {
+        leds_cue                     = leds_cue_bg;
+        leds_cue_frame_index         = leds_cue_bg_frame_index;
+        leds_cue_frame_ticks_elapsed = leds_cue_bg_frame_ticks_elapsed;
+        leds_cue_bg_saved            = 0;
+        led_setup_frame();
+    } else {
+        // Otherwise, just stop the animation.
+        led_stop();
+    }
 }
 
 void led_setup_frame() {
@@ -76,13 +100,23 @@ void led_setup_frame() {
 }
 
 void led_play_cue(t_gq_pointer cue_ptr, uint8_t background) {
+    if (leds_animating && !background && leds_cue.bgcue) {
+        // If we're currently playing a background cue, save it for later before interrupting it.
+        leds_cue_bg                     = leds_cue;
+        leds_cue_bg_saved               = 1;
+        leds_cue_bg_frame_index         = leds_cue_frame_index;
+        leds_cue_bg_frame_ticks_elapsed = leds_cue_frame_ticks_elapsed;
+    }
+
+    // Load the new cue into RAM.
     gq_memcpy_ram((uint8_t *) &leds_cue, cue_ptr, sizeof(gq_ledcue_t));
     leds_animating       = 1;
     leds_cue_frame_index = 0;
+
+    // If this is a background cue, we set it to loop.
     if (background) {
         leds_cue.bgcue = 1;
-        // If this is a background cue, we set it to loop.
-        leds_cue.loop = 1;
+        leds_cue.loop  = 1;
     }
     led_setup_frame();
 }
@@ -108,8 +142,7 @@ void led_tick() {
                 if (leds_cue.loop) {
                     leds_cue_frame_index = 0;
                 } else {
-                    leds_animating = 0;
-                    // TODO: If this isn't a background cue, we need to return to the background cue.
+                    led_anim_done();
                 }
 
                 // Either way, we need to display the destination color of the current transition.
@@ -129,7 +162,7 @@ void led_tick() {
                     gq_leds[i].b = leds_cue_color_curr[i].b;
                 }
                 need_to_redraw = 1;
-            } else if (1 || leds_cue_frame_curr.transition_smooth) {
+            } else if (leds_cue_frame_curr.transition_smooth) {
                 // If the frame is not done and is a smooth transition, interpolate the colors.
                 for (uint8_t i = 0; i < 5; i++) {
                     // Interpolate the colors.

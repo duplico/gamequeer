@@ -160,7 +160,6 @@ def parse_lightcue_definition_section(instring, loc, toks):
 
         with open(cue_source, 'r') as f:
             parsed_cue = parse_cue(f)
-        
         try:
             parsed_cue.set_name(cue_name)
         except ValueError as ve:

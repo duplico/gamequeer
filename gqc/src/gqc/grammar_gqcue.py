@@ -9,7 +9,7 @@ from .grammar import VAR_STRING_MAXLEN
 Grammar for GQC light cues
 ==========================
 
-cue_definition = color_definition_section frame_definition+
+cue_definition = color_definition_section? frame_definition+
 
 color_definition_section = "colors" color_definitions
 color_definitions = color_definition | "{" color_definition* "}"
@@ -46,7 +46,7 @@ def build_lightcue_parser():
     frame_definition.add_parse_action(parse_cue_frame)
 
     # Game cue file overall:
-    gqc_lightcue << color_definition_section - pp.Group(pp.OneOrMore(frame_definition))
+    gqc_lightcue << pp.Optional(color_definition_section) - pp.Group(pp.OneOrMore(frame_definition))
     gqc_lightcue.ignore(pp.cppStyleComment)
     gqc_lightcue.add_parse_action(parse_lightcue_definition)
 

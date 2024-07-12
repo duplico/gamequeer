@@ -26,7 +26,7 @@ animations {
 
 lightcues {
     test <- "test.gqcue";
-    test2 <- "test.gqcue";
+    flash <- "flash.gqcue";
 }
 
 stage start {
@@ -35,11 +35,15 @@ stage start {
 
     event enter {
         play bganim george;
+        cue flash;
+    }
+
+    event input(A) {
+        cue flash;
     }
 
     event bgdone {
         badge_id = badges_seen;
-        cue test2;
         gostage selfie;
     }
 }

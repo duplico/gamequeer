@@ -57,8 +57,12 @@ def parse_cue_frame(instring, loc, toks):
     return LightCueFrame(colors, **kwargs)
 
 def parse_lightcue_definition(instring, loc, toks):
-    colors = toks[0]
-    frames = toks[1]
+    if len(toks) == 1:
+        colors = []
+        frames = toks[0]
+    else:
+        colors = toks[0]
+        frames = toks[1]
 
     cue = LightCue(colors)
     for frame in frames:
