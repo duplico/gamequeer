@@ -79,10 +79,10 @@ RGB_COLOR16_SIZE = struct.calcsize(RGB_COLOR16_FORMAT)
 # typedef struct gq_ledcue_frame_t {
 #     uint16_t duration; // Duration of the frame in ticks
 #     uint16_t flags;    // Flags for the frame
-#     rgbcolor16_t leds[5];
+#     rgbcolor8_t leds[5];
 # } __attribute__((packed)) gq_ledcue_frame_t;
 GqLedCueFrame = namedtuple('GqLedCueFrame', 'duration flags r0 g0 b0 r1 g1 b1 r2 g2 b2 r3 g3 b3 r4 g4 b4')
-GQ_LEDCUE_FRAME_FORMAT = f'<HH{"HHH" * 5}' # TODO: pack these elsewhere
+GQ_LEDCUE_FRAME_FORMAT = f'<HH{"BBB" * 5}' # TODO: pack these elsewhere
 GQ_LEDCUE_FRAME_SIZE = struct.calcsize(GQ_LEDCUE_FRAME_FORMAT)
 
 # typedef struct gq_ledcue_t {

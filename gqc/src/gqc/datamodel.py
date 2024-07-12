@@ -358,7 +358,7 @@ class Stage:
         return structs.GQ_STAGE_SIZE
 
     def __repr__(self) -> str:
-        return f"Stage({self.name}, events={self.events})"
+        return f"Stage({self.name}, bganim={self.bganim_name}, bgcue={self.bgcue_name}, events={self.events})"
     
     def to_bytes(self):
         # TODO: Maybe only calculate the events once?
@@ -887,6 +887,7 @@ class LightCueFrame:
             0, # TODO
             *frame_colors
         )
+        print(frame_struct)
         return struct.pack(structs.GQ_LEDCUE_FRAME_FORMAT, *frame_struct)
     
     def size(self):

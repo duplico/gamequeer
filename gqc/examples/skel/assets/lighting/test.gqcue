@@ -4,7 +4,7 @@ colors {
 }
 
 frame {
-    duration = 10;
+    duration = 100;
     transition := "smooth";
     colors {
         red,
@@ -17,7 +17,7 @@ frame {
 
 
 frame {
-    duration = 15;
+    duration = 150;
     transition := "smooth";
     colors {
         orange,

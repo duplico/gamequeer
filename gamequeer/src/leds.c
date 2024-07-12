@@ -13,10 +13,24 @@ rgbcolor16_t gq_leds[5] = {
 
 uint8_t leds_animating = 0;
 gq_ledcue_frame_t leds_cue_frame_curr;
+rgbcolor16_t leds_cue_color_curr[5];
 rgbcolor16_t leds_cue_color_next[5];
 gq_ledcue_t leds_cue;
 uint16_t leds_cue_frame_index         = 0;
 uint16_t leds_cue_frame_ticks_elapsed = 0;
+
+void led_stop() {
+    // Stop the animation flag.
+    leds_animating = 0;
+
+    // Clear the current LED colors.
+    for (uint8_t i = 0; i < 5; i++) {
+        gq_leds[i] = (rgbcolor16_t) {.r = 0, .g = 0, .b = 0};
+    }
+
+    // Flush the LEDs.
+    HAL_update_leds();
+}
 
 void led_setup_frame() {
     // If we're not currently animating, there's nothing to do.
@@ -30,6 +44,13 @@ void led_setup_frame() {
         leds_cue.frames + leds_cue_frame_index * sizeof(gq_ledcue_frame_t),
         sizeof(gq_ledcue_frame_t));
 
+    // And then add it to the left-shifted 16-bit version:
+    for (uint8_t i = 0; i < 5; i++) {
+        leds_cue_color_curr[i].r = leds_cue_frame_curr.leds[i].r << 8;
+        leds_cue_color_curr[i].g = leds_cue_frame_curr.leds[i].g << 8;
+        leds_cue_color_curr[i].b = leds_cue_frame_curr.leds[i].b << 8;
+    }
+
     // Load the next frame, if there is one, and put its colors into leds_cue_color_next.
     // Note that we don't store the entire frame, just the colors. We don't need the metadata.
     if (leds_cue_frame_index + 1 < leds_cue.frame_count || leds_cue.loop) {
@@ -41,7 +62,9 @@ void led_setup_frame() {
             leds_cue.frames + ((leds_cue_frame_index + 1) % leds_cue.frame_count) * sizeof(gq_ledcue_frame_t),
             sizeof(gq_ledcue_frame_t));
         for (uint8_t i = 0; i < 5; i++) {
-            leds_cue_color_next[i] = leds_cue_frame_next.leds[i];
+            leds_cue_color_next[i].r = leds_cue_frame_next.leds[i].r << 8;
+            leds_cue_color_next[i].g = leds_cue_frame_next.leds[i].g << 8;
+            leds_cue_color_next[i].b = leds_cue_frame_next.leds[i].b << 8;
         }
     } else {
         // If there is no next frame, then load a dummy all-black frame.
@@ -52,10 +75,15 @@ void led_setup_frame() {
     leds_cue_frame_ticks_elapsed = 0;
 }
 
-void led_play_cue(t_gq_pointer cue_ptr) {
+void led_play_cue(t_gq_pointer cue_ptr, uint8_t background) {
     gq_memcpy_ram((uint8_t *) &leds_cue, cue_ptr, sizeof(gq_ledcue_t));
     leds_animating       = 1;
     leds_cue_frame_index = 0;
+    if (background) {
+        leds_cue.bgcue = 1;
+        // If this is a background cue, we set it to loop.
+        leds_cue.loop = 1;
+    }
     led_setup_frame();
 }
 
@@ -81,6 +109,7 @@ void led_tick() {
                     leds_cue_frame_index = 0;
                 } else {
                     leds_animating = 0;
+                    // TODO: If this isn't a background cue, we need to return to the background cue.
                 }
 
                 // Either way, we need to display the destination color of the current transition.
@@ -95,23 +124,25 @@ void led_tick() {
             if (leds_cue_frame_ticks_elapsed == 0) {
                 // If this is the first tick of the frame, set the colors to the current frame's colors.
                 for (uint8_t i = 0; i < 5; i++) {
-                    gq_leds[i] = leds_cue_frame_curr.leds[i];
+                    gq_leds[i].r = leds_cue_color_curr[i].r;
+                    gq_leds[i].g = leds_cue_color_curr[i].g;
+                    gq_leds[i].b = leds_cue_color_curr[i].b;
                 }
                 need_to_redraw = 1;
-            } else if (leds_cue_frame_curr.transition_smooth) {
+            } else if (1 || leds_cue_frame_curr.transition_smooth) {
                 // If the frame is not done and is a smooth transition, interpolate the colors.
                 for (uint8_t i = 0; i < 5; i++) {
                     // Interpolate the colors.
                     // TODO: Consider pre-calculating this, if we have sufficient precision available
                     //       that it won't cause jankiness.
-                    gq_leds[i].r = leds_cue_frame_curr.leds[i].r +
-                        ((leds_cue_color_next[i].r - leds_cue_frame_curr.leds[i].r) * leds_cue_frame_ticks_elapsed /
+                    gq_leds[i].r = leds_cue_color_curr[i].r +
+                        ((leds_cue_color_next[i].r - leds_cue_color_curr[i].r) * leds_cue_frame_ticks_elapsed /
                          leds_cue_frame_curr.duration);
-                    gq_leds[i].g = leds_cue_frame_curr.leds[i].g +
-                        ((leds_cue_color_next[i].g - leds_cue_frame_curr.leds[i].g) * leds_cue_frame_ticks_elapsed /
+                    gq_leds[i].g = leds_cue_color_curr[i].g +
+                        ((leds_cue_color_next[i].g - leds_cue_color_curr[i].g) * leds_cue_frame_ticks_elapsed /
                          leds_cue_frame_curr.duration);
-                    gq_leds[i].b = leds_cue_frame_curr.leds[i].b +
-                        ((leds_cue_color_next[i].b - leds_cue_frame_curr.leds[i].b) * leds_cue_frame_ticks_elapsed /
+                    gq_leds[i].b = leds_cue_color_curr[i].b +
+                        ((leds_cue_color_next[i].b - leds_cue_color_curr[i].b) * leds_cue_frame_ticks_elapsed /
                          leds_cue_frame_curr.duration);
                 }
 
