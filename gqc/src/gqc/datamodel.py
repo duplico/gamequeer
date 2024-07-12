@@ -836,7 +836,7 @@ class LightCue:
         return f"LightCue(name={self.name})"
 
 class LightCueFrame:
-    ALLOWED_TRANSITIONS = ['smooth', 'none']
+    ALLOWED_TRANSITIONS = ['none', 'smooth']
     link_table = dict() # OrderedDict not needed to remember order since Python 3.7
 
     def __init__(self, colors : list[str], duration : int, transition : str = 'none'):
@@ -880,6 +880,11 @@ class LightCueFrame:
         LightCueFrame.link_table[self.addr] = self
     
     def to_bytes(self):
+        flags = 0x00
+        
+        if self.transition == "smooth":
+            flags |= structs.LedCueFrameFlags.TRANSITION_SMOOTH
+
         frame_colors = []
         for color in self.colors:
             frame_colors.append(color.r)
@@ -887,7 +892,7 @@ class LightCueFrame:
             frame_colors.append(color.b)
         frame_struct = structs.GqLedCueFrame(
             self.duration,
-            0, # TODO
+            flags,
             *frame_colors
         )
         return struct.pack(structs.GQ_LEDCUE_FRAME_FORMAT, *frame_struct)

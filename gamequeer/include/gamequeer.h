@@ -97,14 +97,12 @@ typedef struct rgbdelta_t {
 typedef struct gq_ledcue_frame_t {
     uint16_t duration; // Duration of the frame in ticks
     // Flags for the frame:
-    uint8_t flags0;                // First byte of flags for the frame
     uint8_t transition_smooth : 1; // Smoothly fade to the next frame
     rgbcolor8_t leds[5];
 } __attribute__((packed)) gq_ledcue_frame_t;
 
 typedef struct gq_ledcue_t {
     uint16_t frame_count; // Number of frames
-    uint8_t flags0;       // First byte of flags for the cue
     uint8_t loop  : 1;    // Whether the cue loops indefinitely
     uint8_t bgcue : 1;    // Whether the cue was invoked as a background cue
     t_gq_pointer frames;  // Pointer to the first frame
