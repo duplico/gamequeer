@@ -10,6 +10,11 @@ from .datamodel import Command, CommandDone, LightCue, LightCueFrame
 
 from . import structs
 
+def create_reserved_variables():
+    for gq_var in structs.GQ_RESERVED_VARIABLES:
+        var = Variable(gq_var.type, gq_var.name, gq_var.description, 'builtin')
+        var.set_addr(gq_var.addr, namespace=structs.GQ_PTR_BUILTIN)
+
 def create_symbol_table(table_dest = sys.stdout):
     # Output order:
     # header (fixed size)
