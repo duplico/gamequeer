@@ -234,6 +234,23 @@ class CommandSetVar(Command):
     def __repr__(self) -> str:
         return f"SETVAR {self.dst_name} {self.src_name}"
 
+class CommandGoto(Command):
+    def __init__(self, instring, loc, addr : int = 0x00000000):
+        super().__init__(CommandType.GOTO, instring, loc)
+        self.arg1 = addr
+    
+    def resolve(self):
+        if self.resolved:
+            return True
+        
+        if self.arg1 != 0x00000000:
+            self.resolved = True
+        
+        return self.resolved
+    
+    def __repr__(self) -> str:
+        return f"GOTO {self.arg1}"
+
 class Event:
     event_table = []
     link_table = dict()
