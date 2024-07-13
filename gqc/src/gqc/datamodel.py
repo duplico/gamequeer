@@ -94,6 +94,12 @@ class Event:
         self.addr = structs.gq_ptr_apply_ns(namespace, addr)
         Event.link_table[self.addr] = self
 
+        statement_addr = addr
+
+        for statement in self.event_statements:
+            statement.set_addr(statement_addr, namespace)
+            statement_addr += statement.size()
+
     def to_bytes(self):
         event_bytes = []
         for statement in self.event_statements:
@@ -912,6 +918,11 @@ class IntExpression:
         self.resolved = resolved
         return resolved
     
+    def size(self):
+        if not self.resolve():
+            raise ValueError("Cannot calculate size of unresolved IntExpression")
+        return sum(command.size() for command in self.commands)
+
     def __repr__(self) -> str:
         if not self.resolved:
             return f"IntExpression({self.expression_toks})"

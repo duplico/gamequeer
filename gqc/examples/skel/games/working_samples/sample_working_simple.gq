@@ -60,7 +60,7 @@ stage start {
         badge_id = A + B * (5 + -C);
         D = !(badge_id == 17);
 
-        if (D) {
+        if (!D) {
             badge_id = 17;
             A = B + 3;
         } else

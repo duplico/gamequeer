@@ -1,5 +1,7 @@
 import struct
 
+from gqc.structs import GQ_PTR_NS_CART
+
 from . import structs
 from .structs import OpCode as CommandType
 from .datamodel import Stage, Animation, LightCue, Variable, GqcIntOperand, IntExpression
@@ -55,7 +57,7 @@ class Command:
         return structs.GQ_OP_SIZE
 
     def __repr__(self) -> str:
-        return f"Command({self.command_type.name}:{self.command_flags} {self.arg1} {self.arg2});"
+        return f"Command({self.command_type.name}:{self.command_flags:#0{4}x} {self.arg1:#0{10}x} {self.arg2:#0{10}x});"
 
 class CommandDone(Command):
     def __init__(self):
@@ -296,7 +298,7 @@ class CommandGoto(Command):
         return self.resolved
     
     def __repr__(self) -> str:
-        return f"GOTO {self.arg1}"
+        return f"GOTO {self.arg1:#0{10}x}"
 
 class CommandIf(Command):
     def __init__(self, instring, loc, condition : GqcIntOperand | IntExpression, true_cmds : list, false_cmds : list = None):
@@ -311,7 +313,7 @@ class CommandIf(Command):
 
         if not self.condition_is_expression and self.condition.is_literal:
             self.command_flags |= structs.OpFlags.LITERAL_ARG2
-            self.arg2 = condition
+            self.arg2 = condition.value
 
         self.resolve()
     
@@ -389,12 +391,10 @@ class CommandIf(Command):
         
         # First, if we need to evaluate an expression as the condition, perform that evaluation.
         if self.condition_is_expression:
-            for cmd in self.condition_expr.commands:
+            for cmd in self.condition.commands:
                 cmd_bytes += cmd.to_bytes()
 
         # Next, serialize the GOTOIFN command.
-        false_address = self.addr + super().size() + self.true_section_size
-        self.arg1 = false_address
         cmd_bytes += super().to_bytes()
 
         # Next, serialize the true commands.
@@ -409,3 +409,18 @@ class CommandIf(Command):
                 cmd_bytes += cmd.to_bytes()
         
         return cmd_bytes
+    
+    def set_addr(self, addr: int, namespace: int = structs.GQ_PTR_NS_CART):
+        if not self.resolve():
+            raise ValueError("Cannot set address of unresolved IF block")
+        
+        super().set_addr(addr, namespace)
+        false_address = self.addr + super().size() + self.true_section_size
+        self.arg1 = false_address
+
+
+    def __repr__(self) -> str:
+        if not self.resolve():
+            return f"IF: UNRESOLVED"
+
+        return f"{self.condition.commands if self.condition_is_expression else ''} {super().__repr__()} {self.true_cmds} {(repr(CommandGoto(None, None, self.addr + self.size())) + ' ') if self.false_cmds else ''}{self.false_cmds}"
