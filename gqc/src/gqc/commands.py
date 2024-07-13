@@ -236,6 +236,8 @@ class CommandSetVar(Command):
 
     def size(self):
         if self.src_is_expression:
+            if not self.src_expr.resolve():
+                raise ValueError("Unresolved symbol in expression")
             size = 0
             for cmd in self.src_expr.commands:
                 size += cmd.size()
@@ -244,7 +246,11 @@ class CommandSetVar(Command):
             return super().size()
 
     def __repr__(self) -> str:
-        return f"SETVAR {self.dst_name} {self.arg2 if self.src_is_literal else self.src_name}"
+        # TODO: Clean up
+        if self.src_is_expression:
+            return f"SETVAR {self.dst_name} {self.src_expr}"
+        else:
+            return f"SETVAR {self.dst_name} {self.arg2 if self.src_is_literal else self.src_name}"
 
 class CommandGoto(Command):
     def __init__(self, instring, loc, addr : int = 0x00000000):

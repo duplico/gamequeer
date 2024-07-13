@@ -65,7 +65,7 @@ stage start {
 
     event bgdone {
         badge_id = 6;
-        badge_id = A + B * C;
+        badge_id = A + B * (C + 5);
         gostage selfie;
     }
 }

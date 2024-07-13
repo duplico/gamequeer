@@ -832,6 +832,9 @@ class IntExpression:
     def get_result_symbol(self, subexpr : list) -> GqcIntOperand:
         from .commands import CommandSetVar, CommandArithmetic
 
+        if isinstance(subexpr, IntExpression):
+            subexpr = subexpr.expression_toks
+
         if isinstance(subexpr, GqcIntOperand):
             return subexpr
         elif len(subexpr) == 1:
@@ -905,3 +908,9 @@ class IntExpression:
 
         self.resolved = resolved
         return resolved
+    
+    def __repr__(self) -> str:
+        if not self.resolved:
+            return f"IntExpression({self.expression_toks})"
+        else:
+            return ' '.join(map(repr, self.commands))

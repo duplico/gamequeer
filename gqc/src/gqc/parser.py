@@ -218,7 +218,7 @@ def parse_int_expression(instring, loc, toks):
     toks = toks[0]
     if isinstance(toks, GqcIntOperand):
         return toks
-    
+
     return IntExpression(toks, instring, loc)
 
 
