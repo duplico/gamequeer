@@ -10,9 +10,14 @@ from .commands import Command, CommandDone
 from . import structs
 
 def create_reserved_variables():
+    # Create the reserved special-purpose variables for the game:
     for gq_var in structs.GQ_RESERVED_VARIABLES:
         var = Variable(gq_var.type, gq_var.name, gq_var.description, 'builtin')
         var.set_addr(gq_var.addr, namespace=structs.GQ_PTR_BUILTIN)
+    
+    # Create the reserved integer registers for the game:
+    for reg_name in structs.GQ_REGISTERS_INT:
+        var = Variable('int', reg_name, 0, 'volatile')
 
 def create_symbol_table(table_dest = sys.stdout):
     # Output order:

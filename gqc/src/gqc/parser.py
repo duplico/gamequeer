@@ -9,6 +9,7 @@ from .datamodel import Animation, Game, Stage, Variable, Event, Menu, LightCue
 from .datamodel import IntExpression, GqcIntOperand
 from .commands import CommandPlayBg, CommandGoStage, CommandSetVar, CommandCue
 from .structs import EventType
+from . import structs
 
 class GqcParseError(Exception):
     def __init__(self, message, s, loc):
@@ -162,11 +163,11 @@ def parse_variable_definition_storageclass(instring, loc, toks):
     if Variable.storageclass_table[storageclass]:
         non_init_vars_present = False
         for var in Variable.storageclass_table[storageclass].values():
-            if not var.name.endswith(".init"):
+            if not var.name in structs.GQ_REGISTER_INT_NAMES and not var.name.endswith(".init"):
                 non_init_vars_present = True
                 break
         if non_init_vars_present:
-            raise GqcParseError(f"Storage class {storageclass} already defined", instring, loc)
+            raise GqcParseError(f"Storage class {storageclass} already defined by {var.name}", instring, loc)
     
     for var in toks[1]:
         var.set_storageclass(storageclass)

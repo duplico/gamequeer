@@ -198,14 +198,6 @@ GQ_RESERVED_VARIABLES = [
     GqReservedVariable('GQ_menu_value', 'int', 'Menu selection', 0x000018),
     GqReservedVariable('GQ_menu_label', 'str', 'Menu label', 0x00001C),
     GqReservedVariable('GQ_text_input', 'str', 'Text input', 0x000020),
-    GqReservedVariable('GQ_RI0', 'int', 'int register 0', 0x000024),
-    GqReservedVariable('GQ_RI1', 'int', 'int register 1', 0x000028),
-    GqReservedVariable('GQ_RI2', 'int', 'int register 2', 0x00002C),
-    GqReservedVariable('GQ_RI3', 'int', 'int register 3', 0x000030),
-    GqReservedVariable('GQ_RI4', 'int', 'int register 4', 0x000034),
-    GqReservedVariable('GQ_RI5', 'int', 'int register 5', 0x000038),
-    GqReservedVariable('GQ_RI6', 'int', 'int register 6', 0x00003C),
-    GqReservedVariable('GQ_RI7', 'int', 'int register 7', 0x000040),
 ]
 
 GQ_REGISTERS_INT = [

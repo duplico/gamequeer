@@ -57,6 +57,7 @@ stage start {
 
         // badge_id = badge_id + 1 * 10;
         game_name := game_name_2;
+        badge_id = A + B * (C + 5);
     }
 
     event input(A) {
@@ -65,7 +66,6 @@ stage start {
 
     event bgdone {
         badge_id = 6;
-        badge_id = A + B * (C + 5);
         gostage selfie;
     }
 }
