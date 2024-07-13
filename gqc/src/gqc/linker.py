@@ -1,12 +1,11 @@
 import sys
-import typing
-from collections import namedtuple
 
 from tabulate import tabulate
 from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn
 
 from .datamodel import Game, Stage, Variable, Animation, Frame, FrameData, Event, Menu
-from .datamodel import Command, CommandDone, LightCue, LightCueFrame
+from .datamodel import LightCue, LightCueFrame
+from .commands import Command, CommandDone
 
 from . import structs
 

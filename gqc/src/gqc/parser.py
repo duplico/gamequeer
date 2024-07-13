@@ -4,9 +4,8 @@ import pathlib
 import pyparsing as pp
 from rich import print
 
-from .datamodel import Animation, Game, Stage, Variable, Event, Menu
-from .datamodel import Command, CommandDone, CommandPlayBg, CommandGoStage
-from .datamodel import CommandSetVar, CommandCue, LightCue
+from .datamodel import Animation, Game, Stage, Variable, Event, Menu, LightCue
+from .commands import CommandPlayBg, CommandGoStage, CommandSetVar, CommandCue
 from .structs import EventType
 
 class GqcParseError(Exception):
