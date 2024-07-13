@@ -865,16 +865,8 @@ class IntExpression:
         
         # Select the opcode based on the operator token
         # TODO: Make more pythonic
-        if operator == '+':
-            opcode = structs.OpCode.ADDBY
-        elif operator == '-':
-            opcode = structs.OpCode.SUBBY
-        elif operator == '*':
-            opcode = structs.OpCode.MULBY
-        elif operator == '/':
-            opcode = structs.OpCode.DIVBY
-        elif operator == '%':
-            opcode = structs.OpCode.MODBY
+        if operator in CommandArithmetic.OPERATORS:
+            opcode = CommandArithmetic.OPERATORS[operator]
         else:
             raise ValueError(f"Invalid operator {operator}")
         

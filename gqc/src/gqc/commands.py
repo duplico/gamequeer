@@ -113,8 +113,24 @@ class CommandCue(Command):
         return f"CUE {self.arg1}"
 
 class CommandArithmetic(Command):
+    OPERATORS = {
+        '+': CommandType.ADDBY,
+        '-': CommandType.SUBBY,
+        '*': CommandType.MULBY,
+        '/': CommandType.DIVBY,
+        '%': CommandType.MODBY,
+        '==': CommandType.EQ,
+        '!=': CommandType.NE,
+        '>': CommandType.GT,
+        '<': CommandType.LT,
+        '>=': CommandType.GE,
+        '<=': CommandType.LE,
+        '&&': CommandType.AND,
+        '||': CommandType.OR,
+    }
+
     def __init__(self, command_type : CommandType, instring, loc, dst : GqcIntOperand, src : GqcIntOperand):
-        if command_type not in [CommandType.ADDBY, CommandType.SUBBY, CommandType.MULBY, CommandType.DIVBY, CommandType.MODBY]:
+        if command_type not in CommandArithmetic.OPERATORS.values():
             raise ValueError(f"Invalid arithmetic command {command_type}")
 
         super().__init__(command_type, instring, loc)

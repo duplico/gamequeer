@@ -70,6 +70,8 @@ string_operand = identifier | string
 int_expression = pp.infixNotation(int_operand, [
     (pp.oneOf('* /'), 2, pp.opAssoc.LEFT),
     (pp.oneOf('+ -'), 2, pp.opAssoc.LEFT),
+    (pp.oneOf('== !='), 2, pp.opAssoc.LEFT),
+    (pp.oneOf('&& ||'), 2, pp.opAssoc.LEFT),
 ])
 
 """
@@ -150,9 +152,12 @@ def build_game_parser():
     int_operand = identifier | integer
     int_operand.set_parse_action(parse_int_operand)
 
-    int_expression = pp.infixNotation(int_operand, [
-        (pp.oneOf('* /'), 2, pp.opAssoc.LEFT),
-        (pp.oneOf('+ -'), 2, pp.opAssoc.LEFT),
+    int_expression = pp.infix_notation(int_operand, [
+        (pp.one_of('* /'), 2, pp.opAssoc.LEFT),
+        (pp.one_of('+ -'), 2, pp.opAssoc.LEFT),
+        (pp.one_of('< > <= >='), 2, pp.opAssoc.LEFT),
+        (pp.one_of('== !='), 2, pp.opAssoc.LEFT),
+        (pp.one_of('&& ||'), 2, pp.opAssoc.LEFT),
     ])
     int_expression.set_parse_action(parse_int_expression)
     int_assignment = pp.Keyword("=") - int_expression - pp.Suppress(";")

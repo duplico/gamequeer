@@ -34,6 +34,7 @@ typedef enum gq_op_code {
     GQ_OP_AND     = 0x12,
     GQ_OP_OR      = 0x13,
     GQ_OP_NOT     = 0x14,
+    GQ_OP_NEG     = 0x15,
     GQ_OP_COUNT
 } gq_op_code;
 
