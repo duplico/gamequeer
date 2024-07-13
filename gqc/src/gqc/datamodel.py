@@ -839,13 +839,19 @@ class IntExpression:
             return subexpr
         elif len(subexpr) == 1:
             return subexpr[0]
-        elif len(subexpr) != 3:
-            raise ValueError("Invalid subexpression length: should be [operand, operator, operand]")
+        elif len(subexpr) > 3:
+            raise ValueError(f"Invalid subexpression length {len(subexpr)}: should be [operand, operator, operand] or [operator operand]")
 
-        # If we're here, then subexpr is len 3.        
-        operand0 = self.get_result_symbol(subexpr[0])
-        operand1 = self.get_result_symbol(subexpr[2])
-        operator = subexpr[1]
+        if len(subexpr) == 2:
+            # Unary operation.
+            # TODO: if operand1 is a register in a unary operation, we can probably reuse it for operand0
+            operand0 = GqcIntOperand(is_literal=False, value=self.alloc_register())
+            operand1 = self.get_result_symbol(subexpr[1])
+            operator = subexpr[0]
+        else: # len(subexpr) == 3
+            operand0 = self.get_result_symbol(subexpr[0])
+            operand1 = self.get_result_symbol(subexpr[2])
+            operator = subexpr[1]
         
         # If the left operand is not a register, we need to load it into one.
         if operand0.is_literal or operand0.value not in structs.GQ_REGISTERS_INT:
@@ -864,9 +870,12 @@ class IntExpression:
         # Now, we can generate the operation command.
         
         # Select the opcode based on the operator token
-        # TODO: Make more pythonic
-        if operator in CommandArithmetic.OPERATORS:
-            opcode = CommandArithmetic.OPERATORS[operator]
+        operator_lookup_by_cardinality = {
+            2: CommandArithmetic.UNARY_OPERATORS,
+            3: CommandArithmetic.OPERATORS
+        }[len(subexpr)]
+        if operator in operator_lookup_by_cardinality:
+            opcode = operator_lookup_by_cardinality[operator]
         else:
             raise ValueError(f"Invalid operator {operator}")
         
@@ -895,8 +904,10 @@ class IntExpression:
                 break
 
         if not resolved:
+            # Cleanup
             self.commands = []
-            # TODO: Also free all registers
+            for register in self.used_registers:
+                self.free_register(register)
 
         self.resolved = resolved
         return resolved
