@@ -262,6 +262,9 @@ void run_code(t_gq_pointer code_ptr) {
                 // TODO: bounds checking or whatever:
                 load_animation(0, cmd.arg1);
                 break;
+            case GQ_OP_CUE:
+                led_play_cue(cmd.arg1, 0);
+                break;
             case GQ_OP_SETVAR:
                 if (cmd.flags & GQ_OPF_TYPE_INT) {
                     gq_memcpy(cmd.arg1, cmd.arg2, GQ_INT_SIZE);
@@ -269,9 +272,10 @@ void run_code(t_gq_pointer code_ptr) {
                     gq_memcpy(cmd.arg1, cmd.arg2, GQ_STR_SIZE);
                 }
                 break;
-            case GQ_OP_CUE:
-                led_play_cue(cmd.arg1, 0);
-                break;
+            case GQ_OP_GOTO:
+                code_ptr = cmd.arg1;
+                // Skip the rest of this loop, as we've already loaded the next command.
+                continue;
             default:
                 break;
         }

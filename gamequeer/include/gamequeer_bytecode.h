@@ -15,8 +15,23 @@ typedef enum gq_op_code {
     GQ_OP_DONE    = 0x01,
     GQ_OP_GOSTAGE = 0x02,
     GQ_OP_PLAYBG  = 0x03,
-    GQ_OP_CUE     = 0x04, // TODO: Not implemented yet in gqc
+    GQ_OP_CUE     = 0x04,
     GQ_OP_SETVAR  = 0x05,
+    GQ_OP_GOTO    = 0x06,
+    GQ_OP_ADD     = 0x07,
+    GQ_OP_SUB     = 0x08,
+    GQ_OP_MUL     = 0x09,
+    GQ_OP_DIV     = 0x0A,
+    GQ_OP_MOD     = 0x0B,
+    GQ_OP_EQ      = 0x0C,
+    GQ_OP_NE      = 0x0D,
+    GQ_OP_GT      = 0x0E,
+    GQ_OP_LT      = 0x0F,
+    GQ_OP_GE      = 0x10,
+    GQ_OP_LE      = 0x11,
+    GQ_OP_AND     = 0x12,
+    GQ_OP_OR      = 0x13,
+    GQ_OP_NOT     = 0x14,
     GQ_OP_COUNT
 } gq_op_code;
 
