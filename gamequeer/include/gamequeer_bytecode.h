@@ -5,9 +5,11 @@
 #include <stdint.h>
 
 typedef enum gq_op_flags {
-    GQ_OPF_NONE     = 0,
-    GQ_OPF_TYPE_INT = 1,
-    GQ_OPF_TYPE_STR = 2,
+    GQ_OPF_NONE         = 0,
+    GQ_OPF_TYPE_INT     = 1,
+    GQ_OPF_TYPE_STR     = 2,
+    GQ_OPF_LITERAL_ARG1 = 4,
+    GQ_OPF_LITERAL_ARG2 = 8,
 } gq_opcode_flags;
 
 typedef enum gq_op_code {

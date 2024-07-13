@@ -270,10 +270,12 @@ class Variable:
         self.storageclass = storageclass
         Variable.storageclass_table[storageclass][self.name] = self
 
-        # If this variable is volatile, create a persistent variable to use
-        #  for initialization purposes.
+        # If this variable is a volatile string, create a persistent variable to use for
+        #  initialization purposes.
+        # Volatile ints don't need this because they can be initialized with a literal-flagged 
+        #  operation.
         # TODO: De-duplicate init vars
-        if storageclass == "volatile":
+        if storageclass == "volatile" and self.datatype == "str":
             init_var = Variable(self.datatype, f'{self.name}.init', self.value, storageclass="persistent")
             self.init_from = init_var
     
@@ -295,7 +297,12 @@ class Variable:
             raise ValueError(f"Persistent variable {self.name} cannot be added to init table.")
         
         from .commands import CommandSetVar
-        return CommandSetVar(None, None, self.name, self.init_from.name, self.datatype)
+        if self.datatype == "str":
+            return CommandSetVar(None, None, self.datatype, self.name, self.init_from.name)
+        elif self.datatype == "int":
+            return CommandSetVar(None, None, self.datatype, self.name, self.value, src_is_literal=True)
+        else:
+            raise ValueError(f"Invalid datatype {self.datatype}")
 
     def size(self):
         if self.datatype == "int":

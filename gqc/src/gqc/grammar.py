@@ -59,8 +59,18 @@ cue = "cue" identifier ";"
 gostage = "gostage" identifier ";"
 
 assignment_statement = int_assignment | string_assignment
-int_assignment = identifier "=" identifier ";"
+int_assignment = identifier "=" int_expression ";"
 string_assignment = identifier ":=" identifier ";"
+
+int_operand = identifier | integer
+string_operand = identifier | string
+
+# Shorthand; see https://stackoverflow.com/a/23956778
+int_expression = pp.infixNotation(int_operand, [
+    (pp.oneOf('* /'), 2, pp.opAssoc.LEFT),
+    (pp.oneOf('+ -'), 2, pp.opAssoc.LEFT),
+])
+
 """
 
 # TODO: Add support for literals
@@ -72,6 +82,7 @@ VAR_STRING_MAXLEN = 21
 def build_game_parser():
     # Define the grammar
     gqc_game = pp.Forward()
+    gqc_game.enable_left_recursion()
 
     # Basic tokens
     identifier = pp.Word(pp.alphas, pp.alphanums + "_").set_name("identifier")
@@ -129,16 +140,24 @@ def build_game_parser():
     menu_definition.set_parse_action(parse_menu_definition)
 
     ### Stage sections ###
-    # Commands
+    
+    # Assignments and expressions
+    string_operand = identifier | string
+    string_expression = string_operand
+    string_assignment = pp.Keyword(":=") - string_expression - pp.Suppress(";")
+
+    int_operand = identifier | integer
+    int_expression = int_operand
+
+    int_assignment = pp.Keyword("=") - int_expression - pp.Suppress(";")
+    assignment_statement = pp.Group(identifier - (string_assignment | int_assignment))
+
+    assignment_statement.add_parse_action(parse_assignment)
+
+    # Other commands
     play = pp.Group(pp.Keyword("play") - pp.Keyword("bganim") - identifier - pp.Suppress(";"))
     cue = pp.Group(pp.Keyword("cue") - identifier - pp.Suppress(";"))
     gostage = pp.Group(pp.Keyword("gostage") - identifier - pp.Suppress(";"))
-
-    int_assignment = pp.Group(identifier - pp.Keyword("=") - identifier - pp.Suppress(";"))
-    string_assignment = pp.Group(identifier - pp.Keyword(":=") - identifier - pp.Suppress(";"))
-    assignment_statement = int_assignment | string_assignment
-
-    assignment_statement.add_parse_action(parse_assignment)
 
     event_statement = play | cue | gostage | assignment_statement
     event_statements = pp.Group(event_statement | pp.Suppress("{") - pp.ZeroOrMore(event_statement) - pp.Suppress("}"))
@@ -162,6 +181,7 @@ def build_game_parser():
     stage_event.set_parse_action(parse_event_definition)
 
     stage_definition_section.set_parse_action(parse_stage_definition)
+
 
     # Finish up
     gqc_game << game_definition_section - pp.ZeroOrMore(animation_definition_section | lightcue_definition_section | var_definition_section | menu_definition_section | stage_definition_section)

@@ -221,7 +221,7 @@ def parse_command(instring, loc, toks):
     elif command == "gostage":
         return CommandGoStage(instring, loc, toks[1])
     elif command == 'setvar':
-        return CommandSetVar(instring, loc, toks[1], toks[2], toks[3])
+        return CommandSetVar(instring, loc, toks[3], toks[1], toks[2])
     else:
         raise GqcParseError(f"Invalid command {command}", instring, loc)
 
