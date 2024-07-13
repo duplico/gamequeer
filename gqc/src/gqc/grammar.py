@@ -4,6 +4,7 @@ from .parser import parse_variable_definition, parse_variable_definition_storage
 from .parser import parse_animation_definition, parse_stage_definition, parse_game_definition
 from .parser import parse_event_definition, parse_command, parse_assignment, parse_lightcue_definition_section
 from .parser import parse_menu_definition, parse_bound_menu
+from .parser import parse_int_expression, parse_int_operand
 
 """
 Grammar for GQC language
@@ -147,8 +148,13 @@ def build_game_parser():
     string_assignment = pp.Keyword(":=") - string_expression - pp.Suppress(";")
 
     int_operand = identifier | integer
-    int_expression = int_operand
+    int_operand.set_parse_action(parse_int_operand)
 
+    int_expression = pp.infixNotation(int_operand, [
+        (pp.oneOf('* /'), 2, pp.opAssoc.LEFT),
+        (pp.oneOf('+ -'), 2, pp.opAssoc.LEFT),
+    ])
+    int_expression.set_parse_action(parse_int_expression)
     int_assignment = pp.Keyword("=") - int_expression - pp.Suppress(";")
     assignment_statement = pp.Group(identifier - (string_assignment | int_assignment))
 

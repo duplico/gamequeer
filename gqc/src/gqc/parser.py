@@ -1,5 +1,6 @@
 import sys
 import pathlib
+from collections import namedtuple
 
 import pyparsing as pp
 from rich import print
@@ -7,6 +8,8 @@ from rich import print
 from .datamodel import Animation, Game, Stage, Variable, Event, Menu, LightCue
 from .commands import CommandPlayBg, CommandGoStage, CommandSetVar, CommandCue
 from .structs import EventType
+
+GqcIntOperand = namedtuple('GqcIntOperand', 'is_literal value')
 
 class GqcParseError(Exception):
     def __init__(self, message, s, loc):
@@ -204,6 +207,17 @@ def parse_assignment(instring, loc, toks):
 
     return [['setvar', dst, src, datatype]]
 
+def parse_int_operand(instring, loc, toks):
+    if isinstance(toks[0], GqcIntOperand):
+        return toks[0]
+    elif isinstance(toks[0], int):
+        return GqcIntOperand(True, toks[0])
+    else:
+        return GqcIntOperand(False, toks[0])
+
+def parse_int_expression(instring, loc, toks):
+    print('expr', toks)
+
 def parse_command(instring, loc, toks):
     toks = toks[0]
 
@@ -221,7 +235,10 @@ def parse_command(instring, loc, toks):
     elif command == "gostage":
         return CommandGoStage(instring, loc, toks[1])
     elif command == 'setvar':
-        return CommandSetVar(instring, loc, toks[3], toks[1], toks[2])
+        if isinstance(toks[2], GqcIntOperand):
+            return CommandSetVar(instring, loc, toks[3], toks[1], toks[2].value, toks[2].is_literal)
+        else:
+            return CommandSetVar(instring, loc, toks[3], toks[1], toks[2])
     else:
         raise GqcParseError(f"Invalid command {command}", instring, loc)
 

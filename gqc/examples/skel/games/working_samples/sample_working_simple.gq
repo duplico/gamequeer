@@ -52,7 +52,7 @@ stage start {
         play bganim george;
         cue flash;
 
-        badge_id = badge_id;
+        badge_id = badge_id + 1 * 10;
         game_name := game_name_2;
     }
 
