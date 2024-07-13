@@ -66,6 +66,15 @@ uint8_t gq_memcpy_ram(uint8_t *dest, t_gq_pointer src, uint32_t size) {
     return 1;
 }
 
+uint8_t gq_assign_int(t_gq_pointer dest, t_gq_int value) {
+    for (uint8_t i = 0; i < GQ_INT_SIZE; i++) {
+        if (!write_byte(dest + i, (value >> (i * 8)) & 0xFF)) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
 void HAL_update_leds() {
     for (uint8_t i = 0; i < 5; i++) {
         gfx_color(gq_leds[i].r >> 8, gq_leds[i].g >> 8, gq_leds[i].b >> 8);

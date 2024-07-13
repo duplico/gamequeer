@@ -156,6 +156,8 @@ class OpFlags(IntEnum):
     NONE = 0x00
     TYPE_INT = 0x01
     TYPE_STR = 0x02
+    LITERAL_ARG1 = 0x04
+    LITERAL_ARG2 = 0x08
 
 # Bytecode format:
 # typedef struct gq_op {

@@ -12,6 +12,7 @@ volatile {
 
 persistent {
     int badges_seen = 0;
+    str game_name_2 := "Test2";
 }
 
 menus {
@@ -50,6 +51,9 @@ stage start {
     event enter {
         play bganim george;
         cue flash;
+
+        badge_id = badge_id;
+        game_name := game_name_2;
     }
 
     event input(A) {

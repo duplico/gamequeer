@@ -113,16 +113,25 @@ class CommandCue(Command):
         return f"CUE {self.arg1}"
 
 class CommandSetVar(Command):
-    def __init__(self, instring, loc, dst : str, src : str, datatype : str):
+    def __init__(self, instring, loc, datatype : str, dst : str, src = None, src_is_literal = False):
         super().__init__(CommandType.SETVAR, instring, loc, arg1=None, arg2=None)
-        self.src_name = src
         self.dst_name = dst
         self.datatype = datatype
 
+        self.src_is_literal = src_is_literal
+        if src_is_literal and datatype == 'int':
+            self.command_flags |= structs.OpFlags.LITERAL_ARG2
+            self.arg2 = src
+        elif src_is_literal and datatype == 'str':
+            # TODO: create a value for it in .init
+            raise ValueError("Cannot set a string variable to a literal")
+        else:
+            self.src_name = src
+
         if self.datatype == "str":
-            self.command_flags = structs.OpFlags.TYPE_STR
+            self.command_flags |= structs.OpFlags.TYPE_STR
         elif self.datatype == "int":
-            self.command_flags = structs.OpFlags.TYPE_INT
+            self.command_flags |= structs.OpFlags.TYPE_INT
         else:
             raise ValueError(f"Invalid datatype {self.datatype}")
 
@@ -141,15 +150,17 @@ class CommandSetVar(Command):
         else:
             resolved = False
         
-        if self.src_name in Variable.var_table and Variable.var_table[self.src_name].addr != 0x00000000:
-            self.arg2 = Variable.var_table[self.src_name].addr
-        else:
-            resolved = False
+        if not self.src_is_literal:
+            if self.src_name in Variable.var_table and Variable.var_table[self.src_name].addr != 0x00000000:
+                self.arg2 = Variable.var_table[self.src_name].addr
+            else:
+                resolved = False
         
         # Rudimentary type checking:
-        if self.src_name in Variable.var_table and self.dst_name in Variable.var_table:
+        if not self.src_is_literal and self.src_name in Variable.var_table:
             if Variable.var_table[self.src_name].datatype != self.datatype:
                 raise ValueError(f"Variable {self.src_name} is of type {Variable.var_table[self.src_name].datatype}, not {self.datatype}")
+        if self.dst_name in Variable.var_table:
             if Variable.var_table[self.dst_name].datatype != self.datatype:
                 raise ValueError(f"Variable {self.dst_name} is of type {Variable.var_table[self.dst_name].datatype}, not {self.datatype}")
 
@@ -158,7 +169,7 @@ class CommandSetVar(Command):
         return self.resolved
     
     def __repr__(self) -> str:
-        return f"SETVAR {self.dst_name} {self.src_name}"
+        return f"SETVAR {self.dst_name} {self.arg2 if self.src_is_literal else self.src_name}"
 
 class CommandGoto(Command):
     def __init__(self, instring, loc, addr : int = 0x00000000):

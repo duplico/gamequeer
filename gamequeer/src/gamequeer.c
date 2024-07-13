@@ -267,7 +267,11 @@ void run_code(t_gq_pointer code_ptr) {
                 break;
             case GQ_OP_SETVAR:
                 if (cmd.flags & GQ_OPF_TYPE_INT) {
-                    gq_memcpy(cmd.arg1, cmd.arg2, GQ_INT_SIZE);
+                    if (cmd.flags & GQ_OPF_LITERAL_ARG2) {
+                        gq_assign_int(cmd.arg1, cmd.arg2);
+                    } else {
+                        gq_memcpy(cmd.arg1, cmd.arg2, GQ_INT_SIZE);
+                    }
                 } else if (cmd.flags & GQ_OPF_TYPE_STR) {
                     gq_memcpy(cmd.arg1, cmd.arg2, GQ_STR_SIZE);
                 }
