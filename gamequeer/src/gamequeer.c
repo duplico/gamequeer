@@ -243,7 +243,13 @@ void run_arithmetic(gq_op *cmd) {
     t_gq_int arg2;
     t_gq_int result;
 
-    gq_memcpy_ram((uint8_t *) &arg1, cmd->arg1, GQ_INT_SIZE);
+    if (cmd->opcode == GQ_OP_NOT || cmd->opcode == GQ_OP_NEG) {
+        // These operations only have arg2 as an operand; arg1 is the result.
+        // No need to load anything to arg1 for a unary operation.
+    } else {
+        // All other operations have arg1 and arg2 as operands.
+        gq_memcpy_ram((uint8_t *) &arg1, cmd->arg1, GQ_INT_SIZE);
+    }
     if (!(cmd->flags & GQ_OPF_LITERAL_ARG2)) {
         gq_memcpy_ram((uint8_t *) &arg2, cmd->arg2, GQ_INT_SIZE);
     } else {
@@ -265,6 +271,36 @@ void run_arithmetic(gq_op *cmd) {
             break;
         case GQ_OP_MODBY:
             result = arg1 % arg2;
+            break;
+        case GQ_OP_EQ:
+            result = arg1 == arg2;
+            break;
+        case GQ_OP_NE:
+            result = arg1 != arg2;
+            break;
+        case GQ_OP_GT:
+            result = arg1 > arg2;
+            break;
+        case GQ_OP_LT:
+            result = arg1 < arg2;
+            break;
+        case GQ_OP_GE:
+            result = arg1 >= arg2;
+            break;
+        case GQ_OP_LE:
+            result = arg1 <= arg2;
+            break;
+        case GQ_OP_AND:
+            result = arg1 && arg2;
+            break;
+        case GQ_OP_OR:
+            result = arg1 || arg2;
+            break;
+        case GQ_OP_NOT:
+            result = !arg2;
+            break;
+        case GQ_OP_NEG:
+            result = -arg2;
             break;
         default:
             return;
@@ -320,6 +356,16 @@ void run_code(t_gq_pointer code_ptr) {
             case GQ_OP_MULBY:
             case GQ_OP_DIVBY:
             case GQ_OP_MODBY:
+            case GQ_OP_EQ:
+            case GQ_OP_NE:
+            case GQ_OP_GT:
+            case GQ_OP_LT:
+            case GQ_OP_GE:
+            case GQ_OP_LE:
+            case GQ_OP_AND:
+            case GQ_OP_OR:
+            case GQ_OP_NOT:
+            case GQ_OP_NEG:
                 run_arithmetic(&cmd);
                 break;
             default:
