@@ -223,6 +223,26 @@ class CommandSetVar(Command):
         
         return self.resolved
     
+    def to_bytes(self):
+        if self.src_is_expression:
+            expression_cmd_bytes = b''
+            for cmd in self.src_expr.commands:
+                if not cmd.resolve():
+                    raise ValueError("Unresolved symbol in expression")
+                expression_cmd_bytes += cmd.to_bytes()
+            return expression_cmd_bytes + super().to_bytes()
+        else:
+            return super().to_bytes()
+
+    def size(self):
+        if self.src_is_expression:
+            size = 0
+            for cmd in self.src_expr.commands:
+                size += cmd.size()
+            return size + super().size()
+        else:
+            return super().size()
+
     def __repr__(self) -> str:
         return f"SETVAR {self.dst_name} {self.arg2 if self.src_is_literal else self.src_name}"
 
