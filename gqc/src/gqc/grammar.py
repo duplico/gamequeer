@@ -68,6 +68,7 @@ string_operand = identifier | string
 
 # Shorthand; see https://stackoverflow.com/a/23956778
 int_expression = pp.infixNotation(int_operand, [
+    (pp.oneOf('! -'), 1, pp.opAssoc.RIGHT),
     (pp.oneOf('* /'), 2, pp.opAssoc.LEFT),
     (pp.oneOf('+ -'), 2, pp.opAssoc.LEFT),
     (pp.oneOf('== !='), 2, pp.opAssoc.LEFT),
@@ -91,7 +92,7 @@ def build_game_parser():
     identifier = pp.Word(pp.alphas, pp.alphanums + "_").set_name("identifier")
     string = pp.QuotedString('"').setName("string")
     meta_string = pp.QuotedString('"', escChar='\\').setName("meta_string")
-    integer = pp.Word(pp.nums).setName("integer").set_parse_action(lambda t: int(t[0]))
+    integer = pp.Combine(pp.Optional('-') + pp.Word(pp.nums)).setName("integer").set_parse_action(lambda t: int(t[0]))
 
     int_type = pp.Keyword("int").setName("int")
     str_type = pp.Keyword("str").setName("str")
@@ -153,6 +154,7 @@ def build_game_parser():
     int_operand.set_parse_action(parse_int_operand)
 
     int_expression = pp.infix_notation(int_operand, [
+        (pp.oneOf('! -'), 1, pp.opAssoc.RIGHT),
         (pp.one_of('* /'), 2, pp.opAssoc.LEFT),
         (pp.one_of('+ -'), 2, pp.opAssoc.LEFT),
         (pp.one_of('< > <= >='), 2, pp.opAssoc.LEFT),

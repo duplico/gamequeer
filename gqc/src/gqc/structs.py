@@ -30,7 +30,8 @@ def gq_ptr_get_ns(ptr):
 def gq_ptr_get_addr(ptr):
     return ptr & 0x00FFFFFF
 
-GQ_INT_FORMAT = '<i'
+T_GQ_INT_FORMAT = 'i'
+GQ_INT_FORMAT = f'<{T_GQ_INT_FORMAT}'
 GQ_INT_SIZE = struct.calcsize(GQ_INT_FORMAT)
 
 # typedef struct gq_header {
@@ -151,6 +152,7 @@ class OpCode(IntEnum):
     AND = 0x12
     OR = 0x13
     NOT = 0x14
+    NEG = 0x15
 
 class OpFlags(IntEnum):
     NONE = 0x00
@@ -169,7 +171,11 @@ class OpFlags(IntEnum):
 
 GqOp = namedtuple('GqOp', 'opcode flags arg1 arg2')
 GQ_OP_FORMAT = f'<BB{T_GQ_POINTER_FORMAT}{T_GQ_POINTER_FORMAT}'
+GQ_OP_FORMAT_LITERAL_ARGS = f'<BB{T_GQ_INT_FORMAT}{T_GQ_INT_FORMAT}'
+GQ_OP_FORMAT_LITERAL_ARG1 = f'<BB{T_GQ_INT_FORMAT}{T_GQ_POINTER_FORMAT}'
+GQ_OP_FORMAT_LITERAL_ARG2 = f'<BB{T_GQ_POINTER_FORMAT}{T_GQ_INT_FORMAT}'
 GQ_OP_SIZE = struct.calcsize(GQ_OP_FORMAT)
+assert struct.calcsize(GQ_OP_FORMAT_LITERAL_ARG1) == GQ_OP_SIZE and struct.calcsize(GQ_OP_FORMAT_LITERAL_ARG2) == GQ_OP_SIZE and struct.calcsize(GQ_OP_FORMAT_LITERAL_ARGS) == GQ_OP_SIZE
 
 # typedef struct gq_stage {
 #     uint16_t id;                                 // Numerical ID of the stage (sequential, 0-based)

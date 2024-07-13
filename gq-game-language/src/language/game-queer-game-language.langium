@@ -2,7 +2,7 @@ grammar GameQueerGameLanguage
 
 hidden terminal WS: /\s+/;
 terminal ID: /[_a-zA-Z][\w_]*/;
-terminal INT returns number: /[0-9]+/;
+terminal INT returns number: /\-?[0-9]+/;
 
 terminal STRING: /"(\\.|[^"\\])*"/;
 
@@ -12,7 +12,7 @@ hidden terminal ML_COMMENT: /\/\*[\s\S]*?\*\//;
 hidden terminal SL_COMMENT: /\/\/[^\n\r]*/;
 
 entry Program:
-   GameDefinitionSection DeclarationSection*;
+   GameDefinitionSection dec=DeclarationSection*;
 
 DeclarationSection:
     VarDefinitionSection | AnimationDefinitionSection | LightcueDefinitionSection | MenuDefinitionSection | StageDefinition;
@@ -29,7 +29,7 @@ GameStartingStageAssignment:
 GameAssignment:
     GameIdAssignment | GameTitleAssignment | GameAuthorAssignment | GameStartingStageAssignment;
 GameDefinitionSection:
-    'game' '{' GameAssignment* '}';
+    'game' '{' games=GameAssignment* '}';
 
 // Variable definition section
 IntDefinition: 
@@ -39,7 +39,7 @@ StrDefinition:
 VarDefinition: 
     IntDefinition| StrDefinition;
 VarDefinitionSection:
-    storageclass=('volatile' | 'persistent') (VarDefinition | '{' VarDefinition* '}');
+    storageclass=('volatile' | 'persistent') (VarDefinition | '{' vars=VarDefinition* '}');
 
 // File assignment shared by lightcues and animations
 FileAssignment:
@@ -49,21 +49,21 @@ FileAssignment:
 AnimationOption: 
     'frame_rate' '=' framerate=INT ';' | 'dithering' ':=' dithering=STRING ';';
 AnimationAssignment:
-    FileAssignment (AnimationOption? ';' | '{' AnimationOption* '}');
+    FileAssignment (AnimationOption? ';' | '{' anim_options=AnimationOption* '}');
 AnimationDefinitionSection:
-    'animations' (AnimationAssignment | '{' AnimationAssignment* '}');
+    'animations' (AnimationAssignment | '{' anims=AnimationAssignment* '}');
 
 // Lightcue definition section
 LightcueDefinitionSection:
-    'lightcues' (FileAssignment ';' | '{' (FileAssignment ';')* '}');
+    'lightcues' (file=FileAssignment ';' | '{' (file=FileAssignment ';')* '}');
 
 // Menu definition section
 MenuOption:
     returnValue=INT ':' label=STRING ';';
 MenuDefinition:
-    name=ID (MenuOption | '{' MenuOption* '}');
+    name=ID (MenuOption | '{' options=MenuOption* '}');
 MenuDefinitionSection:
-    'menus' (MenuDefinition | '{' MenuDefinition* '}');
+    'menus' (MenuDefinition | '{' menus=MenuDefinition* '}');
 
 // Stage commands
 CmdGoStage:
@@ -79,8 +79,10 @@ IntOperator:
     operator=('+' | '-' | '*' | '/' | '%' | '&&' | '||' | '==' | '!=' | '<' | '>' | '<=' | '>=');
 IntExprParen:
     '(' expr=IntExpr ')';
+IntUnaryExpr:
+    operator=('!' | '-') operand=IntExpr;
 IntExpr:
-    IntOperand | IntOperand IntOperator IntExpr | IntExprParen;
+    IntOperand | IntOperand IntOperator IntExpr | IntExprParen | IntUnaryExpr;
 
 CmdAssignmentInt:
     dst=ID '=' src=IntExpr ';';
@@ -98,7 +100,7 @@ StageCommand:
 EventType:
     eventType='input' button=INPUTBUTTON | eventType='bgdone' | eventType='menu' | eventType='enter';
 StageEvent:
-    'event' EventType (StageCommand | '{' StageCommand* '}');
+    'event' EventType (StageCommand | '{' cmds=StageCommand* '}');
 StageMenu:
     'menu' menu=ID ('prompt' prompt=STRING)? ';';
 StageBgAnim:
@@ -110,5 +112,5 @@ StageOption:
     StageEvent | StageMenu | StageBgAnim | StageBgCue;
 
 StageDefinition:
-    'stage' name=ID (StageOption | '{' StageOption* '}');
+    'stage' name=ID (StageOption | '{' stage_opts=StageOption* '}');
 

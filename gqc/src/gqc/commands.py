@@ -41,6 +41,14 @@ class Command:
             arg1=self.arg1,
             arg2=self.arg2
         )
+        
+        if self.command_flags & structs.OpFlags.LITERAL_ARG2 and self.command_flags & structs.OpFlags.LITERAL_ARG1:
+            return struct.pack(structs.GQ_OP_FORMAT_LITERAL_ARGS, *op)
+        elif self.command_flags & structs.OpFlags.LITERAL_ARG1:
+            return struct.pack(structs.GQ_OP_FORMAT_LITERAL_ARG1, *op)
+        elif self.command_flags & structs.OpFlags.LITERAL_ARG2:
+            return struct.pack(structs.GQ_OP_FORMAT_LITERAL_ARG2, *op)
+        
         return struct.pack(structs.GQ_OP_FORMAT, *op)
     
     def size(self):
@@ -129,8 +137,13 @@ class CommandArithmetic(Command):
         '||': CommandType.OR,
     }
 
+    UNARY_OPERATORS = {
+        '!': CommandType.NOT,
+        '-': CommandType.NEG
+    }
+
     def __init__(self, command_type : CommandType, instring, loc, dst : GqcIntOperand, src : GqcIntOperand):
-        if command_type not in CommandArithmetic.OPERATORS.values():
+        if command_type not in CommandArithmetic.OPERATORS.values() and command_type not in CommandArithmetic.UNARY_OPERATORS.values():
             raise ValueError(f"Invalid arithmetic command {command_type}")
 
         super().__init__(command_type, instring, loc)
