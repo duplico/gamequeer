@@ -4,7 +4,7 @@ from .parser import parse_variable_definition, parse_variable_definition_storage
 from .parser import parse_animation_definition, parse_stage_definition, parse_game_definition
 from .parser import parse_event_definition, parse_command, parse_assignment, parse_lightcue_definition_section
 from .parser import parse_menu_definition, parse_bound_menu
-from .parser import parse_int_expression, parse_int_operand
+from .parser import parse_int_expression, parse_int_operand, parse_if
 
 """
 Grammar for GQC language
@@ -50,11 +50,11 @@ stage_option = stage_bganim | stage_bgcue | stage_menu | stage_event
 stage_bganim = "bganim" identifier ";"
 stage_bgcue = "bgcue" identifier ";"
 stage_menu = "menu" identifier ";" | "menu" identifier "prompt" STRING ";"
-stage_event = "event" event_type event_statements
+stage_event = "event" event_type event_statement
 event_type = "input" "(" event_input_button ")" | "bgdone" | "menu" | "enter"
 event_input_button = "A" | "B" | "<-" | "->" | "-"
 event_statements = event_statement | "{" event_statement* "}"
-event_statement = play | cue | gostage | assignment_statement
+event_statement = play | cue | gostage | assignment_statement | if_statement
 play = "play" "bganim" identifier ";"
 cue = "cue" identifier ";"
 gostage = "gostage" identifier ";"
@@ -74,6 +74,8 @@ int_expression = pp.infixNotation(int_operand, [
     (pp.oneOf('== !='), 2, pp.opAssoc.LEFT),
     (pp.oneOf('&& ||'), 2, pp.opAssoc.LEFT),
 ])
+
+if_statement = "if" "(" int_expression ")" event_statements ("else" event_statements)?
 
 """
 
@@ -144,6 +146,7 @@ def build_game_parser():
     menu_definition.set_parse_action(parse_menu_definition)
 
     ### Stage sections ###
+    event_statements = pp.Forward()
     
     # Assignments and expressions
     string_operand = identifier | string
@@ -167,13 +170,17 @@ def build_game_parser():
 
     assignment_statement.add_parse_action(parse_assignment)
 
+    # Flow control
+    if_statement = pp.Suppress("if") - pp.Suppress("(") - int_expression - pp.Suppress(")") - event_statements - pp.Optional(pp.Suppress("else") - event_statements)
+    if_statement.set_parse_action(parse_if)
+
     # Other commands
     play = pp.Group(pp.Keyword("play") - pp.Keyword("bganim") - identifier - pp.Suppress(";"))
     cue = pp.Group(pp.Keyword("cue") - identifier - pp.Suppress(";"))
     gostage = pp.Group(pp.Keyword("gostage") - identifier - pp.Suppress(";"))
 
-    event_statement = play | cue | gostage | assignment_statement
-    event_statements = pp.Group(event_statement | pp.Suppress("{") - pp.ZeroOrMore(event_statement) - pp.Suppress("}"))
+    event_statement = play | cue | gostage | if_statement | assignment_statement
+    event_statements << (pp.Group(event_statement | pp.Suppress("{") - pp.ZeroOrMore(event_statement) - pp.Suppress("}")))
 
     event_statement.set_parse_action(parse_command)
 
@@ -194,7 +201,6 @@ def build_game_parser():
     stage_event.set_parse_action(parse_event_definition)
 
     stage_definition_section.set_parse_action(parse_stage_definition)
-
 
     # Finish up
     gqc_game << game_definition_section - pp.ZeroOrMore(animation_definition_section | lightcue_definition_section | var_definition_section | menu_definition_section | stage_definition_section)

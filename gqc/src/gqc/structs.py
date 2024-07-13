@@ -153,6 +153,7 @@ class OpCode(IntEnum):
     OR = 0x13
     NOT = 0x14
     NEG = 0x15
+    GOTOIFN = 0x16
 
 class OpFlags(IntEnum):
     NONE = 0x00

@@ -59,11 +59,16 @@ stage start {
         game_name := game_name_2;
         badge_id = A + B * (5 + -C);
         D = !(badge_id == 17);
+
+        if (D) {
+            badge_id = 17;
+            A = B + 3;
+        } else
+            badge_id = 18;
     }
 
-    event input(A) {
+    event input(A)
         cue flash;
-    }
 
     event bgdone {
         badge_id = 6;
