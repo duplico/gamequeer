@@ -238,6 +238,41 @@ void anim_tick() {
     }
 }
 
+void run_arithmetic(gq_op *cmd) {
+    t_gq_int arg1;
+    t_gq_int arg2;
+    t_gq_int result;
+
+    gq_memcpy_ram((uint8_t *) &arg1, cmd->arg1, GQ_INT_SIZE);
+    if (!(cmd->flags & GQ_OPF_LITERAL_ARG2)) {
+        gq_memcpy_ram((uint8_t *) &arg2, cmd->arg2, GQ_INT_SIZE);
+    } else {
+        arg2 = cmd->arg2;
+    }
+
+    switch (cmd->opcode) {
+        case GQ_OP_ADDBY:
+            result = arg1 + arg2;
+            break;
+        case GQ_OP_SUBBY:
+            result = arg1 - arg2;
+            break;
+        case GQ_OP_MULBY:
+            result = arg1 * arg2;
+            break;
+        case GQ_OP_DIVBY:
+            result = arg1 / arg2;
+            break;
+        case GQ_OP_MODBY:
+            result = arg1 % arg2;
+            break;
+        default:
+            return;
+    }
+
+    gq_assign_int(cmd->arg1, result);
+}
+
 void run_code(t_gq_pointer code_ptr) {
     gq_op cmd;
     gq_op_code opcode;
@@ -280,6 +315,13 @@ void run_code(t_gq_pointer code_ptr) {
                 code_ptr = cmd.arg1;
                 // Skip the rest of this loop, as we've already loaded the next command.
                 continue;
+            case GQ_OP_ADDBY:
+            case GQ_OP_SUBBY:
+            case GQ_OP_MULBY:
+            case GQ_OP_DIVBY:
+            case GQ_OP_MODBY:
+                run_arithmetic(&cmd);
+                break;
             default:
                 break;
         }

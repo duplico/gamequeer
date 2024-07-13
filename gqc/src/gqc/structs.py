@@ -137,11 +137,11 @@ class OpCode(IntEnum):
     CUE = 0x04
     SETVAR = 0x05
     GOTO = 0x06
-    ADD = 0x07
-    SUB = 0x08
-    MUL = 0x09
-    DIV = 0x0A
-    MOD = 0x0B
+    ADDBY = 0x07
+    SUBBY = 0x08
+    MULBY = 0x09
+    DIVBY = 0x0A
+    MODBY = 0x0B
     EQ = 0x0C
     NE = 0x0D
     GT = 0x0E
@@ -184,6 +184,10 @@ GQ_STAGE_SIZE = struct.calcsize(GQ_STAGE_FORMAT)
 
 GqReservedVariable = namedtuple('GqReservedVariable', 'name type description addr')
 
+GQ_REGISTER_INT_NAMES = [
+    'GQ_RI0', 'GQ_RI1', 'GQ_RI2', 'GQ_RI3', 'GQ_RI4', 'GQ_RI5', 'GQ_RI6', 'GQ_RI7'
+]
+
 GQ_RESERVED_VARIABLES = [
     GqReservedVariable('GQ_game_name', 'str', 'Name of the game', 0x000000),
     GqReservedVariable('GQ_game_id', 'int', 'ID of the game', 0x000004),
@@ -194,4 +198,8 @@ GQ_RESERVED_VARIABLES = [
     GqReservedVariable('GQ_menu_value', 'int', 'Menu selection', 0x000018),
     GqReservedVariable('GQ_menu_label', 'str', 'Menu label', 0x00001C),
     GqReservedVariable('GQ_text_input', 'str', 'Text input', 0x000020),
+]
+
+GQ_REGISTERS_INT = [
+    'GQ_RI0', 'GQ_RI1', 'GQ_RI2', 'GQ_RI3', 'GQ_RI4', 'GQ_RI5', 'GQ_RI6', 'GQ_RI7'
 ]

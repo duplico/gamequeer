@@ -10,9 +10,14 @@ from .commands import Command, CommandDone
 from . import structs
 
 def create_reserved_variables():
+    # Create the reserved special-purpose variables for the game:
     for gq_var in structs.GQ_RESERVED_VARIABLES:
         var = Variable(gq_var.type, gq_var.name, gq_var.description, 'builtin')
         var.set_addr(gq_var.addr, namespace=structs.GQ_PTR_BUILTIN)
+    
+    # Create the reserved integer registers for the game:
+    for reg_name in structs.GQ_REGISTERS_INT:
+        var = Variable('int', reg_name, 0, 'volatile')
 
 def create_symbol_table(table_dest = sys.stdout):
     # Output order:
@@ -97,6 +102,14 @@ def create_symbol_table(table_dest = sys.stdout):
         menu.set_addr(menus_ptr_start + menus_ptr_offset)
         menus_ptr_offset += menu.size()
 
+    # Allocation of volatile variables to the heap is required for event code
+    #  to resolve correctly, so do that now. We'll have another pass later to
+    #  generate their initialization code.
+    for var in list(Variable.storageclass_table['volatile'].values()):
+        # Heap memory allocation
+        var.set_addr(heap_ptr_start + heap_ptr_offset, namespace=structs.GQ_PTR_NS_HEAP)
+        heap_ptr_offset += var.size()
+
     # The event table's addresses are calculated as part of the placement of
     #  stages.
     events_ptr_start = menus_ptr_start + menus_ptr_offset
@@ -120,13 +133,10 @@ def create_symbol_table(table_dest = sys.stdout):
     init_table = dict()
     Game.game.startup_code_ptr = init_ptr_start
 
-    # Allocate our volatile variables on the heap, and their initialization code.
+    # Generate the volatile variables' initialization code.
     for var in list(Variable.storageclass_table['volatile'].values()):
-        # Heap memory allocation
-        var.set_addr(heap_ptr_start + heap_ptr_offset, namespace=structs.GQ_PTR_NS_HEAP)
-        heap_ptr_offset += var.size()
-
         # Initialization code allocation.
+        # TODO: Can this loop be combined with the allocation loop?
         init_cmd = var.get_init_command()
         init_cmd.set_addr(init_ptr_start + init_ptr_offset)
         init_table[init_cmd.addr] = init_cmd
@@ -211,6 +221,7 @@ def generate_code(parsed, symbol_table : dict):
                 if addr != next_expected_addr:
                     # TODO: emit a more friendly error than this, since it's a compiler/linker error
                     raise ValueError(f"Symbol at address {addr:#0{10}x} is not contiguous with the previous symbol.")
+                    # print(f"WARNING: Symbol at address {addr:#0{10}x} is not contiguous with the previous symbol; expected {next_expected_addr:#0{10}x}.", file=sys.stderr)
                 next_expected_addr += symbol.size()
                 output += symbol.to_bytes()
                 progress.update(task, advance=1)

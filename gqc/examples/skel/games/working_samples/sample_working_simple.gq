@@ -7,6 +7,9 @@ game {
 
 volatile {
     int badge_id = 29;
+    int A = 1;
+    int B = 2;
+    int C = 3;
     str game_name := "Test";
 }
 
@@ -52,8 +55,9 @@ stage start {
         play bganim george;
         cue flash;
 
-        badge_id = badge_id;
+        // badge_id = badge_id + 1 * 10;
         game_name := game_name_2;
+        badge_id = A + B * (C + 5);
     }
 
     event input(A) {
@@ -61,7 +65,7 @@ stage start {
     }
 
     event bgdone {
-        badge_id = badges_seen;
+        badge_id = 6;
         gostage selfie;
     }
 }
