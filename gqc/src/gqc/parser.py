@@ -6,10 +6,9 @@ import pyparsing as pp
 from rich import print
 
 from .datamodel import Animation, Game, Stage, Variable, Event, Menu, LightCue
+from .datamodel import IntExpression, GqcIntOperand
 from .commands import CommandPlayBg, CommandGoStage, CommandSetVar, CommandCue
 from .structs import EventType
-
-GqcIntOperand = namedtuple('GqcIntOperand', 'is_literal value')
 
 class GqcParseError(Exception):
     def __init__(self, message, s, loc):
@@ -216,7 +215,12 @@ def parse_int_operand(instring, loc, toks):
         return GqcIntOperand(False, toks[0])
 
 def parse_int_expression(instring, loc, toks):
-    print('expr', toks)
+    toks = toks[0]
+    if isinstance(toks, GqcIntOperand):
+        return toks
+    
+    return IntExpression(toks, instring, loc)
+
 
 def parse_command(instring, loc, toks):
     toks = toks[0]
@@ -236,7 +240,9 @@ def parse_command(instring, loc, toks):
         return CommandGoStage(instring, loc, toks[1])
     elif command == 'setvar':
         if isinstance(toks[2], GqcIntOperand):
-            return CommandSetVar(instring, loc, toks[3], toks[1], toks[2].value, toks[2].is_literal)
+            return CommandSetVar(instring, loc, toks[3], toks[1], toks[2].value, src_is_literal=toks[2].is_literal)
+        elif isinstance(toks[2], IntExpression):
+            return CommandSetVar(instring, loc, toks[3], toks[1], toks[2], src_is_expression=True)
         else:
             return CommandSetVar(instring, loc, toks[3], toks[1], toks[2])
     else:

@@ -2,7 +2,7 @@ import struct
 
 from . import structs
 from .structs import OpCode as CommandType
-from .datamodel import Stage, Animation, LightCue, Variable
+from .datamodel import Stage, Animation, LightCue, Variable, GqcIntOperand
 
 class Command:
     command_list = []
@@ -112,19 +112,65 @@ class CommandCue(Command):
     def __repr__(self) -> str:
         return f"CUE {self.arg1}"
 
+class CommandArithmetic(Command):
+    def __init__(self, command_type : CommandType, instring, loc, dst : GqcIntOperand, src : GqcIntOperand):
+        if command_type not in [CommandType.ADDBY, CommandType.SUBBY, CommandType.MULBY, CommandType.DIVBY, CommandType.MODBY]:
+            raise ValueError(f"Invalid arithmetic command {command_type}")
+
+        super().__init__(command_type, instring, loc)
+
+        if dst.is_literal:
+            # TODO: decode the code location.
+            raise ValueError("Unmodifiable lvalue!")
+        self.dst_name = dst.value
+        self.src = src
+        
+        self.resolve()
+    
+    def resolve(self):
+        if self.resolved:
+            return True
+
+        resolved = True
+
+        # dst is guaranteed not to be a literal, so:
+        if self.dst_name in Variable.var_table and Variable.var_table[self.dst_name].addr != 0x00000000:
+            self.arg1 = Variable.var_table[self.dst_name].addr
+        else:
+            resolved = False
+        
+        if self.src.is_literal:
+            self.arg2 = self.src.value
+            self.command_flags |= structs.OpFlags.LITERAL_ARG2
+        elif self.src.value in Variable.var_table and Variable.var_table[self.src.value].addr != 0x00000000:
+            self.arg2 = Variable.var_table[self.src.value].addr
+        else:
+            resolved = False
+        
+        self.resolved = resolved
+        
+        return self.resolved
+
+# TODO: crib from the above, and create separate SetVar for int and strings with different namedstructs
 class CommandSetVar(Command):
-    def __init__(self, instring, loc, datatype : str, dst : str, src = None, src_is_literal = False):
+    def __init__(self, instring, loc, datatype : str, dst : str, src = None, src_is_literal = False, src_is_expression = False):
         super().__init__(CommandType.SETVAR, instring, loc, arg1=None, arg2=None)
         self.dst_name = dst
         self.datatype = datatype
 
         self.src_is_literal = src_is_literal
+        self.src_is_expression = src_is_expression
+
         if src_is_literal and datatype == 'int':
             self.command_flags |= structs.OpFlags.LITERAL_ARG2
             self.arg2 = src
         elif src_is_literal and datatype == 'str':
             # TODO: create a value for it in .init
-            raise ValueError("Cannot set a string variable to a literal")
+            raise NotImplementedError("Cannot set a string variable to a literal")
+        elif src_is_expression and datatype == 'int':
+            self.src_expr = src
+        elif src_is_expression and datatype == 'str':
+            raise NotImplementedError("Cannot set a string variable to an expression")
         else:
             self.src_name = src
 
@@ -150,6 +196,15 @@ class CommandSetVar(Command):
         else:
             resolved = False
         
+        if self.src_is_expression:
+            if not self.src_expr.resolve():
+                resolved = False
+                return False
+            else:
+                # TODO: confirm this can never be a literal
+                self.src_name = self.src_expr.result_symbol.value
+                # TODO: take expression generated code and prepend it to my code
+
         if not self.src_is_literal:
             if self.src_name in Variable.var_table and Variable.var_table[self.src_name].addr != 0x00000000:
                 self.arg2 = Variable.var_table[self.src_name].addr
