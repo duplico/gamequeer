@@ -73,8 +73,25 @@ CmdPlayBgAnim:
 CmdPlayCue:
     'cue' cue=ID ';';
 
+IntOperand:
+    var=ID | val=INT;
+IntExprAdd:
+    left=IntOperand '+' right=IntExpr;
+IntExprSub:
+    left=IntOperand '-' right=IntExpr;
+IntExprMul:
+    left=IntOperand '*' right=IntExpr;
+IntExprDiv:
+    left=IntOperand '/' right=IntExpr;
+IntExprMod:
+    left=IntOperand '%' right=IntExpr;
+IntExprParen:
+    '(' expr=IntExpr ')';
+IntExpr:
+    IntExprAdd | IntExprSub | IntExprMul | IntExprDiv | IntExprMod | IntExprParen | IntOperand;
+
 CmdAssignmentInt:
-    dst=ID '=' src=ID ';';
+    dst=ID '=' src=IntExpr ';';
 CmdAssignmentStr:
     dst=ID ':=' src=ID ';';
 
