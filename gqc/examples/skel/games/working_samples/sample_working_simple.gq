@@ -10,6 +10,7 @@ volatile {
     int A = 1;
     int B = 2;
     int C = 3;
+    int D = 0;
     str game_name := "Test";
 }
 
@@ -58,6 +59,7 @@ stage start {
         // badge_id = badge_id + 1 * 10;
         game_name := game_name_2;
         badge_id = A + B * (C + 5);
+        D = badge_id == 17;
     }
 
     event input(A) {
