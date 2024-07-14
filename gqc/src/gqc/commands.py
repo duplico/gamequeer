@@ -415,7 +415,7 @@ class CommandIf(Command):
             raise ValueError("Cannot set address of unresolved IF block")
         
         super().set_addr(addr, namespace)
-        false_address = self.addr + super().size() + self.true_section_size
+        false_address = self.addr + self.condition_section_size + super().size() + self.true_section_size
         self.arg1 = false_address
 
 
@@ -423,4 +423,4 @@ class CommandIf(Command):
         if not self.resolve():
             return f"IF: UNRESOLVED"
 
-        return f"{self.condition.commands if self.condition_is_expression else ''} {super().__repr__()} {self.true_cmds} {(repr(CommandGoto(None, None, self.addr + self.size())) + ' ') if self.false_cmds else ''}{self.false_cmds}"
+        return f"{self.condition.commands if self.condition_is_expression else ''} {super().__repr__()} {self.true_cmds} {(repr(CommandGoto(None, None, self.addr + self.size())) + ' ') if self.false_cmds else ''}{self.false_cmds if self.false_cmds else ''}"
