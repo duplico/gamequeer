@@ -8,6 +8,7 @@ from rich import print
 from .datamodel import Animation, Game, Stage, Variable, Event, Menu, LightCue
 from .datamodel import IntExpression, GqcIntOperand
 from .commands import CommandPlayBg, CommandGoStage, CommandSetVar, CommandCue
+from .commands import CommandIf, Command
 from .structs import EventType
 from . import structs
 
@@ -222,10 +223,22 @@ def parse_int_expression(instring, loc, toks):
 
     return IntExpression(toks, instring, loc)
 
+def parse_if(instring, loc, toks):
+    condition = toks[0]
+    true_block = toks[1]
+    false_block = toks[2] if len(toks) == 3 else None
+
+    return CommandIf(instring, loc, condition, true_block, false_cmds=false_block)
+
 
 def parse_command(instring, loc, toks):
     toks = toks[0]
 
+    # If the command has already been fully parsed, just pass it through:
+    if isinstance(toks, Command):
+        return toks
+
+    # Otherwise, parse it:
     command = toks[0]
 
     if command == "play":

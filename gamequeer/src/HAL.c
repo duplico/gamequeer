@@ -75,6 +75,14 @@ uint8_t gq_assign_int(t_gq_pointer dest, t_gq_int value) {
     return 1;
 }
 
+t_gq_int gq_load_int(t_gq_pointer src) {
+    t_gq_int value = 0;
+    for (uint8_t i = 0; i < GQ_INT_SIZE; i++) {
+        value |= read_byte(src + i) << (i * 8);
+    }
+    return value;
+}
+
 void HAL_update_leds() {
     for (uint8_t i = 0; i < 5; i++) {
         gfx_color(gq_leds[i].r >> 8, gq_leds[i].g >> 8, gq_leds[i].b >> 8);

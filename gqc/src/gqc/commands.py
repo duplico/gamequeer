@@ -1,8 +1,10 @@
 import struct
 
+from gqc.structs import GQ_PTR_NS_CART
+
 from . import structs
 from .structs import OpCode as CommandType
-from .datamodel import Stage, Animation, LightCue, Variable, GqcIntOperand
+from .datamodel import Stage, Animation, LightCue, Variable, GqcIntOperand, IntExpression
 
 class Command:
     command_list = []
@@ -55,7 +57,7 @@ class Command:
         return structs.GQ_OP_SIZE
 
     def __repr__(self) -> str:
-        return f"Command({self.command_type.name}:{self.command_flags} {self.arg1} {self.arg2});"
+        return f"Command({self.command_type.name}:{self.command_flags:#0{4}x} {self.arg1:#0{10}x} {self.arg2:#0{10}x});"
 
 class CommandDone(Command):
     def __init__(self):
@@ -228,7 +230,7 @@ class CommandSetVar(Command):
         if self.src_is_expression:
             if not self.src_expr.resolve():
                 resolved = False
-                return False
+                return False # TODO: Was this needed?
             else:
                 # TODO: confirm this can never be a literal
                 self.src_name = self.src_expr.result_symbol.value
@@ -296,4 +298,129 @@ class CommandGoto(Command):
         return self.resolved
     
     def __repr__(self) -> str:
-        return f"GOTO {self.arg1}"
+        return f"GOTO {self.arg1:#0{10}x}"
+
+class CommandIf(Command):
+    def __init__(self, instring, loc, condition : GqcIntOperand | IntExpression, true_cmds : list, false_cmds : list = None):
+        super().__init__(CommandType.GOTOIFN, instring, loc)
+        self.condition = condition
+        self.condition_is_expression = True if isinstance(condition, IntExpression) else False
+        self.condition_section_size = 0
+        self.true_cmds = true_cmds
+        self.true_section_size = 0
+        self.false_cmds = false_cmds
+        self.false_section_size = 0
+
+        if not self.condition_is_expression and self.condition.is_literal:
+            self.command_flags |= structs.OpFlags.LITERAL_ARG2
+            self.arg2 = condition.value
+
+        self.resolve()
+    
+    def resolve(self):
+        if self.resolved:
+            return True
+
+        resolved = True
+
+        # If the condition is an expression, resolve it to the register name that it
+        #  outputs to.
+        if self.condition_is_expression:
+            if self.condition.resolve():
+                self.condition_name = self.condition.result_symbol.value
+                self.condition_section_size = self.condition.size()
+            else:
+                resolved = False
+                return False
+        elif not self.condition.is_literal:
+            self.condition_name = self.condition.value
+        
+        # If the condition is literal, there's nothing to do - it was already set up in __init__.
+        # TODO: We can probably optimize away any literal conditionals.
+
+        # If the condition is a reference, attempt to resolve the reference:
+        if self.condition_is_expression or not self.condition.is_literal:
+            if self.condition_name in Variable.var_table:
+                if Variable.var_table[self.condition_name].datatype != 'int':
+                    raise ValueError(f"Variable {self.condition_name} is not an integer")
+                if Variable.var_table[self.condition_name].addr != 0x00000000:
+                    self.arg2 = Variable.var_table[self.condition_name].addr
+                else:
+                    resolved = False
+
+        # Resolve the true commands.
+        self.true_section_size = 0
+        for cmd in self.true_cmds:
+            if cmd.resolve():
+                self.true_section_size += cmd.size()
+            else:
+                resolved = False
+        
+        self.false_section_size = 0
+        # Resolve the false commands.
+        if self.false_cmds:
+            for cmd in self.false_cmds:
+                if cmd.resolve():
+                    self.false_section_size += cmd.size()
+                else:
+                    resolved = False
+
+        if self.false_section_size != 0:
+            self.true_section_size += structs.GQ_OP_SIZE # Add the size of the GOTO command to the true section.
+
+        self.resolved = resolved
+        return self.resolved
+    
+    def size(self):
+        if not self.resolve():
+            raise ValueError("Cannot calculate size of unresolved IF block")
+        
+        # The size of this if block is the size of the GOTOIFN command, plus the size of the true section,
+        #  plus the size of the false section.
+        return self.condition_section_size + super().size() + self.true_section_size + self.false_section_size
+    
+    def to_bytes(self):
+        if not self.resolve():
+            # This also confirms that the condition is resolved.
+            raise ValueError("Cannot serialize unresolved IF block")
+
+        if not self.addr:
+            raise ValueError("Cannot serialize IF block without base address set")
+        
+        cmd_bytes = b''
+        
+        # First, if we need to evaluate an expression as the condition, perform that evaluation.
+        if self.condition_is_expression:
+            for cmd in self.condition.commands:
+                cmd_bytes += cmd.to_bytes()
+
+        # Next, serialize the GOTOIFN command.
+        cmd_bytes += super().to_bytes()
+
+        # Next, serialize the true commands.
+        for cmd in self.true_cmds:
+            cmd_bytes += cmd.to_bytes()
+        
+        # If there are false commands, we need to add a GOTO command to jump over them,
+        #  and then serialize the false commands.
+        if self.false_cmds:
+            cmd_bytes += CommandGoto(None, None, self.addr + self.size()).to_bytes()
+            for cmd in self.false_cmds:
+                cmd_bytes += cmd.to_bytes()
+        
+        return cmd_bytes
+    
+    def set_addr(self, addr: int, namespace: int = structs.GQ_PTR_NS_CART):
+        if not self.resolve():
+            raise ValueError("Cannot set address of unresolved IF block")
+        
+        super().set_addr(addr, namespace)
+        false_address = self.addr + self.condition_section_size + super().size() + self.true_section_size
+        self.arg1 = false_address
+
+
+    def __repr__(self) -> str:
+        if not self.resolve():
+            return f"IF: UNRESOLVED"
+
+        return f"{self.condition.commands if self.condition_is_expression else ''} {super().__repr__()} {self.true_cmds} {(repr(CommandGoto(None, None, self.addr + self.size())) + ' ') if self.false_cmds else ''}{self.false_cmds if self.false_cmds else ''}"

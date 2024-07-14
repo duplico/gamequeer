@@ -92,15 +92,20 @@ CmdAssignmentStr:
 CmdAssignment:
     CmdAssignmentInt | CmdAssignmentStr;
 
+CmdIf:
+    'if' '(' condition=IntExpr ')' true_cmds=StageCommands ('else' false_cmds=StageCommands)?;
+
 StageCommand:
-    CmdGoStage | CmdPlayBgAnim | CmdPlayCue | CmdAssignment;
+    CmdGoStage | CmdPlayBgAnim | CmdPlayCue | CmdAssignment | CmdIf;
+StageCommands:
+    StageCommand | '{' cmds=StageCommand* '}';
 
 // Stage definitions
 
 EventType:
     eventType='input' button=INPUTBUTTON | eventType='bgdone' | eventType='menu' | eventType='enter';
 StageEvent:
-    'event' EventType (StageCommand | '{' cmds=StageCommand* '}');
+    'event' EventType StageCommands;
 StageMenu:
     'menu' menu=ID ('prompt' prompt=STRING)? ';';
 StageBgAnim:
