@@ -56,7 +56,7 @@ stage start {
         play bganim george;
         cue flash;
 
-        game_name := game_name_2;
+        game_name := "foobar";
         badge_id = A + B * (5 + -C);
         D = !(badge_id == 17);
 
