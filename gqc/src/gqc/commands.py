@@ -182,7 +182,7 @@ class CommandArithmetic(Command):
         
         return self.resolved
 
-# TODO: crib from the above, and create separate SetVar for int and strings with different namedstructs
+# TODO: Consider cribbing from the above, and creating separate SetVar for int and strings with different namedstructs
 class CommandSetVar(Command):
     def __init__(self, instring, loc, datatype : str, dst : str, src = None, src_is_literal = False, src_is_expression = False):
         super().__init__(CommandType.SETVAR, instring, loc, arg1=None, arg2=None)

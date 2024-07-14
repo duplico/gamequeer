@@ -4,7 +4,7 @@ from .parser import parse_variable_definition, parse_variable_definition_storage
 from .parser import parse_animation_definition, parse_stage_definition, parse_game_definition
 from .parser import parse_event_definition, parse_command, parse_assignment, parse_lightcue_definition_section
 from .parser import parse_menu_definition, parse_bound_menu
-from .parser import parse_int_expression, parse_int_operand, parse_if
+from .parser import parse_int_expression, parse_int_operand, parse_str_literal, parse_if
 
 """
 Grammar for GQC language
@@ -149,7 +149,11 @@ def build_game_parser():
     event_statements = pp.Forward()
     
     # Assignments and expressions
-    string_operand = identifier | string
+    string_literal = pp.QuotedString('"').setName("string_literal")
+    string_operand = identifier | string_literal
+
+    string_literal.add_parse_action(parse_str_literal)
+
     string_expression = string_operand
     string_assignment = pp.Keyword(":=") - string_expression - pp.Suppress(";")
 

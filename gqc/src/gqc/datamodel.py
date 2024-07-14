@@ -225,6 +225,20 @@ class Variable:
     storageclass_table = dict(persistent={}, volatile={}, builtin={})
     link_table = dict() # OrderedDict not needed to remember order since Python 3.7
     heap_table = dict()
+    
+    str_literals = dict()
+
+    @classmethod
+    def get_str_literal(cls, value : str):
+        if value in cls.str_literals:
+            return cls.str_literals[value]
+        else:
+            name = f'S{len(cls.str_literals)}.strlit'
+            cls.str_literals[value] = name
+
+            # Create a persistent variable to hold the string literal
+            Variable('str', name, value, storageclass='persistent')
+            return name
 
     def __init__(self, datatype : str, name : str, value, storageclass : str = None):
         self.addr = 0x00000000 # Set at link time

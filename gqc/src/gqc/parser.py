@@ -164,7 +164,7 @@ def parse_variable_definition_storageclass(instring, loc, toks):
     if Variable.storageclass_table[storageclass]:
         non_init_vars_present = False
         for var in Variable.storageclass_table[storageclass].values():
-            if not var.name in structs.GQ_REGISTER_INT_NAMES and not var.name.endswith(".init"):
+            if not var.name in structs.GQ_REGISTER_INT_NAMES and not var.name.endswith(".init") and not var.name.endswith(".strlit"):
                 non_init_vars_present = True
                 break
         if non_init_vars_present:
@@ -223,13 +223,15 @@ def parse_int_expression(instring, loc, toks):
 
     return IntExpression(toks, instring, loc)
 
+def parse_str_literal(instring, loc, toks):
+    return Variable.get_str_literal(toks[0])
+
 def parse_if(instring, loc, toks):
     condition = toks[0]
     true_block = toks[1]
     false_block = toks[2] if len(toks) == 3 else None
 
     return CommandIf(instring, loc, condition, true_block, false_cmds=false_block)
-
 
 def parse_command(instring, loc, toks):
     toks = toks[0]
