@@ -32,6 +32,8 @@
 #define MAX_CONCURRENT_ANIMATIONS 4
 #define GQ_HEAP_SIZE              0x200
 
+#define GQ_MENU_MAX_OPTIONS 6
+
 typedef uint32_t t_gq_pointer;
 // TODO: make every int from the builder use this:
 typedef int32_t t_gq_int;

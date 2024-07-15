@@ -22,7 +22,7 @@ uint8_t menu_option_selected   = 0;
 t_gq_int GQ_BUILTIN_menu_value = 0;
 // TODO: Add all the other built-ins
 
-gq_menu *menu_current; // TODO: we need a cap on menu sizes.
+gq_menu *menu_current; // TODO: don't dynamically allocate this
 
 // TODO: Move
 const uint32_t palette_bw[] = {0x000000, 0xffffff};

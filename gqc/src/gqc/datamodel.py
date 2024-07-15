@@ -668,6 +668,9 @@ class Menu:
         if len(options) == 0:
             raise ValueError("At least one menu option is required.")
 
+        if len(options) > structs.GQ_MENU_MAX_OPTIONS:
+            raise ValueError(f"Menu {name} has too many options ({len(options)}); maximum is {structs.GQ_MENU_MAX_OPTIONS}")
+
         if name in Menu.menu_table:
             raise ValueError(f"Menu {name} already defined")
         
