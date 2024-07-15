@@ -1,18 +1,19 @@
+#include <string.h>
+
 #include "gfx.h"
 #include "grlib.h"
 #include "grlib_gfx.h"
+
+uint8_t frame_buffer[OLED_HORIZONTAL_MAX][OLED_VERTICAL_MAX] = {
+    0,
+};
 
 void gfx_driver_init(char *window_title) {
     gfx_open(OLED_HORIZONTAL_MAX + LEDS_W * 2, OLED_VERTICAL_MAX, window_title);
 }
 
 static void gfx_driver_pixelDraw(void *displayData, int16_t x, int16_t y, uint16_t value) {
-    if (value)
-        gfx_color(255, 255, 255);
-    else
-        gfx_color(0, 0, 0);
-
-    gfx_point(x + LEDS_W, y);
+    frame_buffer[x][y] = value ? 1 : 0;
 }
 
 static void gfx_driver_pixelDrawMultiple(
@@ -42,33 +43,23 @@ static void gfx_driver_pixelDrawMultiple(
 }
 
 static void gfx_driver_lineDrawH(void *displayData, int16_t x1, int16_t x2, int16_t y, uint16_t value) {
-    if (value) {
-        gfx_color(255, 255, 255);
-    } else {
-        gfx_color(0, 0, 0);
+    for (int16_t x = x1; x <= x2; x++) {
+        gfx_driver_pixelDraw(displayData, x, y, value);
     }
-
-    gfx_line(x1, y, x2, y);
 }
 
 static void gfx_driver_lineDrawV(void *displayData, int16_t x, int16_t y1, int16_t y2, uint16_t value) {
-    if (value) {
-        gfx_color(255, 255, 255);
-    } else {
-        gfx_color(0, 0, 0);
+    for (int16_t y = y1; y <= y2; y++) {
+        gfx_driver_pixelDraw(displayData, x, y, value);
     }
-
-    gfx_line(x, y1, x, y2);
 }
 
 static void gfx_driver_rectFill(void *displayData, const Graphics_Rectangle *rect, uint16_t value) {
-    if (value) {
-        gfx_color(255, 255, 255);
-    } else {
-        gfx_color(0, 0, 0);
+    for (int16_t y = rect->yMin; y <= rect->yMax; y++) {
+        for (int16_t x = rect->xMin; x <= rect->xMax; x++) {
+            gfx_driver_pixelDraw(displayData, x, y, value);
+        }
     }
-
-    gfx_fillrect(rect->sXMin, rect->sYMin, rect->sXMax, rect->sYMax);
 }
 
 static uint32_t gfx_driver_colorTranslate(void *displayData, uint32_t value) {
@@ -77,13 +68,21 @@ static uint32_t gfx_driver_colorTranslate(void *displayData, uint32_t value) {
 }
 
 static void gfx_driver_flush(void *displayData) {
+    for (int16_t y = 0; y < OLED_VERTICAL_MAX; y++) {
+        for (int16_t x = 0; x < OLED_HORIZONTAL_MAX; x++) {
+            if (frame_buffer[x][y]) {
+                gfx_color(255, 255, 255);
+            } else {
+                gfx_color(0, 0, 0);
+            }
+            gfx_point(x + LEDS_W, y);
+        }
+    }
     gfx_flush();
 }
 
 static void gfx_driver_clearDisplay(void *displayData, uint16_t value) {
-    uint8_t color_val = value ? 0xFF : 0x00;
-    gfx_color(color_val, color_val, color_val);
-    gfx_fillrect(LEDS_W, 0, OLED_HORIZONTAL_MAX, OLED_VERTICAL_MAX);
+    memset(frame_buffer, value ? 1 : 0, sizeof(frame_buffer));
 }
 
 const Graphics_Display g_gfx = {

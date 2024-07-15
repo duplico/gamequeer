@@ -201,6 +201,8 @@ void draw_animations() {
             }
         }
     }
+
+    Graphics_flushBuffer(&g_sContext);
 }
 
 void anim_tick() {
