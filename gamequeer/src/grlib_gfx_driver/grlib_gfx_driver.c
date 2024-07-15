@@ -13,6 +13,10 @@ void gfx_driver_init(char *window_title) {
 }
 
 static void gfx_driver_pixelDraw(void *displayData, int16_t x, int16_t y, uint16_t value) {
+    if (x < 0 || x >= OLED_HORIZONTAL_MAX || y < 0 || y >= OLED_VERTICAL_MAX) {
+        // TODO: This is happening on our second animation, for some reason.
+        return;
+    }
     frame_buffer[x][y] = value ? 1 : 0;
 }
 
@@ -87,7 +91,7 @@ static void gfx_driver_clearDisplay(void *displayData, uint16_t value) {
 
 const Graphics_Display g_gfx = {
     sizeof(Graphics_Display),     // size
-    0x00,                         // displayData - unneeded here
+    frame_buffer,                 // displayData - unneeded here
     OLED_HORIZONTAL_MAX,          // width
     OLED_VERTICAL_MAX,            // height
     gfx_driver_pixelDraw,         // callPixelDraw
