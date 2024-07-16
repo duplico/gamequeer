@@ -73,7 +73,7 @@ CmdPlayBgAnim:
 CmdPlayCue:
     'cue' cue=ID ';';
 CmdTimer:
-    'timer' interval=INT ';';
+    'timer' interval=IntExpr ';';
 
 IntOperand:
     var=ID | val=INT;

@@ -80,7 +80,7 @@ stage selfie {
     bganim george2;
 
     event bgdone {
-        timer 100;
+        timer badge_id + 5;
     }
 
     event timer {
