@@ -122,6 +122,15 @@ class CommandCue(Command):
     def __repr__(self) -> str:
         return f"CUE {self.arg1}"
 
+class CommandTimer(Command):
+    def __init__(self, instring, loc, interval : int):
+        super().__init__(CommandType.TIMER, instring, loc)
+        self.arg1 = interval
+        self.resolved = True
+    
+    def __repr__(self) -> str:
+        return f"TIMER {self.arg1}"
+
 class CommandArithmetic(Command):
     OPERATORS = {
         '+': CommandType.ADDBY,

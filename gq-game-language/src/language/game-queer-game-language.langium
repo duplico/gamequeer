@@ -72,6 +72,8 @@ CmdPlayBgAnim:
     'play' 'bganim' anim=ID ';';
 CmdPlayCue:
     'cue' cue=ID ';';
+CmdTimer:
+    'timer' interval=INT ';';
 
 IntOperand:
     var=ID | val=INT;
@@ -87,7 +89,7 @@ IntExpr:
 CmdAssignmentInt:
     dst=ID '=' src=IntExpr ';';
 CmdAssignmentStr:
-    dst=ID ':=' src=ID ';';
+    dst=ID ':=' (src=ID | src=STRING) ';';
 
 CmdAssignment:
     CmdAssignmentInt | CmdAssignmentStr;
@@ -96,14 +98,14 @@ CmdIf:
     'if' '(' condition=IntExpr ')' true_cmds=StageCommands ('else' false_cmds=StageCommands)?;
 
 StageCommand:
-    CmdGoStage | CmdPlayBgAnim | CmdPlayCue | CmdAssignment | CmdIf;
+    CmdGoStage | CmdPlayBgAnim | CmdPlayCue | CmdTimer | CmdAssignment | CmdIf;
 StageCommands:
     StageCommand | '{' cmds=StageCommand* '}';
 
 // Stage definitions
 
 EventType:
-    eventType='input' button=INPUTBUTTON | eventType='bgdone' | eventType='menu' | eventType='enter';
+    eventType='input' button=INPUTBUTTON | eventType='bgdone' | eventType='menu' | eventType='enter' | eventType='timer';
 StageEvent:
     'event' EventType StageCommands;
 StageMenu:

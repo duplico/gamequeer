@@ -51,13 +51,14 @@ stage_bganim = "bganim" identifier ";"
 stage_bgcue = "bgcue" identifier ";"
 stage_menu = "menu" identifier ";" | "menu" identifier "prompt" STRING ";"
 stage_event = "event" event_type event_statement
-event_type = "input" "(" event_input_button ")" | "bgdone" | "menu" | "enter"
+event_type = "input" "(" event_input_button ")" | "bgdone" | "menu" | "enter" | "timer"
 event_input_button = "A" | "B" | "<-" | "->" | "-"
 event_statements = event_statement | "{" event_statement* "}"
-event_statement = play | cue | gostage | assignment_statement | if_statement
+event_statement = play | cue | gostage | assignment_statement | if_statement | timer
 play = "play" "bganim" identifier ";"
 cue = "cue" identifier ";"
 gostage = "gostage" identifier ";"
+timer = "timer" integer ";"
 
 assignment_statement = int_assignment | string_assignment
 int_assignment = identifier "=" int_expression ";"
@@ -182,15 +183,16 @@ def build_game_parser():
     play = pp.Group(pp.Keyword("play") - pp.Keyword("bganim") - identifier - pp.Suppress(";"))
     cue = pp.Group(pp.Keyword("cue") - identifier - pp.Suppress(";"))
     gostage = pp.Group(pp.Keyword("gostage") - identifier - pp.Suppress(";"))
+    timer = pp.Group(pp.Keyword("timer") - integer - pp.Suppress(";"))
 
-    event_statement = play | cue | gostage | if_statement | assignment_statement
+    event_statement = play | cue | gostage | timer | if_statement | assignment_statement
     event_statements << (pp.Group(event_statement | pp.Suppress("{") - pp.ZeroOrMore(event_statement) - pp.Suppress("}")))
 
     event_statement.set_parse_action(parse_command)
 
     # Event types
     event_input_button = pp.Keyword("A") | pp.Keyword("B") | pp.Keyword("<-") | pp.Keyword("->") | pp.Keyword("-")
-    event_type = pp.Keyword("input") - pp.Suppress("(") - event_input_button - pp.Suppress(")") | pp.Keyword("bgdone") | pp.Keyword("menu") | pp.Keyword("enter")
+    event_type = pp.Keyword("input") - pp.Suppress("(") - event_input_button - pp.Suppress(")") | pp.Keyword("timer") | pp.Keyword("bgdone") | pp.Keyword("menu") | pp.Keyword("enter")
 
     # General stage definition and options
     stage_bganim = pp.Group(pp.Keyword("bganim") - identifier - pp.Suppress(";"))
