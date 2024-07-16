@@ -58,7 +58,7 @@ event_statement = play | cue | gostage | assignment_statement | if_statement | t
 play = "play" "bganim" identifier ";"
 cue = "cue" identifier ";"
 gostage = "gostage" identifier ";"
-timer = "timer" integer ";"
+timer = "timer" int_expression ";"
 
 assignment_statement = int_assignment | string_assignment
 int_assignment = identifier "=" int_expression ";"
@@ -183,7 +183,7 @@ def build_game_parser():
     play = pp.Group(pp.Keyword("play") - pp.Keyword("bganim") - identifier - pp.Suppress(";"))
     cue = pp.Group(pp.Keyword("cue") - identifier - pp.Suppress(";"))
     gostage = pp.Group(pp.Keyword("gostage") - identifier - pp.Suppress(";"))
-    timer = pp.Group(pp.Keyword("timer") - integer - pp.Suppress(";"))
+    timer = pp.Group(pp.Keyword("timer") - int_expression - pp.Suppress(";"))
 
     event_statement = play | cue | gostage | timer | if_statement | assignment_statement
     event_statements << (pp.Group(event_statement | pp.Suppress("{") - pp.ZeroOrMore(event_statement) - pp.Suppress("}")))

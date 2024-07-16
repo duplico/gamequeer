@@ -50,7 +50,7 @@ class Command:
             return struct.pack(structs.GQ_OP_FORMAT_LITERAL_ARG1, *op)
         elif self.command_flags & structs.OpFlags.LITERAL_ARG2:
             return struct.pack(structs.GQ_OP_FORMAT_LITERAL_ARG2, *op)
-        
+
         return struct.pack(structs.GQ_OP_FORMAT, *op)
     
     def size(self):
@@ -121,15 +121,6 @@ class CommandCue(Command):
     
     def __repr__(self) -> str:
         return f"CUE {self.arg1}"
-
-class CommandTimer(Command):
-    def __init__(self, instring, loc, interval : int):
-        super().__init__(CommandType.TIMER, instring, loc)
-        self.arg1 = interval
-        self.resolved = True
-    
-    def __repr__(self) -> str:
-        return f"TIMER {self.arg1}"
 
 class CommandArithmetic(Command):
     OPERATORS = {
@@ -309,21 +300,21 @@ class CommandGoto(Command):
     def __repr__(self) -> str:
         return f"GOTO {self.arg1:#0{10}x}"
 
-class CommandIf(Command):
-    def __init__(self, instring, loc, condition : GqcIntOperand | IntExpression, true_cmds : list, false_cmds : list = None):
-        super().__init__(CommandType.GOTOIFN, instring, loc)
-        self.condition = condition
-        self.condition_is_expression = True if isinstance(condition, IntExpression) else False
-        self.condition_section_size = 0
-        self.true_cmds = true_cmds
-        self.true_section_size = 0
-        self.false_cmds = false_cmds
-        self.false_section_size = 0
+class CommandWithIntExpressionArgument(Command):
 
-        if not self.condition_is_expression and self.condition.is_literal:
+    # TODO: Maybe track whether the expression is arg1 or arg2 or both?
+    #       But, for now, it'll be assumed that the expression is arg2.
+    def __init__(self, command_type : CommandType, instring, loc, expr_or_operand : GqcIntOperand | IntExpression):
+        super().__init__(command_type, instring, loc)
+
+        self.arg2_is_expression = isinstance(expr_or_operand, IntExpression)
+        self.arg2_section_size = 0
+        self.expr_or_operand = expr_or_operand
+
+        if not self.arg2_is_expression and expr_or_operand.is_literal:
             self.command_flags |= structs.OpFlags.LITERAL_ARG2
-            self.arg2 = condition.value
-
+            self.arg2 = expr_or_operand.value
+        
         self.resolve()
     
     def resolve(self):
@@ -332,30 +323,87 @@ class CommandIf(Command):
 
         resolved = True
 
-        # If the condition is an expression, resolve it to the register name that it
-        #  outputs to.
-        if self.condition_is_expression:
-            if self.condition.resolve():
-                self.condition_name = self.condition.result_symbol.value
-                self.condition_section_size = self.condition.size()
+        if self.arg2_is_expression:
+            if self.expr_or_operand.resolve():
+                self.arg2_name = self.expr_or_operand.result_symbol.value
+                self.arg2_section_size = self.expr_or_operand.size()
             else:
                 resolved = False
                 return False
-        elif not self.condition.is_literal:
-            self.condition_name = self.condition.value
+        elif not self.expr_or_operand.is_literal:
+            self.arg2_name = self.expr_or_operand.value
         
-        # If the condition is literal, there's nothing to do - it was already set up in __init__.
-        # TODO: We can probably optimize away any literal conditionals.
+        # If the expression is a literal, it was already resolved in __init__.
 
-        # If the condition is a reference, attempt to resolve the reference:
-        if self.condition_is_expression or not self.condition.is_literal:
-            if self.condition_name in Variable.var_table:
-                if Variable.var_table[self.condition_name].datatype != 'int':
-                    raise ValueError(f"Variable {self.condition_name} is not an integer")
-                if Variable.var_table[self.condition_name].addr != 0x00000000:
-                    self.arg2 = Variable.var_table[self.condition_name].addr
+        # If the expression is a reference, attempt to resolve the reference:
+        if self.arg2_is_expression or not self.expr_or_operand.is_literal:
+            if self.arg2_name in Variable.var_table:
+                if Variable.var_table[self.arg2_name].datatype != 'int':
+                    raise ValueError(f"Variable {self.arg2_name} is not an integer")
+                if Variable.var_table[self.arg2_name].addr != 0x00000000:
+                    self.arg2 = Variable.var_table[self.arg2_name].addr
                 else:
                     resolved = False
+        
+        self.resolved = resolved
+        return self.resolved
+    
+    def expr_section_size(self):
+        if not self.resolve():
+            raise ValueError("Cannot calculate size of unresolved expression section")
+        
+        return self.arg2_section_size
+    
+    def expr_section_bytes(self):
+        if not self.resolve():
+            raise ValueError("Cannot serialize unresolved expression section")
+        
+        if self.arg2_is_expression:
+            expr_bytes = b''
+            for cmd in self.expr_or_operand.commands:
+                expr_bytes += cmd.to_bytes()
+            return expr_bytes
+        else:
+            return b''
+        
+    def size(self):
+        if not self.resolve():
+            raise ValueError("Cannot calculate size of unresolved expression section")
+        
+        return self.expr_section_size() + super().size()
+    
+    def to_bytes(self):
+        if not self.resolve():
+            raise ValueError("Cannot serialize unresolved expression section")
+        
+        return self.expr_section_bytes() + super().to_bytes()
+    
+    def __repr__(self) -> str:
+        if not self.resolve():
+            return f"{self.command_type.name}: UNRESOLVED"
+
+        return f"{self.expr_or_operand.commands if self.arg2_is_expression else ''} {super().__repr__()}"
+
+class CommandIf(CommandWithIntExpressionArgument):
+    def __init__(self, instring, loc, condition : GqcIntOperand | IntExpression, true_cmds : list, false_cmds : list = None):
+        super().__init__(CommandType.GOTOIFN, instring, loc, condition)
+        self.true_cmds = true_cmds
+        self.true_section_size = 0
+        self.false_cmds = false_cmds
+        self.false_section_size = 0
+
+        self.resolve()
+    
+    def resolve(self):
+        if self.resolved:
+            return True
+        
+        if not super().resolve():
+            return False
+
+        resolved = True
+
+        # TODO: We can probably optimize away any literal conditionals.
 
         # Resolve the true commands.
         self.true_section_size = 0
@@ -386,7 +434,7 @@ class CommandIf(Command):
         
         # The size of this if block is the size of the GOTOIFN command, plus the size of the true section,
         #  plus the size of the false section.
-        return self.condition_section_size + super().size() + self.true_section_size + self.false_section_size
+        return self.expr_section_size() + super().size() + self.true_section_size + self.false_section_size
     
     def to_bytes(self):
         if not self.resolve():
@@ -396,12 +444,9 @@ class CommandIf(Command):
         if not self.addr:
             raise ValueError("Cannot serialize IF block without base address set")
         
-        cmd_bytes = b''
-        
-        # First, if we need to evaluate an expression as the condition, perform that evaluation.
-        if self.condition_is_expression:
-            for cmd in self.condition.commands:
-                cmd_bytes += cmd.to_bytes()
+        # If there's an expression section required, this will serialize it.
+        #  Otherwise, it will be an empty byte string.
+        cmd_bytes = self.expr_section_bytes()
 
         # Next, serialize the GOTOIFN command.
         cmd_bytes += super().to_bytes()
@@ -424,7 +469,7 @@ class CommandIf(Command):
             raise ValueError("Cannot set address of unresolved IF block")
         
         super().set_addr(addr, namespace)
-        false_address = self.addr + self.condition_section_size + super().size() + self.true_section_size
+        false_address = self.addr + super().size() + self.true_section_size
         self.arg1 = false_address
 
 
@@ -432,4 +477,12 @@ class CommandIf(Command):
         if not self.resolve():
             return f"IF: UNRESOLVED"
 
-        return f"{self.condition.commands if self.condition_is_expression else ''} {super().__repr__()} {self.true_cmds} {(repr(CommandGoto(None, None, self.addr + self.size())) + ' ') if self.false_cmds else ''}{self.false_cmds if self.false_cmds else ''}"
+        return f"{self.expr_or_operand.commands if self.arg2_is_expression else ''} {super().__repr__()} {self.true_cmds} {(repr(CommandGoto(None, None, self.addr + self.size())) + ' ') if self.false_cmds else ''}{self.false_cmds if self.false_cmds else ''}"
+
+class CommandTimer(CommandWithIntExpressionArgument):
+    def __init__(self, instring, loc, interval : GqcIntOperand | IntExpression):
+        print(interval)
+        super().__init__(CommandType.TIMER, instring, loc, interval)
+    
+    # def __repr__(self) -> str:
+    #     return f"TIMER {self.arg2}"
