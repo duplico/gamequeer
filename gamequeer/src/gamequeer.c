@@ -56,9 +56,6 @@ void menu_load(t_gq_pointer menu_ptr, t_gq_pointer menu_prompt) {
 }
 
 void menu_close() {
-    // TODO: make sure we prevent stage changes while a menu is open,
-    //       OR we close the menu on a stage change. Maybe both.
-
     if (!menu_active) {
         return;
     }
@@ -97,6 +94,8 @@ uint8_t load_stage(t_gq_pointer stage_ptr) {
         // If we're currently playing a background cue, stop it.
         led_stop();
     }
+
+    menu_close();
 
     if (stage_current.menu_pointer) {
         // If this stage has a menu, load it.
