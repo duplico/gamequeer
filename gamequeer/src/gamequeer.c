@@ -22,6 +22,10 @@ uint8_t menu_option_selected   = 0;
 t_gq_int GQ_BUILTIN_menu_value = 0;
 // TODO: Add all the other built-ins
 
+uint8_t timer_active = 0;
+t_gq_int timer_interval;
+t_gq_int timer_counter;
+
 gq_menu *menu_current; // TODO: don't dynamically allocate this
 
 // TODO: Move
@@ -97,6 +101,11 @@ uint8_t load_stage(t_gq_pointer stage_ptr) {
     if (stage_current.menu_pointer) {
         // If this stage has a menu, load it.
         menu_load(stage_current.menu_pointer, 0);
+    }
+
+    if (timer_active) {
+        // If a timer is active, stop it.
+        timer_active = 0;
     }
 
     // Set stage entry event flag
@@ -209,9 +218,18 @@ void draw_animations() {
     Graphics_flushBuffer(&g_sContext);
 }
 
+// TODO: Consider renaming, as this is the _system_ tick, not just animation tick
 void anim_tick() {
     // Should be called by the 100 Hz system tick
     uint8_t need_to_redraw = 0;
+
+    if (timer_active) {
+        timer_counter++;
+        if (timer_counter >= timer_interval) {
+            timer_active = 0;
+            GQ_EVENT_SET(GQ_EVENT_TIMER);
+        }
+    }
 
     for (uint8_t i = 0; i < MAX_CONCURRENT_ANIMATIONS; i++) {
         if (!current_animations[i].in_use) {
@@ -382,6 +400,11 @@ void run_code(t_gq_pointer code_ptr) {
                     // Skip the rest of this loop, as we've already loaded the next command.
                     continue;
                 }
+                break;
+            case GQ_OP_TIMER:
+                timer_active   = 1;
+                timer_interval = gq_load_int(cmd.arg1);
+                timer_counter  = 0;
                 break;
             default:
                 break;
