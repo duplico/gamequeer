@@ -193,6 +193,10 @@ void draw_animations() {
 
     // Then, draw the menu, if there is one.
     if (menu_active) {
+        Graphics_Rectangle menu_background = {0, 0, 128, menu_current->option_count * 10};
+        Graphics_setForegroundColor(&g_sContext, GRAPHICS_COLOR_BLACK);
+        Graphics_fillRectangle(&g_sContext, &menu_background);
+        Graphics_setForegroundColor(&g_sContext, GRAPHICS_COLOR_WHITE);
         // TODO: make this look better.
         for (uint8_t i = 0; i < menu_current->option_count; i++) {
             Graphics_drawString(&g_sContext, menu_current->options[i].label, -1, 15, i * 10, 0);

@@ -135,13 +135,13 @@ void HAL_event_poll() {
         case 'd': // "right"
             GQ_EVENT_SET(GQ_EVENT_BUTTON_R);
             break;
-        case 'k': // "a"
+        case 'l': // "a"
             GQ_EVENT_SET(GQ_EVENT_BUTTON_A);
             break;
-        case 'l': // "b"
+        case 'k': // "b"
             GQ_EVENT_SET(GQ_EVENT_BUTTON_B);
             break;
-        case ' ': // "click"
+        case 's': // "click"
             GQ_EVENT_SET(GQ_EVENT_BUTTON_CLICK);
             break;
     }
