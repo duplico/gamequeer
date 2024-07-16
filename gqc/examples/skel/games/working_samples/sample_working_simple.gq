@@ -80,6 +80,11 @@ stage selfie {
     bganim george2;
 
     event bgdone {
+        timer 100;
+    }
+
+    event timer {
+        badge_id = 7;
         gostage start;
     }
 }

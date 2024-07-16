@@ -8,7 +8,7 @@ from rich import print
 from .datamodel import Animation, Game, Stage, Variable, Event, Menu, LightCue
 from .datamodel import IntExpression, GqcIntOperand
 from .commands import CommandPlayBg, CommandGoStage, CommandSetVar, CommandCue
-from .commands import CommandIf, Command
+from .commands import CommandTimer, CommandIf, Command
 from .structs import EventType
 from . import structs
 
@@ -100,6 +100,9 @@ def parse_event_definition(instring, loc, toks):
         raise NotImplementedError("Menu events not yet implemented")
     elif toks[1] == 'enter':
         event_type = EventType.ENTER
+        event_statements = toks[2]
+    elif toks[1] == 'timer':
+        event_type = EventType.TIMER
         event_statements = toks[2]
     
     return Event(event_type, event_statements)
@@ -261,6 +264,8 @@ def parse_command(instring, loc, toks):
             return CommandSetVar(instring, loc, toks[3], toks[1], toks[2], src_is_expression=True)
         else:
             return CommandSetVar(instring, loc, toks[3], toks[1], toks[2])
+    elif command == 'timer':
+        return CommandTimer(instring, loc, toks[1])
     else:
         raise GqcParseError(f"Invalid command {command}", instring, loc)
 

@@ -130,6 +130,7 @@ class EventType(IntEnum):
     BUTTON_CLICK = 0x05
     BGDONE = 0x06
     MENU = 0x07
+    TIMER = 0x08
 
 # TODO: read this from the C header instead
 class OpCode(IntEnum):
@@ -156,6 +157,7 @@ class OpCode(IntEnum):
     NOT = 0x14
     NEG = 0x15
     GOTOIFN = 0x16
+    TIMER = 0x17
 
 class OpFlags(IntEnum):
     NONE = 0x00

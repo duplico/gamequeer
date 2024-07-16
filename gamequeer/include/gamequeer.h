@@ -121,6 +121,7 @@ typedef enum gq_event_type {
     GQ_EVENT_BUTTON_CLICK,
     GQ_EVENT_BGDONE,
     GQ_EVENT_MENU,
+    GQ_EVENT_TIMER,
     GQ_EVENT_COUNT
 } gq_event_type;
 
