@@ -402,9 +402,13 @@ void run_code(t_gq_pointer code_ptr) {
                 }
                 break;
             case GQ_OP_TIMER:
-                timer_active   = 1;
-                timer_interval = gq_load_int(cmd.arg1);
-                timer_counter  = 0;
+                if (cmd.arg1 > 0) {
+                    timer_active   = 1;
+                    timer_counter  = 0;
+                    timer_interval = cmd.arg1;
+                } else {
+                    timer_active = 0;
+                }
                 break;
             default:
                 break;
