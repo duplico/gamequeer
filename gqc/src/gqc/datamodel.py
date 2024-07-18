@@ -222,7 +222,7 @@ class Stage:
 
 class Variable:
     var_table = {}
-    storageclass_table = dict(persistent={}, volatile={}, builtin={})
+    storageclass_table = dict(persistent={}, volatile={}, builtin_int={}, builtin_str = {})
     link_table = dict() # OrderedDict not needed to remember order since Python 3.7
     heap_table = dict()
     
@@ -249,7 +249,7 @@ class Variable:
         self.storageclass = None
 
         if name in Variable.var_table:
-            if Variable.var_table[name].storageclass == 'builtin':
+            if Variable.var_table[name].storageclass.startswith('builtin'):
                 raise ValueError(f"Cannot redefine builtin variable {name}")
             else:
                 raise ValueError(f"Duplicate definition of {name}")
@@ -259,7 +259,7 @@ class Variable:
             self.set_storageclass(storageclass)
 
         # Skip type validation for builtins
-        if storageclass == "builtin":
+        if storageclass and storageclass.startswith("builtin"):
             return
 
         # If this variable is not a builtin (reserved keyword), validate the value.
@@ -287,7 +287,7 @@ class Variable:
         return f"Variable({repr(self.datatype)}, {repr(self.name)}, {self.value}, storageclass={repr(self.storageclass)})"
 
     def set_storageclass(self, storageclass):
-        assert storageclass in ["volatile", "persistent", "builtin"]
+        assert storageclass in ["volatile", "persistent", "builtin_int", "builtin_str"]
         self.storageclass = storageclass
         Variable.storageclass_table[storageclass][self.name] = self
 
@@ -339,7 +339,7 @@ class Variable:
             Variable.link_table[self.addr] = self
         elif namespace == structs.GQ_PTR_NS_HEAP:
             Variable.heap_table[self.addr] = self
-        elif namespace == structs.GQ_PTR_BUILTIN:
+        elif namespace in [structs.GQ_PTR_BUILTIN_INT, structs.GQ_PTR_BUILTIN_STR]:
             # Builtin variables are not linked into the symbol table
             pass
         else:

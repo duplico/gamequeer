@@ -11,9 +11,13 @@ from . import structs
 
 def create_reserved_variables():
     # Create the reserved special-purpose variables for the game:
-    for gq_var in structs.GQ_RESERVED_VARIABLES:
-        var = Variable(gq_var.type, gq_var.name, gq_var.description, 'builtin')
-        var.set_addr(gq_var.addr, namespace=structs.GQ_PTR_BUILTIN)
+    for gq_var in structs.GQ_RESERVED_INTS:
+        var = Variable('int', gq_var.name, gq_var.description, 'builtin_int')
+        var.set_addr(gq_var.addr, namespace=structs.GQ_PTR_BUILTIN_INT)
+    
+    for gq_var in structs.GQ_RESERVED_STRS:
+        var = Variable('str', gq_var.name, gq_var.description, 'builtin_str')
+        var.set_addr(gq_var.addr, namespace=structs.GQ_PTR_BUILTIN_STR)
     
     # Create the reserved integer registers for the game:
     for reg_name in structs.GQ_REGISTERS_INT:

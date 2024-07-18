@@ -24,6 +24,12 @@ uint8_t read_byte(t_gq_pointer ptr) {
             return 0; // TODO: Implement framebuffer
         case GQ_PTR_NS_HEAP:
             return gq_heap[GQ_PTR_ADDR(ptr)];
+        case GQ_PTR_BUILTIN_INT:
+            // TODO: bounds checking?
+            return gq_builtin_ints[GQ_PTR_ADDR(ptr)];
+        case GQ_PTR_BUILTIN_STR:
+            // TODO: bounds checking?
+            return gq_builtin_strs[GQ_PTR_ADDR(ptr)];
         default:
             return 0;
     }
