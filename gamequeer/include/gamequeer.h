@@ -9,14 +9,15 @@
 #define GQ_STR_SIZE   22
 #define GQ_INT_SIZE   4
 
-#define GQ_PTR_NS_MASK 0xFF000000
-#define GQ_PTR_NS_NULL 0x00
-#define GQ_PTR_NS_CART 0x01
-#define GQ_PTR_NS_SAVE 0x02
-#define GQ_PTR_NS_FRAM 0x03
-#define GQ_PTR_NS_FBUF 0x04
-#define GQ_PTR_NS_HEAP 0x05
-#define GQ_PTR_BUILTIN 0x80
+#define GQ_PTR_NS_MASK     0xFF000000
+#define GQ_PTR_NS_NULL     0x00
+#define GQ_PTR_NS_CART     0x01
+#define GQ_PTR_NS_SAVE     0x02
+#define GQ_PTR_NS_FRAM     0x03
+#define GQ_PTR_NS_FBUF     0x04
+#define GQ_PTR_NS_HEAP     0x05
+#define GQ_PTR_BUILTIN_INT 0x80
+#define GQ_PTR_BUILTIN_STR 0x81
 
 #define GQ_PTR_NS(POINTER)     ((POINTER & GQ_PTR_NS_MASK) >> 24)
 #define GQ_PTR_ADDR(POINTER)   (POINTER & ~GQ_PTR_NS_MASK)
@@ -112,6 +113,18 @@ typedef struct gq_ledcue_t {
     t_gq_pointer frames;  // Pointer to the first frame
 } __attribute__((packed)) gq_ledcue_t;
 
+typedef enum gq_special_var_int {
+    GQI_GAME_ID = 0x00,
+    GQI_MENU_ACTIVE,
+    GQI_MENU_VALUE,
+    GQI_COUNT
+} gq_special_var_int;
+
+typedef enum gq_special_var_str {
+    GQS_GAME_TITLE = 0x00,
+    GQS_COUNT
+} gq_special_var_str;
+
 typedef enum gq_event_type {
     GQ_EVENT_ENTER = 0x00,
     GQ_EVENT_BUTTON_A,
@@ -158,6 +171,9 @@ extern uint8_t gq_heap[GQ_HEAP_SIZE];
 extern rgbcolor16_t gq_leds[5];
 extern gq_ledcue_t leds_cue;
 extern uint8_t leds_animating;
+
+extern uint8_t gq_builtin_ints[];
+extern uint8_t gq_builtin_strs[];
 
 uint8_t load_game();
 uint8_t load_stage(t_gq_pointer stage_ptr);

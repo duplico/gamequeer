@@ -1,10 +1,11 @@
 #include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "HAL.h"
 #include "gamequeer.h"
 #include "gamequeer_bytecode.h"
 #include "grlib.h"
-#include "stdlib.h"
 
 gq_header game;
 uint8_t bg_animating = 0;
@@ -17,16 +18,26 @@ uint32_t curr_frame;
 uint8_t *frame_data;
 uint8_t gq_heap[GQ_HEAP_SIZE]; // TODO: Consider dynamically allocating?
 
-uint8_t menu_active            = 0;
-uint8_t menu_option_selected   = 0;
-t_gq_int GQ_BUILTIN_menu_value = 0;
-// TODO: Add all the other built-ins
+uint8_t gq_builtin_ints[GQI_COUNT * GQ_INT_SIZE] = {
+    0,
+};
+
+uint8_t gq_builtin_strs[GQS_COUNT * GQ_STR_SIZE] = {
+    0,
+};
+
+t_gq_int *game_id     = (t_gq_int *) &gq_builtin_ints[GQI_GAME_ID * GQ_INT_SIZE];
+t_gq_int *menu_active = (t_gq_int *) &gq_builtin_ints[GQI_MENU_ACTIVE * GQ_INT_SIZE];
+t_gq_int *menu_value  = (t_gq_int *) &gq_builtin_ints[GQI_MENU_VALUE * GQ_INT_SIZE];
+
+char *game_title = (char *) &gq_builtin_strs[GQS_GAME_TITLE * GQ_STR_SIZE];
+
+gq_menu *menu_current; // TODO: don't dynamically allocate this
+uint8_t menu_option_selected = 0;
 
 uint8_t timer_active = 0;
 t_gq_int timer_interval;
 t_gq_int timer_counter;
-
-gq_menu *menu_current; // TODO: don't dynamically allocate this
 
 // TODO: Move
 const uint32_t palette_bw[] = {0x000000, 0xffffff};
@@ -50,17 +61,17 @@ void menu_load(t_gq_pointer menu_ptr, t_gq_pointer menu_prompt) {
 
     // Initialize the menu options and activate it.
     menu_option_selected = 0;
-    menu_active          = 1;
+    *menu_active         = 1;
 
     // TODO: flag to the main loop indicating we need to redraw.
 }
 
 void menu_close() {
-    if (!menu_active) {
+    if (!*menu_active) {
         return;
     }
 
-    menu_active = 0;
+    *menu_active = 0;
     free(menu_current);
 
     // TODO: flag to the main loop indicating we need to redraw.
@@ -122,6 +133,9 @@ uint8_t load_game() {
     if (!load_stage(game.starting_stage)) {
         return 0;
     }
+
+    *game_id = game.id;
+    memcpy(game_title, game.title, GQ_STR_SIZE);
 
     // Run the initialization commands
     run_code(game.startup_code);
@@ -200,7 +214,7 @@ void draw_animations() {
     // TODO: Implement
 
     // Then, draw the menu, if there is one.
-    if (menu_active) {
+    if (*menu_active) {
         Graphics_Rectangle menu_background = {0, 0, 128, menu_current->option_count * 10};
         Graphics_setForegroundColor(&g_sContext, GRAPHICS_COLOR_BLACK);
         Graphics_fillRectangle(&g_sContext, &menu_background);
@@ -428,12 +442,12 @@ void handle_events() {
         if (GQ_EVENT_GET(event_type)) {
             GQ_EVENT_CLR(event_type);
             // If we're in a menu, hijack button events to navigate the menu.
-            if (menu_active) {
+            if (*menu_active) {
                 switch (event_type) {
                     case GQ_EVENT_BUTTON_A:
                         // Select the current menu option
                         // TODO: should this be a click instead?
-                        GQ_BUILTIN_menu_value = menu_current->options[menu_option_selected].value;
+                        *menu_value = menu_current->options[menu_option_selected].value;
                         menu_close();
                         break;
                     case GQ_EVENT_BUTTON_B:

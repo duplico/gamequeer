@@ -18,7 +18,8 @@ GQ_PTR_NS_SAVE = 0x02
 GQ_PTR_NS_FRAM = 0x03
 GQ_PTR_NS_FBUF = 0x04
 GQ_PTR_NS_HEAP = 0x05
-GQ_PTR_BUILTIN = 0x80
+GQ_PTR_BUILTIN_INT = 0x80
+GQ_PTR_BUILTIN_STR = 0x81
 
 GQ_MAGIC_SIZE = 4
 GQ_MAGIC = b'GQ01'
@@ -199,17 +200,27 @@ GQ_REGISTER_INT_NAMES = [
     'GQ_RI0', 'GQ_RI1', 'GQ_RI2', 'GQ_RI3', 'GQ_RI4', 'GQ_RI5', 'GQ_RI6', 'GQ_RI7'
 ]
 
-GQ_RESERVED_VARIABLES = [
-    GqReservedVariable('GQ_game_name', 'str', 'Name of the game', 0x000000),
-    GqReservedVariable('GQ_game_id', 'int', 'ID of the game', 0x000004),
-    # TODO: Space available here
-    GqReservedVariable('GQ_player_handle', 'str', 'Player handle', 0x00000C),
-    GqReservedVariable('GQ_player_id', 'int', 'Player ID', 0x000010),
-    GqReservedVariable('GQ_player_seen', 'int', 'Player seen', 0x000014),
-    GqReservedVariable('GQ_menu_value', 'int', 'Menu selection', 0x000018),
-    GqReservedVariable('GQ_menu_label', 'str', 'Menu label', 0x00001C),
-    GqReservedVariable('GQ_text_input', 'str', 'Text input', 0x000020),
+GQ_RESERVED_INTS = [
+    GqReservedVariable('GQI_GAME_ID', 'int', 'ID of the game', 0x000000),
+    GqReservedVariable('GQI_MENU_ACTIVE', 'int', 'Menu active', 0x000004),
+    GqReservedVariable('GQI_MENU_VALUE', 'int', 'Menu selection', 0x000008),
 ]
+
+GQ_RESERVED_STRS = [
+    GqReservedVariable('GQS_GAME_NAME', 'str', 'Name of the game', 0x000000),
+]
+
+# [
+#     GqReservedVariable('GQ_game_name', 'str', 'Name of the game', 0x000000),
+#     GqReservedVariable('GQ_game_id', 'int', 'ID of the game', 0x000004),
+#     # TODO: Space available here
+#     GqReservedVariable('GQ_player_handle', 'str', 'Player handle', 0x00000C),
+#     GqReservedVariable('GQ_player_id', 'int', 'Player ID', 0x000010),
+#     GqReservedVariable('GQ_player_seen', 'int', 'Player seen', 0x000014),
+#     GqReservedVariable('GQ_menu_value', 'int', 'Menu selection', 0x000018),
+#     GqReservedVariable('GQ_menu_label', 'str', 'Menu label', 0x00001C),
+#     GqReservedVariable('GQ_text_input', 'str', 'Text input', 0x000020),
+# ]
 
 GQ_REGISTERS_INT = [
     'GQ_RI0', 'GQ_RI1', 'GQ_RI2', 'GQ_RI3', 'GQ_RI4', 'GQ_RI5', 'GQ_RI6', 'GQ_RI7'
