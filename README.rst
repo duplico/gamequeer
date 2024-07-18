@@ -337,6 +337,7 @@ to enclose or delimit the frame definitions; they're just listed one after the o
 Here's an example of a frame definition:
 
 .. code-block:: text
+
     frame {
         duration = 100;
         transition := "smooth";
@@ -366,6 +367,7 @@ The color definition section allows you to define new colors by name, or overwri
 built-in colors. Here's an example of a color definition section:
 
 .. code-block:: text
+
     colors {
         my_red := "red";
         orange := "#ff2010";
@@ -397,6 +399,7 @@ We'll go into the details of the syntax and general mechanics of the gq language
 a little later, but for now, let's walk through a simple example game:
 
 .. code-block:: text
+
     game {
         id = 0;
         title := "Working Example";
@@ -484,6 +487,7 @@ Game definition
 ^^^^^^^^^^^^^^^
 
 .. code-block:: text
+
     game {
         id = 0;
         title := "Working Example";
@@ -513,6 +517,7 @@ Variable definitions
 ^^^^^^^^^^^^^^^^^^^^
 
 .. code-block:: text
+
     volatile {
         int points = 0;
         str player_name := "Player";
@@ -539,6 +544,7 @@ Menu definitions
 ^^^^^^^^^^^^^^^^
 
 .. code-block:: text
+
     menus {
         YesNo {
             1: "Yes";
@@ -567,6 +573,7 @@ Animation definitions
 ^^^^^^^^^^^^^^^^^^^^^
 
 .. code-block:: text
+
     animations {
         foo <- "foo.mp4";
 
@@ -593,6 +600,7 @@ Light cue definitions
 ^^^^^^^^^^^^^^^^^^^^^
 
 .. code-block:: text
+
     lightcues {
         cue1 <- "cue1.gqcue";
         cue2 <- "cue2.gqcue";
@@ -607,7 +615,7 @@ Stage definitions
 ^^^^^^^^^^^^^^^^^
 
 .. code-block:: text
-    
+
     stage starting_stage {
         bganim foo;
         bgcue cue1;
