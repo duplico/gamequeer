@@ -607,6 +607,7 @@ Stage definitions
 ^^^^^^^^^^^^^^^^^
 
 .. code-block:: text
+    
     stage starting_stage {
         bganim foo;
         bgcue cue1;
