@@ -281,3 +281,389 @@ Alternatively, you can build all the games in the workspace with the following c
 .. code-block:: bash
 
     make all
+
+Creating assets
+---------------
+
+In GameQueer, assets refer to two different types of visual components that are used in games:
+animations and light cues. Animations are visual sequences that are displayed on the OLED
+display of the badge, and light cues are sequences of colors and patterns that are displayed
+on the LEDs on either side of the display.
+
+Animations are created as video files that can be read by ffmpeg. The GameQueer compiler
+will automatically convert these video files into a format that can be displayed on the badge.
+
+Light cues are created as text files that describe the colors and patterns of the LEDs. The
+GameQueer compiler will read these text files and convert them into a format that can be
+displayed on the badge.
+
+Animations
+^^^^^^^^^^
+
+Any path specification that can be processed by ffmpeg may be used as the source for an
+animation. Extensive testing has only been done with .mp4 files, but other formats should
+work as well. The GameQueer compiler will automatically convert the video file into a format
+that can be displayed on the badge.
+
+Place the source video file in the `assets/animations` directory of your workspace. Games
+will reference animations by their filename, relative to that directory. For example, if
+you create `assets/animations/test.mp4`, you can import it in a game source file as
+`test.mp4`. If you create `assets/animations/subdir/test.mp4`, you can import it as
+`subdir/test.mp4`. Multiple games (and, in fact, multiple animations within a single game)
+can reference the same animation file.
+
+Light cues
+^^^^^^^^^^
+
+Light cues refer to the animations of the LEDs on either side of the OLED display. The display
+has five vertically-oriented RGB LEDs on either side, shining generally outwards. The LEDs on
+each side are electrically paired; for example, whatever is displayed on the top LED on one side
+is also displayed on the top LED on the other side.
+
+Light cue files use the `.gqcue` extension and are placed in the `assets/lighting` directory of
+your workspace. The file hierarchy works the same as for animations: if a game refers to
+`foo.gqcue`, it will look for that file at `assets/lighting/foo.gqcue`.
+
+Lighting cue files have two sections: the color definition section, and the frame definition
+section. The color definition section is optional, and allows you to define custom colors by
+hex code and assign them a name. The frame definition section is required, and describes the
+frame by frame changes to the LEDs.
+
+We'll start by describing the frame definition section, and then follow up with a description
+of the color definition section. Often, you won't need a color definition section at all.
+A frame definition section is just a sequence of frame definitions. There's no symbol needed
+to enclose or delimit the frame definitions; they're just listed one after the other.
+
+Here's an example of a frame definition:
+
+.. code-block:: text
+    frame {
+        duration = 100;
+        transition := "smooth";
+        colors {
+            red,
+            orange,
+            yellow,
+            green,
+            blue
+        }
+    }
+
+The `duration` field is required. It specifies the duration of the frame in system ticks,
+which are 10ms each. So a duration of 100 is 1 second. The `transition` field is optional,
+and specifies how this frame transitions to the next. Valid values are either `"smooth"`
+or `"none"`, which is also the default if no transition type is specified. A smooth
+transition gradually fades from this frame to the next over its entire duration. 
+Specifying `"none"` means this frame will hold steady for its duration, then abruptly change
+to the next frame once it's complete.
+
+The `colors` field is required, and specifies the colors of the LEDs for this frame. There
+must be exactly 5 comma-separated colors, enclosed in curly braces. All named colors
+included in the Python `webcolors` package are supported here, but we recommend that
+you stick with CSS color names.
+
+The color definition section allows you to define new colors by name, or overwrite the
+built-in colors. Here's an example of a color definition section:
+
+.. code-block:: text
+    colors {
+        my_red := "red";
+        orange := "#ff2010";
+    }
+
+Color definitions support both overwriting the built-in colors and defining new colors.
+You may use CSS color names to define your custom colors, but this isn't generally very
+useful because you can also use the CSS color names directly in your frame definitions.
+Most of the power of this feature comes from defining custom colors by hex code, which
+are double-quoted strings that start with a hash mark, much like web hex colors.
+
+Creating games
+--------------
+
+GameQueer games are written in a specialized language designed to lend itself well to
+modestly interactive games with a focus on visual and lighting effects. The language
+uses some C-like syntax, but is much simpler. Every game is a single file with a `.gq`
+extension, and is placed in the `games` directory of your workspace.
+
+A GameQueer game has several global definition sections, which are used to define
+global variables, animations, light cues, and menus. The game is then divided into
+stages, which themselves are comprised of some basic configuration plus sets of
+event handlers. The event handlers are where the game logic is implemented, and they 
+are called in response to various events that occur during the game: for example, 
+button presses, animations being completed, or timers. Each game begins with its 
+"starting stage."
+
+We'll go into the details of the syntax and general mechanics of the gq language
+a little later, but for now, let's walk through a simple example game:
+
+.. code-block:: text
+    game {
+        id = 0;
+        title := "Working Example";
+        author := "duplico";
+        starting_stage = start;
+    }
+
+    volatile {
+        int points = 0;
+        str player_name := "Player";
+    }
+
+    persistent {
+        int high_score = 0;
+        str high_score_name := "ME";
+    }
+
+    menus {
+        YesNo {
+            1: "Yes";
+            0: "No";
+        }
+
+        OkCancel {
+            1: "OK";
+            0: "Cancel";
+        }
+    }
+
+    animations {
+        foo <- "foo.mp4";
+
+        bar <- "bar.mp4" {
+            dithering := "sierra2_4a";
+            frame_rate = 25;
+        }
+    }
+
+    lightcues {
+        cue1 <- "cue1.gqcue";
+        cue2 <- "cue2.gqcue";
+    }
+
+    stage starting_stage {
+        bganim foo;
+        bgcue cue1;
+
+        event enter {
+            timer 1000;
+            player_name := GQS_PLAYER_HANDLE;
+        }
+
+        event timer {
+            gostage game_over;
+        }
+
+        event input (A) {
+            points = points + 1;
+        }
+
+        event input (B) {
+            points = points - 1;
+        }
+    }
+
+    stage game_over {
+        menu YesNo prompt "Play again?";
+
+        event enter {
+            if (points > high_score) {
+                high_score = points;
+                high_score_name = player_name;
+            }
+        }
+
+        event menu {
+            if (GQI_MENU_VALUE)
+                gostage starting_stage;
+        }
+    }
+
+Let's break it down into its parts.
+
+Game definition
+^^^^^^^^^^^^^^^
+
+.. code-block:: text
+    game {
+        id = 0;
+        title := "Working Example";
+        author := "duplico";
+        starting_stage = start;
+    }
+
+Every game must start with a `game` block, which contains basic information about the game.
+That information can be listed in any order, but it must include a numeric `id`, a string
+`title`, a string `author`, and the name of the starting stage. This section must be
+the first thing in the game file.
+
+The ID is a unique identifier for the game, and is used to distinguish it from other games.
+Its definition here shows an example of *numeric assignment* in gq, using the `=` operator.
+The only numeric type in gq is `int`, and it's a 32-bit signed integer.
+
+The title is simply a display name for the game. Its assignment demonstrates *string
+assignment*, using the `:=` operator. Strings may be up to 22 characters long. The author
+field is also a display name, stored in a string, intended to record the author of the
+game.
+
+Finally, the `starting_stage` field is the name of the stage that the game should start in.
+This field uses the `=` operator, but is a special case. It's a *stage reference*, which
+probably shouldn't use the `=` operator, but it does. So sue me.
+
+Variable definitions
+^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: text
+    volatile {
+        int points = 0;
+        str player_name := "Player";
+    }
+
+    persistent {
+        int high_score = 0;
+        str high_score_name := "ME";
+    }
+
+All variables in gq have global scope. There are two types: `str` and `int`. As described
+above, `str` is the string type, which is an up-to 22 character string, and `int` is a
+signed 32-bit integer. The variables are defined in sections that specify their storage
+class: `persistent`, which is stored on the game cartridge and persists between plays, and
+`volatile`, which is stored in RAM and is reset between plays.
+
+All variables require an initial value, which is set with the `=` operator for `int` and
+the `:=` operator for `str`.
+
+The variable sections are optional. If you don't need any variables of a particular
+storage class, you may omit the section.
+
+Menu definitions
+^^^^^^^^^^^^^^^^
+
+.. code-block:: text
+    menus {
+        YesNo {
+            1: "Yes";
+            0: "No";
+        }
+
+        OkCancel {
+            25: "OK";
+            -5: "Cancel";
+        }
+    }
+
+GameQueer has a concept of modal menus, which may be called from any stage. Menus map
+an integer `value` to a string `label`. The `value` is returned to the game in an
+event when the menu selection is made. The `label` is what's displayed on the screen
+for the user to select. The values do not need to be contiguous, and they also do not
+need to be unique. I don't know why you would have non-unique labels in a menu, but
+technically that's also allowed.
+
+This section defines two callable menus, `YesNo` and `OkCancel`. The `YesNo` menu has
+two options, with values 1 and 0, and the `OkCancel` menu also has two options, with
+values 25 and -5. The values may be any supported `int`, and the labels may be any
+supported `str`.
+
+Animation definitions
+^^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: text
+    animations {
+        foo <- "foo.mp4";
+
+        bar <- "bar.mp4" {
+            dithering := "sierra2_4a";
+            frame_rate = 25;
+        }
+    }
+
+Animations are defined in the `animations` section. This section introduces a new
+operator, the `<-` or file load operator. In the animation section, the left-hand
+side of the file load operator specifies the name of an animation, and the right-hand
+side specifies the path to the animation file, plus an optional configuration block.
+
+The configuration block is optional, and currently only allows the `dithering` and
+`frame_rate` fields. The `dithering` field specifies the dithering algorithm to use
+when converting the video to the badge's display format. The `frame_rate` field
+specifies the frame rate of the video, in frames per second. Note that frames are
+displayed in a 100 Hz loop, so the frame rate will be rounded to something that
+evenly divides 100. The compiler will emit a warning if the frame rate rounded.
+The default frame rate is 25 fps.
+
+Light cue definitions
+^^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: text
+    lightcues {
+        cue1 <- "cue1.gqcue";
+        cue2 <- "cue2.gqcue";
+    }
+
+Light cues are defined in the `lightcues` section. The syntax is the same as for
+animations, with the left-hand side of the file load operator specifying the name
+of the light cue, and the right-hand side specifying the path to the light cue file.
+There are no configuration options for light cues.
+
+Stage definitions
+^^^^^^^^^^^^^^^^^
+
+.. code-block:: text
+    stage starting_stage {
+        bganim foo;
+        bgcue cue1;
+
+        event enter {
+            timer 1000;
+            player_name := GQS_PLAYER_HANDLE;
+        }
+
+        event timer {
+            gostage game_over;
+        }
+
+        event input (A) {
+            points = points + 1;
+        }
+
+        event input (B) {
+            points = points - 1;
+        }
+    }
+
+    stage game_over {
+        menu YesNo prompt "Play again?";
+
+        event enter {
+            if (points > high_score) {
+                high_score = points;
+                high_score_name = player_name;
+            }
+        }
+
+        event menu {
+            if (GQI_MENU_VALUE)
+                gostage starting_stage;
+        }
+    }
+
+Stages are the main building blocks of a GameQueer game. Each game must have at least
+one stage, and the game starts in the stage specified in the `starting_stage` field of
+the game definition. Each stage is defined in a `stage` block.
+
+Each stage has some optional configuration declarations. A `bganim` declaration specifies
+the background animation to display on the OLED. A `bgcue` declaration specifies the
+looping background lighting cue to display on the LEDs. And, the `menu` declaration
+specifies the menu to display when the stage is entered. The menu will be displayed on top
+of the OLED animations.
+
+Aside from the configuration declarations, stages are comprised of event handlers. The
+event handlers are called in response to various events that occur during the game. The
+`enter` event is called when the stage is entered. The `input` event is called when a
+button is pressed. The `timer` event is called when a timer expires. The `bgdone` event
+is called when the background animation has completed. The `menu` event is called when
+a menu selection is made.
+
+Event commands
+^^^^^^^^^^^^^^
+
+The event handlers are where the game logic is implemented. They are comprised of a series
+of commands that are executed in sequence. They're pretty simple.

@@ -208,6 +208,7 @@ GQ_RESERVED_INTS = [
 
 GQ_RESERVED_STRS = [
     GqReservedVariable('GQS_GAME_NAME', 'str', 'Name of the game', 0x000000),
+    GqReservedVariable('GQS_PLAYER_HANDLE', 'str', 'Player handle', 2 * GQ_STR_SIZE),
 ]
 
 # [
