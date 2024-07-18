@@ -222,7 +222,7 @@ To set up a new GameQueer game project, run the following command:
 
 .. code-block:: bash
 
-    gqc init-dir /path/to/your/workspace
+    python -m gqc init-dir /path/to/your/workspace
 
 This will create a new directory at `/path/to/your/workspace` with the following structure:
 
