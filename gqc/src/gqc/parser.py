@@ -97,7 +97,7 @@ def parse_event_definition(instring, loc, toks):
         event_type = event_inputs[toks[2]]
         event_statements = toks[3]
     elif toks[1] == 'menu':
-        raise NotImplementedError("Menu events not yet implemented")
+        event_type = EventType.MENU
     elif toks[1] == 'enter':
         event_type = EventType.ENTER
         event_statements = toks[2]
