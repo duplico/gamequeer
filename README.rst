@@ -402,14 +402,9 @@ a little later, but for now, let's walk through a simple example game:
 
     game {
         id = 0;
-        title := "Working Example";
+        title := "Tutorial 1";
         author := "duplico";
         starting_stage = start;
-    }
-
-    volatile {
-        int points = 0;
-        str player_name := "Player";
     }
 
     persistent {
@@ -417,67 +412,64 @@ a little later, but for now, let's walk through a simple example game:
         str high_score_name := "ME";
     }
 
-    menus {
-        YesNo {
-            1: "Yes";
-            0: "No";
-        }
-
-        OkCancel {
-            1: "OK";
-            0: "Cancel";
-        }
+    volatile {
+        int score = 0;
     }
 
     animations {
-        foo <- "foo.mp4";
-
-        bar <- "bar.mp4" {
+        hearts <- "heart_anim.gif";
+        pop <- "bwcircles.gif" {
+            frame_rate = 10;
             dithering := "sierra2_4a";
-            frame_rate = 25;
         }
     }
 
     lightcues {
-        cue1 <- "cue1.gqcue";
-        cue2 <- "cue2.gqcue";
+        flash <- "flash.gqcue";
+    }
+    menus {
+        restart {
+            1: "Yes";
+            0: "No";
+        }
     }
 
-    stage starting_stage {
-        bganim foo;
-        bgcue cue1;
-
+    stage start {
         event enter {
             timer 1000;
-            player_name := GQS_PLAYER_HANDLE;
         }
 
         event timer {
-            gostage game_over;
+            gostage end;
         }
 
-        event input (A) {
-            points = points + 1;
-        }
-
-        event input (B) {
-            points = points - 1;
+        event input(A) {
+            score = score + 1;
+            play bganim pop;
+            cue flash;
         }
     }
 
-    stage game_over {
-        menu YesNo prompt "Play again?";
+    stage end {
+        menu restart prompt "Play again?";
+        bganim hearts;
 
         event enter {
-            if (points > high_score) {
-                high_score = points;
-                high_score_name = player_name;
+            if (score > high_score) {
+                high_score = score;
+                high_score_name := GQS_PLAYER_HANDLE;
             }
         }
 
+        event bgdone {
+            play bganim hearts;
+        }
+
         event menu {
-            if (GQI_MENU_VALUE)
-                gostage starting_stage;
+            if (GQI_MENU_VALUE == 0) {
+                score = 0;
+                gostage start;
+            }
         }
     }
 
@@ -485,15 +477,6 @@ Let's break it down into its parts.
 
 Game definition
 ^^^^^^^^^^^^^^^
-
-.. code-block:: text
-
-    game {
-        id = 0;
-        title := "Working Example";
-        author := "duplico";
-        starting_stage = start;
-    }
 
 Every game must start with a `game` block, which contains basic information about the game.
 That information can be listed in any order, but it must include a numeric `id`, a string
@@ -516,18 +499,6 @@ probably shouldn't use the `=` operator, but it does. So sue me.
 Variable definitions
 ^^^^^^^^^^^^^^^^^^^^
 
-.. code-block:: text
-
-    volatile {
-        int points = 0;
-        str player_name := "Player";
-    }
-
-    persistent {
-        int high_score = 0;
-        str high_score_name := "ME";
-    }
-
 All variables in gq have global scope. There are two types: `str` and `int`. As described
 above, `str` is the string type, which is an up-to 22 character string, and `int` is a
 signed 32-bit integer. The variables are defined in sections that specify their storage
@@ -543,20 +514,6 @@ storage class, you may omit the section.
 Menu definitions
 ^^^^^^^^^^^^^^^^
 
-.. code-block:: text
-
-    menus {
-        YesNo {
-            1: "Yes";
-            0: "No";
-        }
-
-        OkCancel {
-            25: "OK";
-            -5: "Cancel";
-        }
-    }
-
 GameQueer has a concept of modal menus, which may be called from any stage. Menus map
 an integer `value` to a string `label`. The `value` is returned to the game in an
 event when the menu selection is made. The `label` is what's displayed on the screen
@@ -571,17 +528,6 @@ supported `str`.
 
 Animation definitions
 ^^^^^^^^^^^^^^^^^^^^^
-
-.. code-block:: text
-
-    animations {
-        foo <- "foo.mp4";
-
-        bar <- "bar.mp4" {
-            dithering := "sierra2_4a";
-            frame_rate = 25;
-        }
-    }
 
 Animations are defined in the `animations` section. This section introduces a new
 operator, the `<-` or file load operator. In the animation section, the left-hand
@@ -599,13 +545,6 @@ The default frame rate is 25 fps.
 Light cue definitions
 ^^^^^^^^^^^^^^^^^^^^^
 
-.. code-block:: text
-
-    lightcues {
-        cue1 <- "cue1.gqcue";
-        cue2 <- "cue2.gqcue";
-    }
-
 Light cues are defined in the `lightcues` section. The syntax is the same as for
 animations, with the left-hand side of the file load operator specifying the name
 of the light cue, and the right-hand side specifying the path to the light cue file.
@@ -613,46 +552,6 @@ There are no configuration options for light cues.
 
 Stage definitions
 ^^^^^^^^^^^^^^^^^
-
-.. code-block:: text
-
-    stage starting_stage {
-        bganim foo;
-        bgcue cue1;
-
-        event enter {
-            timer 1000;
-            player_name := GQS_PLAYER_HANDLE;
-        }
-
-        event timer {
-            gostage game_over;
-        }
-
-        event input (A) {
-            points = points + 1;
-        }
-
-        event input (B) {
-            points = points - 1;
-        }
-    }
-
-    stage game_over {
-        menu YesNo prompt "Play again?";
-
-        event enter {
-            if (points > high_score) {
-                high_score = points;
-                high_score_name = player_name;
-            }
-        }
-
-        event menu {
-            if (GQI_MENU_VALUE)
-                gostage starting_stage;
-        }
-    }
 
 Stages are the main building blocks of a GameQueer game. Each game must have at least
 one stage, and the game starts in the stage specified in the `starting_stage` field of
@@ -675,4 +574,74 @@ Event commands
 ^^^^^^^^^^^^^^
 
 The event handlers are where the game logic is implemented. They are comprised of a series
-of commands that are executed in sequence. They're pretty simple.
+of commands that are executed in sequence.
+
+The following event types are allowed:
+
+* `enter`: Called when the stage is entered
+* `input(A)`: Called when button A is pressed
+* `input(B)`: Called when button B is pressed
+* `input(<-)`: Called when the D-Dial is rotated left
+* `input(->)`: Called when the D-Dial is rotated right
+* `input(-)`: Called when the D-Dial is clicked
+* `timer`: Called when a timer expires
+* `bgdone`: Called when the background animation has completed
+* `menu`: Called when a menu selection is made
+
+Inside an event, the following commands are available:
+
+* `cue`: Play a lighting cue by name; for example, `cue flash`
+* `play bganim`: Play a new background animation by name; for exmaple, `play bganim pop`
+* `gostage`: Go to a different stage; for example, `gostage end`
+* `timer`: Set a one-shot timer by a numeric expression. The interval is measured in
+    system ticks, which are 10ms each. For example, `timer 1000` sets a timer for 10 seconds.
+
+The following operators are available:
+
+Unary operators (one operand, right-associative):
+* `-`: Unary negation. The right hand side is negated. The value of the expression is the
+    negation of the right hand side.
+* `!`: Logical NOT. The right hand side is negated. The value of the expression is 1 if the
+    right hand side is equal to 0, and 0 otherwise.
+
+Binary operators (two operands):
+* `=`: Numeric assignment. The integer variable on the left hand side is assigned the value
+  of the expression on the right hand side.
+* `:=`: String assignment. The string variable on the left hand side is assigned the value
+    of the expression on the right hand side.
+* `+`: Numeric addition. The left and right hand sides are added together.
+* `-`: Numeric subtraction. The right hand side is subtracted from the left hand side.
+* `*`: Numeric multiplication. The left and right hand sides are multiplied together.
+* `/`: Numeric division. The left hand side is divided by the right hand side.
+* `%`: Numeric modulo. The left hand side is divided by the right hand side, and the
+  expression takes the value of the remainder.
+* `==`: Numeric equality. The left and right hand sides are compared for equality. The value
+  of the expression is 1 if they are equal, and 0 if they are not.
+* `!=`: Numeric inequality. The left and right hand sides are compared for inequality. The
+    value of the expression is 1 if they are not equal, and 0 if they are equal.
+* `>`, `>=`, `<`, and `<=`: Numeric comparison. The left and right hand sides are compared
+  for greater than, greater than or equal, less than, and less than or equal, respectively.
+  The value of the expression is 1 if the comparison is true, and 0 if it is false.
+* `&&`: Logical AND. The left and right hand sides are compared for truth. The value of the
+    expression is 1 if both sides are true, and 0 if either side is false. Does NOT support
+    short-circuit evaluation.
+* `||`: Logical OR. The left and right hand sides are compared for truth. The value of the
+    expression is 1 if either side is true, and 0 if both sides are false. Does NOT support
+    short-circuit evaluation.
+
+The following control structures are available:
+
+* `if`: The `if` statement allows you to conditionally execute a block of code. The gqc
+    syntax for `if` statements is similar to C. The `if` statement must be followed by a
+    condition in parentheses, followed by the code to be executed if the condition is true.
+    The code block may be a single command, or a block of commands enclosed in curly braces.
+    The `if` statement may be followed by an optional `else` statement, which is executed
+    if the condition is false. If the `else` statement is included, it must be followed by a
+    code block. It's permitted to use an `else if` structure.
+* (NOT YET IMPLEMENTED) `loop`: The `loop` statement allows you to execute a block of code
+    repeatedly. The loop statement must be followed by a command or a block of commands
+    enclosed in curly braces, which will be executed repeatedly until a `break` statement.
+    Note that there are no built-in conditionals for loops; you must implement it yourself
+    with `if` statements.
+* (NOT YET IMPLEMENTED) `break`: Exit the innermost loop.
+* (NOT YET IMPLEMENTED) `continue`: Skip the rest of the current iteration of the innermost loop.
