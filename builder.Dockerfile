@@ -67,7 +67,7 @@ RUN ln -s /usr/bin/clang-tidy-${llvm_version} /usr/local/bin/clang-tidy
 # install unity cmock and ceedling (unit test environment)
 RUN gem install ceedling
 # set standard encoding to UTF-8 for ruby (and thus ceedling)
-ENV RUBYOPT "-KU -E utf-8:utf-8"
+ENV RUBYOPT="-KU -E utf-8:utf-8"
 
 # Node stuff for langium:
 COPY gq-game-language/install-langium-deps.sh /workspaces/gamequeer/gq-game-language/
@@ -83,4 +83,5 @@ COPY requirements.txt /workspaces/gamequeer/
 RUN pip install --upgrade pip && pip install --requirement /workspaces/gamequeer/requirements.txt
 
 # Put the dev python gqc module in the python path
-ENV PYTHONPATH $PYTHONPATH:/workspaces/gamequeer/gqc/src/:/workspaces/gamequeer/gqc/src/
+ENV PYTHONPATH=$PYTHONPATH:/workspaces/gamequeer/gqc/src/:/workspaces/gamequeer/gqc/src/
+ENV PATH="/workspaces/gamequeer/build/:$PATH"

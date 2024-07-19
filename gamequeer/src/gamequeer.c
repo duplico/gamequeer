@@ -446,9 +446,9 @@ void handle_events() {
                 switch (event_type) {
                     case GQ_EVENT_BUTTON_A:
                         // Select the current menu option
-                        // TODO: should this be a click instead?
                         *menu_value = menu_current->options[menu_option_selected].value;
                         menu_close();
+                        GQ_EVENT_SET(GQ_EVENT_MENU);
                         break;
                     case GQ_EVENT_BUTTON_B:
                         // Cancel the menu
