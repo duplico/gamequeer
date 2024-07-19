@@ -98,6 +98,7 @@ def parse_event_definition(instring, loc, toks):
         event_statements = toks[3]
     elif toks[1] == 'menu':
         event_type = EventType.MENU
+        event_statements = toks[2]
     elif toks[1] == 'enter':
         event_type = EventType.ENTER
         event_statements = toks[2]
