@@ -1,0 +1,78 @@
+game {
+    id = 0;
+    title := "Tutorial 1";
+    author := "duplico";
+    starting_stage = start;
+}
+
+persistent {
+    int high_score = 0;
+    str high_score_name := "ME";
+}
+
+volatile {
+    int score = 0;
+}
+
+animations {
+    hearts <- "heart_anim.gif";
+    pop <- "bwcircles.gif" {
+        frame_rate = 10;
+        dithering := "sierra2_4a";
+    }
+}
+
+lightcues {
+    flash <- "flash.gqcue";
+}
+
+menus {
+    restart {
+        1: "Yes";
+        0: "No";
+    }
+}
+
+stage start {
+    bganim pop;
+
+    event enter {
+        timer 1000;
+    }
+
+    event timer {
+        gostage end;
+    }
+
+    event input(A) {
+        score = score + 1;
+        cue flash;
+    }
+
+    event bgdone {
+        play bganim pop;
+    }
+}
+
+stage end {
+    menu restart prompt "Play again?";
+    bganim hearts;
+
+    event enter {
+        if (score > high_score) {
+            high_score = score;
+            high_score_name := GQS_PLAYER_HANDLE;
+        }
+    }
+
+    event bgdone {
+        play bganim hearts;
+    }
+
+    event menu {
+        if (GQI_MENU_VALUE == 1) {
+            score = 0;
+            gostage start;
+        }
+    }
+}

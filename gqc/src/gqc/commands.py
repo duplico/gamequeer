@@ -481,7 +481,6 @@ class CommandIf(CommandWithIntExpressionArgument):
 
 class CommandTimer(CommandWithIntExpressionArgument):
     def __init__(self, instring, loc, interval : GqcIntOperand | IntExpression):
-        print(interval)
         super().__init__(CommandType.TIMER, instring, loc, interval)
     
     # def __repr__(self) -> str:
