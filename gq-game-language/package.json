@@ -2,10 +2,6 @@
     "name": "gq-game-language",
     "description": "Game definition language for the GameQueer fantasy console",
     "version": "0.0.1",
-    "files": [
-        "out",
-        "src"
-    ],
     "type": "module",
     "scripts": {
         "build": "tsc -b tsconfig.json && node esbuild.mjs",
