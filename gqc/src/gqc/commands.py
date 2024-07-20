@@ -224,9 +224,10 @@ class CommandSetStr(Command):
         return f"SETSTR {self.dst_name} {self.src_name}"
 
 class CommandGoto(Command):
-    def __init__(self, instring, loc, addr : int = 0x00000000):
+    def __init__(self, instring, loc, addr : int = 0x00000000, form : str = None):
         super().__init__(CommandType.GOTO, instring, loc)
         self.arg1 = addr
+        self.form = form
     
     def resolve(self):
         if self.resolved:
@@ -439,6 +440,54 @@ class CommandIf(CommandWithIntExpressionArgument):
 
         return f"{self.expr_or_operand.commands if self.arg2_is_expression else ''} {super().__repr__()} {self.true_cmds} {(repr(CommandGoto(None, None, self.addr + self.size())) + ' ') if self.false_cmds else ''}{self.false_cmds if self.false_cmds else ''}"
 
+class CommandLoop():
+    def __init__(self, instring, loc, commands : list):
+        self.instring = instring
+        self.loc = loc
+        self.commands = commands
+        self.addr = 0x00000000
+        self.done_addr = 0x00000000
+        self.resolved = False
+
+        self.commands.append(CommandGoto(instring, loc, form='continue'))
+
+    def set_addr(self, addr : int, namespace : int = structs.GQ_PTR_NS_CART):
+        self.addr = structs.gq_ptr_apply_ns(namespace, addr)
+        self.done_addr = self.addr + self.size()
+    
+    def size(self):
+        size = 0
+        for cmd in self.commands:
+            size += cmd.size()
+        return size
+    
+    def set_goto_addrs(self, commands: list):
+        for cmd in commands:
+            if isinstance(cmd, CommandGoto):
+                if cmd.form == 'continue':
+                    cmd.arg1 = self.addr
+                elif cmd.form == 'break':
+                    cmd.arg1 = self.done_addr
+            elif isinstance(cmd, CommandIf):
+                self.set_goto_addrs(cmd.true_cmds)
+                if cmd.false_cmds:
+                    self.set_goto_addrs(cmd.false_cmds)
+
+    def resolve(self):
+        if self.resolved:
+            return True
+        
+        resolved = True
+
+        self.set_goto_addrs(self.commands)
+
+        for cmd in self.commands:
+            if not cmd.resolve():
+                resolved = False
+        
+        self.resolved = resolved
+        return self.resolved
+    
 class CommandTimer(CommandWithIntExpressionArgument):
     def __init__(self, instring, loc, interval : GqcIntOperand | IntExpression):
         super().__init__(CommandType.TIMER, instring, loc, interval)

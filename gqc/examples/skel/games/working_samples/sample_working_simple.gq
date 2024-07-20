@@ -65,6 +65,15 @@ stage start {
             A = B + 3;
         } else
             badge_id = 18;
+        
+        // loop {
+        //     badge_id = badge_id + 1;
+        //     if (badge_id == 22)
+        //         break;
+        //     else if (badge_id == 21) {
+        //         continue;
+        //     }
+        // }
     }
 
     event input(A)
