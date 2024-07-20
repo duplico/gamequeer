@@ -219,12 +219,6 @@ class CommandSetStr(Command):
 
         self.resolved = resolved
         return self.resolved
-    
-    def to_bytes(self):
-        return super().to_bytes()
-
-    def size(self):
-        return super().size()
 
     def __repr__(self) -> str:
         return f"SETSTR {self.dst_name} {self.src_name}"
@@ -335,7 +329,7 @@ class CommandSetInt(CommandWithIntExpressionArgument):
         self.dst_name = dst
 
         super().__init__(CommandType.SETVAR, instring, loc, src)
-        
+
         self.command_flags |= structs.OpFlags.TYPE_INT
     
     def resolve(self):
