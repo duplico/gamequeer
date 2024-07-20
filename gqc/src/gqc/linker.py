@@ -140,7 +140,6 @@ def create_symbol_table(table_dest = sys.stdout, cmd_dest = sys.stdout):
     # Generate the volatile variables' initialization code.
     for var in list(Variable.storageclass_table['volatile'].values()):
         # Initialization code allocation.
-        # TODO: Can this loop be combined with the allocation loop?
         init_cmd = var.get_init_command()
         init_cmd.set_addr(init_ptr_start + init_ptr_offset)
         init_table[init_cmd.addr] = init_cmd
@@ -224,9 +223,6 @@ def create_symbol_table(table_dest = sys.stdout, cmd_dest = sys.stdout):
     # Return the machine-readable symbol table for use in final code generation.
     return symbol_table
 
-# TODO: Generate initialization commands and add the pointer to them to the game
-#       metadata header.
-
 def generate_code(parsed, symbol_table : dict):
     output = bytes()
 
@@ -247,9 +243,7 @@ def generate_code(parsed, symbol_table : dict):
                 if addr != symbol.addr:
                     raise ValueError(f"Symbol at address {addr:#0{10}x} has an address mismatch with its symbol table entry.")
                 if addr != next_expected_addr:
-                    # TODO: emit a more friendly error than this, since it's a compiler/linker error
                     raise ValueError(f"Symbol at address {addr:#0{10}x} is not contiguous with the previous symbol.")
-                    # print(f"WARNING: Symbol at address {addr:#0{10}x} is not contiguous with the previous symbol; expected {next_expected_addr:#0{10}x}.", file=sys.stderr)
                 next_expected_addr += symbol.size()
                 output += symbol.to_bytes()
                 progress.update(task, advance=1)

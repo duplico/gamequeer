@@ -154,7 +154,6 @@ def update_makefile_local(base_dir : pathlib.Path):
     #  the build directory tree for games as well.
     with makefile_path.open('w') as f:
         f.write('# Auto-generated Makefile.local\n\n')
-        # TODO: Permit this to be overridden
         f.write('GQC_CMD := python -m gqc\n\n')
         f.write('.PHONY: all\n')
         f.write('.DEFAULT_GOAL := all\n\n')

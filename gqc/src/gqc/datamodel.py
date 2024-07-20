@@ -16,8 +16,6 @@ from .anim import make_animation
 
 import hashlib
 
-# TODO: Turn the datamodel module into a directory
-
 FrameOnDisk = namedtuple('FrameOnDisk', ['compression_type_name', 'width', 'height', 'bytes'])
 CueColor = namedtuple('CueColor', ['name', 'r', 'g', 'b'])
 GqcIntOperand = namedtuple('GqcIntOperand', 'is_literal value')
@@ -84,11 +82,9 @@ class Event:
         self.addr = 0x00000000 # Set at link time
 
         self.event_statements = event_statements
-        # TODO: Don't emit an event object if the statements are empty?
         
         from .commands import CommandDone
         self.event_statements.append(CommandDone())
-        # TODO: don't generate anything for an empty event
 
     def set_addr(self, addr : int, namespace : int = structs.GQ_PTR_NS_CART):
         self.addr = structs.gq_ptr_apply_ns(namespace, addr)
@@ -107,7 +103,6 @@ class Event:
         return b''.join(event_bytes)
 
     def size(self):
-        # TODO: List needed??
         return sum(statement.size() for statement in self.event_statements)
 
     def __repr__(self) -> str:
@@ -134,7 +129,6 @@ class Stage:
 
         self.events = dict()
 
-        # TODO: Validate it's a valid event type
         for event in events:
             if event.event_type not in self.events:
                 self.events[event.event_type] = event
@@ -143,7 +137,6 @@ class Stage:
 
         self.resolve()
 
-        # TODO: what?
         Game.game.add_stage(self)
 
     def resolve(self) -> bool:
@@ -198,19 +191,13 @@ class Stage:
         return f"Stage({self.name}, bganim={self.bganim_name}, bgcue={self.bgcue_name}, events={self.events})"
     
     def to_bytes(self):
-        # TODO: Maybe only calculate the events once?
         event_pointers = []
         for event_type in EventType:
-            # TODO: These seem to happen in order in CPython 3.10, but need to confirm
-            # TODO: Need to resolve the addr of all the events rather than just setting
-            #       them all to null
             if event_type in self.events:
-                # TODO: Not this - resolve the address of the event code first
                 event_pointers.append(self.events[event_type].addr)
             else:
                 event_pointers.append(0x00)
 
-        # TODO: Figure out a better way to pack the following:
         stage = structs.GqStage(
             id=self.id,
             anim_bg_pointer=self.bganim.addr if self.bganim else 0,
@@ -295,7 +282,6 @@ class Variable:
         #  initialization purposes.
         # Volatile ints don't need this because they can be initialized with a literal-flagged 
         #  operation.
-        # TODO: De-duplicate init vars
         if storageclass == "volatile" and self.datatype == "str":
             init_var = Variable(self.datatype, f'{self.name}.init', self.value, storageclass="persistent")
             self.init_from = init_var
@@ -309,7 +295,6 @@ class Variable:
                 raise ValueError(f"String {self.name} length {strlen} exceeds maximum of {structs.GQ_STR_SIZE-1}")
             # Convert self.value from str to null-padded bytes of length structs.GQ_STR_SIZE:
             return self.value.encode('ascii').ljust(structs.GQ_STR_SIZE, b'\x00')
-            # TODO: needs return value
         else:
             raise ValueError(f"Invalid datatype {self.datatype}")
     
@@ -345,7 +330,6 @@ class Variable:
         else:
             raise ValueError("Invalid or unsupported namespace")
 
-# TODO: Use this:
 class FrameEncoding(IntEnum):
     UNCOMPRESSED = 0x01
     RLE4 = 0x41
@@ -356,11 +340,6 @@ class Animation:
     link_table = dict() # OrderedDict not needed to remember order since Python 3.7
     next_id : str = 0
     
-    # TODO: move DITHER_CHOICES to an enum?
-    # TODO: deduplicate the resolution of defaults here:
-    # TODO: change source from a str to a pathlib.Path
-    # TODO: accept a size parameter
-    # TODO: Make sure the frame count fits in a 16-bit integer
     def __init__(self, name : str, source : str, dithering : str = 'none', frame_rate : int = 25):
         self.frame_pointer = 0x00000000
         self.addr = 0x00000000
@@ -382,7 +361,6 @@ class Animation:
             
             self.frames = []
             
-            # TODO: Additional frame rate validation
             if 100 % frame_rate != 0:
                 print(f"[red][bold]WARNING[/bold][/red]: [blue][italic]{self.name}[/italic][/blue] frame rate {frame_rate} not a factor of 100; setting to {100 / self.ticks_per_frame}")
                 frame_rate = 100 / self.ticks_per_frame
@@ -426,8 +404,6 @@ class Animation:
             animation_progress.start_task(binary_task)
             for frame_path in frame_paths:
                 serialized_path = frame_path.with_suffix('.gqframe')
-                # TODO: Do some kind of error handling here for whatever can be
-                #       raised while trying to deserialize the frame.
                 if ffmpeged and serialized_path.exists():
                     self.frames.append(Frame(path=serialized_path))
                 else:
@@ -448,9 +424,6 @@ class Animation:
     def digest(self) -> int:
         # An Animation object is uniquely identified by a hash of the source file,
         #  its frame rate, size, and its dithering configuration.
-        # TODO: The following should be added, but currently it breaks when
-        #       trying to load from file (because the frames list is empty)
-        #size = f"{self.frames[0].width}x{self.frames[0].height}"
 
         # Get a SHA-256 hash of self.source's contents
         with open(self.src_path, 'rb') as file:
@@ -458,7 +431,6 @@ class Animation:
             sha256_hash = hashlib.sha256(contents)
         sha256_hash.update(str(self.ticks_per_frame).encode('ascii'))
         sha256_hash.update(self.dithering.encode('ascii'))
-        # sha256_hash.update(size.encode('ascii')) TODO: Re-add
         from . import __version__
         sha256_hash.update(__version__.encode('ascii'))
         return sha256_hash.hexdigest()
@@ -466,10 +438,7 @@ class Animation:
     def set_frame_pointer(self, frame_pointer : int, namespace : int = structs.GQ_PTR_NS_CART):
         self.frame_pointer = structs.gq_ptr_apply_ns(namespace, frame_pointer)
     
-    # TODO: break this out into an abstract class or something.
     def set_addr(self, addr : int, namespace : int = structs.GQ_PTR_NS_CART):
-        # TODO: Add a check to ensure that the namespace byte isn't already
-        #       set in the address.
         self.addr = structs.gq_ptr_apply_ns(namespace, addr)
         Animation.link_table[self.addr] = self
     
@@ -494,7 +463,6 @@ class Animation:
 class Frame:
     link_table = dict() # OrderedDict not needed to remember order since Python 3.7
 
-    # TODO: replace with the enum
     image_formats = dict(
         # IMAGE_FMT_1BPP_COMP_RLE7=0x71,
         IMAGE_FMT_1BPP_COMP_RLE4=0x41,
@@ -522,7 +490,7 @@ class Frame:
 
         # Now, determine which of these image types is the smallest:
         image_types = dict(
-            # IMAGE_FMT_1BPP_COMP_RLE7=self.image_rle7_bytes(), # TODO: Re-add once the C side supports it
+            # IMAGE_FMT_1BPP_COMP_RLE7=self.image_rle7_bytes(), # Re-add once the C side supports it
             IMAGE_FMT_1BPP_COMP_RLE4=self.image_rle4_bytes(),
             IMAGE_FMT_1BPP_UNCOMP=self.uncompressed_bytes()
         )
@@ -675,7 +643,6 @@ class Menu:
             raise ValueError(f"Menu {name} already defined")
         
         for label in options:
-            # TODO: make a function for validating string sizes:
             if len(label) > structs.GQ_STR_SIZE-1: # null term
                 raise ValueError("Menu label too long.")
 
@@ -692,7 +659,6 @@ class Menu:
         bytes_out = len(self.options).to_bytes(structs.GQ_INT_SIZE, 'little')
 
         for label, value in self.options.items():
-            # TODO: function for this:
             bytes_out += label.encode('ascii').ljust(structs.GQ_STR_SIZE, b'\x00')
             bytes_out += value.to_bytes(structs.GQ_INT_SIZE, 'little')
         
@@ -840,13 +806,6 @@ class IntExpression:
         # If the result is in a register, we need to free it.
         if self.result_symbol.value in structs.GQ_REGISTERS_INT:
             self.free_register(self.result_symbol.value)
-        
-        # TODO: Probably remove; this shouldn't be possible:
-        # if len(self.expression_toks) == 1:
-        #     if self.expression_toks[0].is_literal:
-        #         raise ValueError("Single literal expression not permitted in IntExpression.")
-        #     self.result_symbol = self.expression_toks[0].value
-        #     self.resolved = True
 
     def alloc_register(self):
         for register_name in structs.GQ_REGISTERS_INT:
@@ -873,7 +832,6 @@ class IntExpression:
 
         if len(subexpr) == 2:
             # Unary operation.
-            # TODO: if operand1 is a register in a unary operation, we can probably reuse it for operand0
             operand0 = GqcIntOperand(is_literal=False, value=self.alloc_register())
             operand1 = self.get_result_symbol(subexpr[1])
             operator = subexpr[0]

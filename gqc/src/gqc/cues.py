@@ -50,7 +50,6 @@ def parse_cue_frame(instring, loc, toks):
         if tok[0] == 'colors':
             # Note: The number of colors is enforced by pyparsing
             for color in tok[1:6]:
-                # TODO: Check that the color is defined, and look it up?
                 colors.append(color)
         elif tok[0] not in kwargs:
             val = tok[1]

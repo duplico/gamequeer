@@ -15,7 +15,6 @@ from . import structs
 
 class GqcParseError(Exception):
     def __init__(self, message, s, loc):
-        # TODO: Show the actual line
         message = f"Error at line {pp.lineno(loc, s)}, column {pp.col(loc, s)}: {message}"
         super().__init__(message)
 
@@ -24,7 +23,6 @@ def parse_game_definition(instring, loc, toks):
 
     # Note: if we're already here, the parser has already enforced that each of the key
     #       parameters for the game are uniquely defined.
-    # TODO: if we add optional parameters, this will need to be updated.
     id = None
     title = None
     author = None
@@ -161,10 +159,6 @@ def parse_variable_definition(instring, loc, toks):
 def parse_variable_definition_storageclass(instring, loc, toks):
     toks = toks[0]
     storageclass = toks[0]
-
-    # TODO: Is this needed?
-    if storageclass not in ["volatile", "persistent"]:
-        raise GqcParseError(f"Invalid storage class: {storageclass}", instring, loc)
     
     if Variable.storageclass_table[storageclass]:
         non_init_vars_present = False
@@ -177,9 +171,6 @@ def parse_variable_definition_storageclass(instring, loc, toks):
     
     for var in toks[1]:
         var.set_storageclass(storageclass)
-    
-    # TODO: Needed?
-    # return Variable.link_table[storageclass]
 
 def parse_lightcue_definition_section(instring, loc, toks):
     # Import here to avoid circular import
@@ -262,7 +253,6 @@ def parse_command(instring, loc, toks):
     elif command == 'setvar':
         _, dst, src, datatype = toks
         if datatype == 'str':
-            # TODO: Need to make this richer.
             return CommandSetStr(instring, loc, dst, src)
         else:
             if isinstance(src, int):

@@ -25,6 +25,9 @@ GQ_MAGIC_SIZE = 4
 GQ_MAGIC = b'GQ01'
 
 def gq_ptr_apply_ns(ns, ptr):
+    if ns < 0 or ns > 0xFF:
+        raise ValueError(f'Invalid namespace {ns}')
+        
     # TODO: Add a check to ensure that the namespace byte isn't already
     #       set in the address.
     return (ns << 24) | (ptr & 0x00FFFFFF)
@@ -47,7 +50,7 @@ GQ_INT_SIZE = struct.calcsize(GQ_INT_FORMAT)
 #     uint16_t stage_count;         // Number of stages
 #     t_gq_pointer starting_stage;  // Pointer to the starting stage
 #     t_gq_pointer startup_code;    // Pointer to the startup code.
-#     uint16_t flags;               // TODO
+#     uint16_t flags;               // TBD
 #     uint16_t crc16;               // CRC16 checksum of the header
 # } gq_header;
 GqHeader = namedtuple('GqHeader', 'magic id title anim_count stage_count starting_stage_ptr startup_code_ptr flags crc16')
@@ -57,8 +60,8 @@ GQ_HEADER_SIZE = struct.calcsize(GQ_HEADER_FORMAT)
 # typedef struct gq_anim {
 #     uint16_t id;                // Numerical ID of the animation (sequential, 0-based)
 #     uint16_t frame_count;       // Number of frames
-#     uint16_t ticks_per_frame;   // TODO
-#     uint16_t flags;             // TODO
+#     uint16_t ticks_per_frame;   // Ticks per frame
+#     uint16_t flags;             // TBD
 #     uint8_t width;              // Width of the animation
 #     uint8_t height;             // Height of the animation
 #     t_gq_pointer frame_pointer; // Pointer to the first gq_anim_frame
