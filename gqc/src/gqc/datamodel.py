@@ -317,11 +317,11 @@ class Variable:
         if self.storageclass != 'volatile':
             raise ValueError(f"Persistent variable {self.name} cannot be added to init table.")
         
-        from .commands import CommandSetVar
+        from .commands import CommandSetInt, CommandSetStr
         if self.datatype == "str":
-            return CommandSetVar(None, None, self.datatype, self.name, self.init_from.name)
+            return CommandSetStr(None, None, self.name, self.init_from.name)
         elif self.datatype == "int":
-            return CommandSetVar(None, None, self.datatype, self.name, self.value, src_is_literal=True)
+            return CommandSetInt(None, None, self.name, self.value, src_is_literal=True)
         else:
             raise ValueError(f"Invalid datatype {self.datatype}")
 
@@ -853,7 +853,7 @@ class IntExpression:
         self.used_registers.remove(reg)
 
     def get_result_symbol(self, subexpr : list) -> GqcIntOperand:
-        from .commands import CommandSetVar, CommandArithmetic
+        from .commands import CommandSetInt, CommandArithmetic
 
         if isinstance(subexpr, IntExpression):
             subexpr = subexpr.expression_toks
@@ -879,7 +879,9 @@ class IntExpression:
         # If the left operand is not a register, we need to load it into one.
         if operand0.is_literal or operand0.value not in structs.GQ_REGISTERS_INT:
             reg0 = self.alloc_register()
-            self.commands.append(CommandSetVar(None, None, 'int', reg0, operand0.value, src_is_literal=operand0.is_literal))
+            # TODO: remove:
+            # self.commands.append(CommandSetVar(None, None, 'int', reg0, operand0.value, src_is_literal=operand0.is_literal))
+            self.commands.append(CommandSetInt(None, None, reg0, operand0.value, src_is_literal=operand0.is_literal))
             operand0 = GqcIntOperand(is_literal=False, value=reg0)
 
         # The right operand does not need to be loaded into a register, because our commands

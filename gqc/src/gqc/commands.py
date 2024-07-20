@@ -182,35 +182,12 @@ class CommandArithmetic(Command):
         
         return self.resolved
 
-# TODO: Consider cribbing from the above, and creating separate SetVar for int and strings with different namedstructs
-class CommandSetVar(Command):
-    def __init__(self, instring, loc, datatype : str, dst : str, src = None, src_is_literal = False, src_is_expression = False):
+class CommandSetStr(Command):
+    def __init__(self, instring, loc, dst : str, src = None):
         super().__init__(CommandType.SETVAR, instring, loc, arg1=None, arg2=None)
         self.dst_name = dst
-        self.datatype = datatype
-
-        self.src_is_literal = src_is_literal
-        self.src_is_expression = src_is_expression
-
-        if src_is_literal and datatype == 'int':
-            self.command_flags |= structs.OpFlags.LITERAL_ARG2
-            self.arg2 = src
-        elif src_is_literal and datatype == 'str':
-            # TODO: create a value for it in .init
-            raise NotImplementedError("Cannot set a string variable to a literal")
-        elif src_is_expression and datatype == 'int':
-            self.src_expr = src
-        elif src_is_expression and datatype == 'str':
-            raise NotImplementedError("Cannot set a string variable to an expression")
-        else:
-            self.src_name = src
-
-        if self.datatype == "str":
-            self.command_flags |= structs.OpFlags.TYPE_STR
-        elif self.datatype == "int":
-            self.command_flags |= structs.OpFlags.TYPE_INT
-        else:
-            raise ValueError(f"Invalid datatype {self.datatype}")
+        self.src_name = src
+        self.command_flags |= structs.OpFlags.TYPE_STR
 
         self.resolve()
     
@@ -226,62 +203,31 @@ class CommandSetVar(Command):
             self.arg1 = Variable.var_table[self.dst_name].addr
         else:
             resolved = False
-        
-        if self.src_is_expression:
-            if not self.src_expr.resolve():
-                resolved = False
-                return False # TODO: Was this needed?
-            else:
-                # TODO: confirm this can never be a literal
-                self.src_name = self.src_expr.result_symbol.value
-                # TODO: take expression generated code and prepend it to my code
 
-        if not self.src_is_literal:
-            if self.src_name in Variable.var_table and Variable.var_table[self.src_name].addr != 0x00000000:
-                self.arg2 = Variable.var_table[self.src_name].addr
-            else:
-                resolved = False
+        if self.src_name in Variable.var_table and Variable.var_table[self.src_name].addr != 0x00000000:
+            self.arg2 = Variable.var_table[self.src_name].addr
+        else:
+            resolved = False
         
         # Rudimentary type checking:
-        if not self.src_is_literal and self.src_name in Variable.var_table:
-            if Variable.var_table[self.src_name].datatype != self.datatype:
-                raise ValueError(f"Variable {self.src_name} is of type {Variable.var_table[self.src_name].datatype}, not {self.datatype}")
+        if self.src_name in Variable.var_table:
+            if Variable.var_table[self.src_name].datatype != 'str':
+                raise ValueError(f"Variable {self.src_name} is of type {Variable.var_table[self.src_name].datatype}, not str")
         if self.dst_name in Variable.var_table:
-            if Variable.var_table[self.dst_name].datatype != self.datatype:
-                raise ValueError(f"Variable {self.dst_name} is of type {Variable.var_table[self.dst_name].datatype}, not {self.datatype}")
+            if Variable.var_table[self.dst_name].datatype != 'str':
+                raise ValueError(f"Variable {self.dst_name} is of type {Variable.var_table[self.dst_name].datatype}, not str")
 
         self.resolved = resolved
-        
         return self.resolved
     
     def to_bytes(self):
-        if self.src_is_expression:
-            expression_cmd_bytes = b''
-            for cmd in self.src_expr.commands:
-                if not cmd.resolve():
-                    raise ValueError("Unresolved symbol in expression")
-                expression_cmd_bytes += cmd.to_bytes()
-            return expression_cmd_bytes + super().to_bytes()
-        else:
-            return super().to_bytes()
+        return super().to_bytes()
 
     def size(self):
-        if self.src_is_expression:
-            if not self.src_expr.resolve():
-                raise ValueError("Unresolved symbol in expression")
-            size = 0
-            for cmd in self.src_expr.commands:
-                size += cmd.size()
-            return size + super().size()
-        else:
-            return super().size()
+        return super().size()
 
     def __repr__(self) -> str:
-        # TODO: Clean up
-        if self.src_is_expression:
-            return f"SETVAR {self.dst_name} {self.src_expr}"
-        else:
-            return f"SETVAR {self.dst_name} {self.arg2 if self.src_is_literal else self.src_name}"
+        return f"SETSTR {self.dst_name} {self.src_name}"
 
 class CommandGoto(Command):
     def __init__(self, instring, loc, addr : int = 0x00000000):
@@ -301,7 +247,6 @@ class CommandGoto(Command):
         return f"GOTO {self.arg1:#0{10}x}"
 
 class CommandWithIntExpressionArgument(Command):
-
     # TODO: Maybe track whether the expression is arg1 or arg2 or both?
     #       But, for now, it'll be assumed that the expression is arg2.
     def __init__(self, command_type : CommandType, instring, loc, expr_or_operand : GqcIntOperand | IntExpression):
@@ -383,6 +328,94 @@ class CommandWithIntExpressionArgument(Command):
             return f"{self.command_type.name}: UNRESOLVED"
 
         return f"{self.expr_or_operand.commands if self.arg2_is_expression else ''} {super().__repr__()}"
+
+class CommandSetInt(Command):
+    def __init__(self, instring, loc, dst : str, src = None, src_is_literal = False, src_is_expression = False):
+        super().__init__(CommandType.SETVAR, instring, loc, arg1=None, arg2=None)
+        self.dst_name = dst
+
+        self.src_is_literal = src_is_literal
+        self.src_is_expression = src_is_expression
+        self.command_flags |= structs.OpFlags.TYPE_INT
+
+        if src_is_literal:
+            self.command_flags |= structs.OpFlags.LITERAL_ARG2
+            self.arg2 = src
+        elif src_is_expression:
+            self.src_expr = src
+        else:
+            self.src_name = src
+
+        self.resolve()
+    
+    def resolve(self):
+        if self.resolved:
+            return True
+
+        resolved = True
+
+        # TODO: Test for null differently:
+        # TODO: Test for valid memory namespaces:
+        if self.dst_name in Variable.var_table and Variable.var_table[self.dst_name].addr != 0x00000000:
+            self.arg1 = Variable.var_table[self.dst_name].addr
+        else:
+            resolved = False
+        
+        if self.src_is_expression:
+            if not self.src_expr.resolve():
+                resolved = False
+                return False # TODO: Was this needed?
+            else:
+                # TODO: confirm this can never be a literal
+                self.src_name = self.src_expr.result_symbol.value
+                # TODO: take expression generated code and prepend it to my code
+
+        if not self.src_is_literal:
+            if self.src_name in Variable.var_table and Variable.var_table[self.src_name].addr != 0x00000000:
+                self.arg2 = Variable.var_table[self.src_name].addr
+            else:
+                resolved = False
+        
+        # Rudimentary type checking:
+        if not self.src_is_literal and self.src_name in Variable.var_table:
+            if Variable.var_table[self.src_name].datatype != 'int':
+                raise ValueError(f"Variable {self.src_name} is of type {Variable.var_table[self.src_name].datatype}, not int")
+        if self.dst_name in Variable.var_table:
+            if Variable.var_table[self.dst_name].datatype != 'int':
+                raise ValueError(f"Variable {self.dst_name} is of type {Variable.var_table[self.dst_name].datatype}, not int")
+
+        self.resolved = resolved
+        
+        return self.resolved
+    
+    def to_bytes(self):
+        if self.src_is_expression:
+            expression_cmd_bytes = b''
+            for cmd in self.src_expr.commands:
+                if not cmd.resolve():
+                    raise ValueError("Unresolved symbol in expression")
+                expression_cmd_bytes += cmd.to_bytes()
+            return expression_cmd_bytes + super().to_bytes()
+        else:
+            return super().to_bytes()
+
+    def size(self):
+        if self.src_is_expression:
+            if not self.src_expr.resolve():
+                raise ValueError("Unresolved symbol in expression")
+            size = 0
+            for cmd in self.src_expr.commands:
+                size += cmd.size()
+            return size + super().size()
+        else:
+            return super().size()
+
+    def __repr__(self) -> str:
+        # TODO: Clean up
+        if self.src_is_expression:
+            return f"SETVAR {self.dst_name} {self.src_expr}"
+        else:
+            return f"SETVAR {self.dst_name} {self.arg2 if self.src_is_literal else self.src_name}"
 
 class CommandIf(CommandWithIntExpressionArgument):
     def __init__(self, instring, loc, condition : GqcIntOperand | IntExpression, true_cmds : list, false_cmds : list = None):
@@ -485,3 +518,6 @@ class CommandTimer(CommandWithIntExpressionArgument):
     
     # def __repr__(self) -> str:
     #     return f"TIMER {self.arg2}"
+
+class CommandLoop(Command):
+    pass
