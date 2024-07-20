@@ -578,22 +578,46 @@ of commands that are executed in sequence.
 
 The following event types are allowed:
 
-* `enter`: Called when the stage is entered
-* `input(A)`: Called when button A is pressed
-* `input(B)`: Called when button B is pressed
-* `input(<-)`: Called when the D-Dial is rotated left
-* `input(->)`: Called when the D-Dial is rotated right
-* `input(-)`: Called when the D-Dial is clicked
-* `timer`: Called when a timer expires
-* `bgdone`: Called when the background animation has completed
-* `menu`: Called when a menu selection is made
+`enter` 
+    Called when the stage is entered
+
+`input(A)`
+    Called when button A is pressed
+
+`input(B)`
+    Called when button B is pressed
+
+`input(<-)`
+    Called when the D-Dial is rotated left
+
+`input(->)` 
+    Called when the D-Dial is rotated right
+
+`input(-)` 
+    Called when the D-Dial is clicked
+
+`timer` 
+    Called when a timer expires
+
+`bgdone` 
+    Called when the background animation has completed
+
+`menu` 
+    Called when a menu selection is made
 
 Inside an event, the following commands are available:
 
-* `cue`: Play a lighting cue by name; for example, `cue flash`
-* `play bganim`: Play a new background animation by name; for exmaple, `play bganim pop`
-* `gostage`: Go to a different stage; for example, `gostage end`
-* `timer`: Set a one-shot timer by a numeric expression. The interval is measured in
+`cue` 
+    Play a lighting cue by name; for example, `cue flash`
+
+`play bganim` 
+    Play a new background animation by name; for exmaple, `play bganim pop`
+
+`gostage` 
+    Go to a different stage; for example, `gostage end`
+
+`timer` 
+    Set a one-shot timer by a numeric expression. The interval is measured in
     system ticks, which are 10ms each. For example, `timer 1000` sets a timer for 10 seconds.
 
 The following operators are available:
@@ -676,6 +700,6 @@ The following control structures are available:
 
 `break` 
     Exit the innermost loop.
-    
+
 `continue`
     Skip the rest of the current iteration of the innermost loop.
