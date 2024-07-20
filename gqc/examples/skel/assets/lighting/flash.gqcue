@@ -1,5 +1,5 @@
 frame {
-    duration = 10;
+    duration = 8;
     colors {
         white,
         black,
@@ -10,7 +10,7 @@ frame {
 }
 
 frame {
-    duration = 10;
+    duration = 8;
     colors {
         black,
         white,
@@ -20,7 +20,7 @@ frame {
     }
 }
 frame {
-    duration = 10;
+    duration = 8;
     colors {
         white,
         black,
@@ -31,7 +31,7 @@ frame {
 }
 
 frame {
-    duration = 10;
+    duration = 8;
     colors {
         black,
         white,
@@ -41,7 +41,7 @@ frame {
     }
 }
 frame {
-    duration = 10;
+    duration = 8;
     colors {
         white,
         black,
@@ -52,7 +52,7 @@ frame {
 }
 
 frame {
-    duration = 10;
+    duration = 8;
     colors {
         black,
         white,
@@ -62,7 +62,7 @@ frame {
     }
 }
 frame {
-    duration = 10;
+    duration = 8;
     colors {
         white,
         black,
@@ -73,7 +73,7 @@ frame {
 }
 
 frame {
-    duration = 10;
+    duration = 8;
     colors {
         black,
         white,
@@ -83,7 +83,7 @@ frame {
     }
 }
 frame {
-    duration = 10;
+    duration = 8;
     colors {
         white,
         black,
@@ -94,7 +94,7 @@ frame {
 }
 
 frame {
-    duration = 10;
+    duration = 8;
     colors {
         black,
         white,

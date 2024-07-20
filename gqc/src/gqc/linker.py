@@ -200,7 +200,7 @@ def create_symbol_table(table_dest = sys.stdout, cmd_dest = sys.stdout):
     print(tabulate(section_table, headers=section_table_headers), file=table_dest)
 
     cmds_table = []
-    cmds_table_headers = ['Address', 'Command', 'Flags', 'arg1', 'arg2']
+    cmds_table_headers = ['Address', 'Command', 'Op', 'Flags', 'arg1', 'arg2']
     next_expected_addr = list(Event.link_table.values())[0].event_statements[0].addr
 
     # Now let's print a human readable list of all our commands.
@@ -208,14 +208,14 @@ def create_symbol_table(table_dest = sys.stdout, cmd_dest = sys.stdout):
         if event.addr != next_expected_addr:
             print(f"WARNING: Event at address {event.addr:#0{10}x} is not contiguous with the previous event; expected {next_expected_addr:#0{10}x}.", file=sys.stderr)
         
-        cmds_table.append((f"{event.addr:#0{PAD}x}", f'EVENT:{event.event_type.name}', '', '', ''))
+        cmds_table.append((f"{event.addr:#0{PAD}x}", f'EVENT:{event.event_type.name}', '', '', '', ''))
 
-        next_expected_addr = event.addr + event.size()
         for cmd in event.event_statements:
             cmd_addr = cmd.addr
             for cmd_struct in cmd.cmd_list():
-                cmds_table.append((f"{cmd_addr:#0{PAD}x}", cmd_struct.opcode.name, f'{cmd_struct.flags:#0{4}x}', f"{cmd_struct.arg1:#0{PAD}x}", f"{cmd_struct.arg2:#0{PAD}x}"))
+                cmds_table.append((f"{cmd_addr:#0{PAD}x}", cmd_struct.opcode.name, f'{cmd_struct.opcode.value:#0{4}x}', f'{cmd_struct.flags:#0{4}x}', f"{cmd_struct.arg1:#0{PAD}x}", f"{cmd_struct.arg2:#0{PAD}x}"))
                 cmd_addr += structs.GQ_OP_SIZE
+                next_expected_addr += structs.GQ_OP_SIZE
 
     print(tabulate(cmds_table, headers=cmds_table_headers), file=cmd_dest)
 
@@ -244,6 +244,8 @@ def generate_code(parsed, symbol_table : dict):
                 if structs.gq_ptr_get_ns(addr) != structs.GQ_PTR_NS_CART:
                     # Only emit code for the cartridge.
                     continue
+                if addr != symbol.addr:
+                    raise ValueError(f"Symbol at address {addr:#0{10}x} has an address mismatch with its symbol table entry.")
                 if addr != next_expected_addr:
                     # TODO: emit a more friendly error than this, since it's a compiler/linker error
                     raise ValueError(f"Symbol at address {addr:#0{10}x} is not contiguous with the previous symbol.")
