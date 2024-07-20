@@ -68,6 +68,7 @@ class Game:
             stage_count=len(Stage.stage_table),
             starting_stage_ptr=self.starting_stage.addr,
             startup_code_ptr=self.startup_code_ptr,
+            color=0x00, # Unassigned.
             flags=0,
             crc16=0
         )

@@ -38,6 +38,25 @@
 typedef uint32_t t_gq_pointer;
 typedef int32_t t_gq_int;
 
+typedef enum gq_game_color {
+    GQ_COLOR_UNASSIGNED = 0x00,
+    GQ_COLOR_BLACK1,
+    GQ_COLOR_BLACK2,
+    GQ_COLOR_WHITE,
+    GQ_COLOR_RED,
+    GQ_COLOR_ORANGE,
+    GQ_COLOR_YELLOW,
+    GQ_COLOR_GREEN,
+    GQ_COLOR_BLUE,
+    GQ_COLOR_PURPLE,
+    GQ_COLOR_CYAN,
+    GQ_COLOR_PINK,
+    GQ_COLOR_BROWN,
+    GQ_COLOR_GRAY,
+    GQ_COLOR_LTGRAY,
+    GQ_COLOR_COUNT
+} gq_game_color;
+
 typedef struct gq_header {
     uint8_t magic[GQ_MAGIC_SIZE]; // Magic number
     uint16_t id;                  // Numerical ID of the game
@@ -46,7 +65,8 @@ typedef struct gq_header {
     uint16_t stage_count;         // Number of stages
     t_gq_pointer starting_stage;  // Pointer to the starting stage
     t_gq_pointer startup_code;    // Pointer to the startup code.
-    uint16_t flags;               // TBD
+    uint8_t color;                // Color of the cartridge, as per gq_game_color - may be assigned at write-time.
+    uint8_t flags;                // Reserved for future use
     uint16_t crc16;               // CRC16 checksum of the header
 } __attribute__((packed)) gq_header;
 
@@ -113,6 +133,7 @@ typedef enum gq_special_var_int {
     GQI_GAME_ID = 0x00,
     GQI_MENU_ACTIVE,
     GQI_MENU_VALUE,
+    GQI_GAME_COLOR,
     GQI_COUNT
 } gq_special_var_int;
 
