@@ -835,6 +835,12 @@ class IntExpression:
         if len(self.expression_toks) == 0:
             raise ValueError("Empty expression")
         
+        self.result_symbol = self.get_result_symbol(self.expression_toks)
+
+        # If the result is in a register, we need to free it.
+        if self.result_symbol.value in structs.GQ_REGISTERS_INT:
+            self.free_register(self.result_symbol.value)
+        
         # TODO: Probably remove; this shouldn't be possible:
         # if len(self.expression_toks) == 1:
         #     if self.expression_toks[0].is_literal:
@@ -915,29 +921,15 @@ class IntExpression:
         
         resolved = True
 
-        self.result_symbol = self.get_result_symbol(self.expression_toks)
-
-        # If the result is in a register, we need to free it.
-        if self.result_symbol.value in structs.GQ_REGISTERS_INT:
-            self.free_register(self.result_symbol.value)
-
         for command in self.commands:
             if not command.resolve():
                 resolved = False
                 break
 
-        if not resolved:
-            # Cleanup
-            self.commands = []
-            for register in self.used_registers:
-                self.free_register(register)
-
         self.resolved = resolved
         return resolved
     
     def size(self):
-        if not self.resolve():
-            raise ValueError("Cannot calculate size of unresolved IntExpression")
         return sum(command.size() for command in self.commands)
 
     def __repr__(self) -> str:
