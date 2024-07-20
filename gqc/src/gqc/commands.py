@@ -491,9 +491,3 @@ class CommandLoop():
 class CommandTimer(CommandWithIntExpressionArgument):
     def __init__(self, instring, loc, interval : GqcIntOperand | IntExpression):
         super().__init__(CommandType.TIMER, instring, loc, interval)
-    
-    # def __repr__(self) -> str:
-    #     return f"TIMER {self.arg2}"
-
-class CommandLoop(Command):
-    pass
