@@ -419,7 +419,7 @@ class CommandIf(CommandWithIntExpressionArgument):
     def size(self):
         # The size of this if block is the size of the GOTOIFN command, plus the size of the true section,
         #  plus the size of the false section.
-        return self.expr_section_size() + super().size() + self.true_section_size + self.false_section_size
+        return super().size() + self.true_section_size + self.false_section_size
     
     def to_bytes(self):
         if not self.resolve():
