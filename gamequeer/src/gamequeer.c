@@ -29,6 +29,7 @@ uint8_t gq_builtin_strs[GQS_COUNT * GQ_STR_SIZE] = {
 t_gq_int *game_id     = (t_gq_int *) &gq_builtin_ints[GQI_GAME_ID * GQ_INT_SIZE];
 t_gq_int *menu_active = (t_gq_int *) &gq_builtin_ints[GQI_MENU_ACTIVE * GQ_INT_SIZE];
 t_gq_int *menu_value  = (t_gq_int *) &gq_builtin_ints[GQI_MENU_VALUE * GQ_INT_SIZE];
+t_gq_int *game_color  = (t_gq_int *) &gq_builtin_ints[GQI_GAME_COLOR * GQ_INT_SIZE];
 
 char *game_title = (char *) &gq_builtin_strs[GQS_GAME_TITLE * GQ_STR_SIZE];
 
@@ -128,7 +129,8 @@ uint8_t load_game() {
         return 0;
     }
 
-    *game_id = game.id;
+    *game_id    = game.id;
+    *game_color = game.color;
     memcpy(game_title, game.title, GQ_STR_SIZE);
 
     // Run the initialization commands
