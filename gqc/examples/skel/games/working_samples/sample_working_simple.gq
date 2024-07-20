@@ -35,6 +35,8 @@ animations {
     george <- "eat.gif" {
         dithering := "sierra2_4a";
         frame_rate = 25;
+        w = 96;
+        h = 96;
     }
 
     george2 <- "dance.gif" {

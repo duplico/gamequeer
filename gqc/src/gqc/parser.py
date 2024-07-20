@@ -120,14 +120,9 @@ def parse_animation_definition(instring, loc, toks):
 
     if toks[2]:
         for opt in toks[2]:
-            if opt[0] == "frame_rate":
-                if frame_rate in kwargs:
-                    raise GqcParseError(f"Duplicate frame_rate for animation {name}", instring, loc)
-                kwargs['frame_rate'] = opt[1]
-            elif opt[0] == "dithering":
-                if dithering in kwargs:
-                    raise GqcParseError(f"Duplicate dithering for animation {name}", instring, loc)
-                kwargs["dithering"] = opt[1]
+            if opt[0] in kwargs:
+                raise GqcParseError(f"Duplicate option {opt[0]} for animation {name}", instring, loc)
+            kwargs[opt[0]] = opt[1]
 
     try:
         return Animation(name, source, **kwargs)
