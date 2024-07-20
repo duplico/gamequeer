@@ -174,7 +174,10 @@ uint8_t load_animation(uint8_t index, t_gq_pointer anim_ptr) {
 void draw_animations() {
     gq_anim_frame frame_current;
 
-    // First, draw the animation stack
+    // First, start with a blank slate.
+    Graphics_clearDisplay(&g_sContext);
+
+    // Then draw the animation stack.
     for (uint8_t i = 0; i < MAX_CONCURRENT_ANIMATIONS; i++) {
         if (!current_animations[i].in_use) {
             continue;
