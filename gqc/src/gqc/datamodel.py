@@ -929,6 +929,13 @@ class IntExpression:
         self.resolved = resolved
         return resolved
     
+    def set_addr(self, addr : int, namespace : int = structs.GQ_PTR_NS_CART):
+        self.addr = structs.gq_ptr_apply_ns(namespace, addr)
+        addr_offset = 0
+        for cmd in self.commands:
+            cmd.set_addr(addr + addr_offset, namespace)
+            addr_offset += cmd.size()
+
     def size(self):
         return sum(command.size() for command in self.commands)
 

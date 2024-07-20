@@ -169,7 +169,7 @@ def parse_variable_definition_storageclass(instring, loc, toks):
     if Variable.storageclass_table[storageclass]:
         non_init_vars_present = False
         for var in Variable.storageclass_table[storageclass].values():
-            if not var.name in structs.GQ_REGISTER_INT_NAMES and not var.name.endswith(".init") and not var.name.endswith(".strlit"):
+            if not var.name in structs.GQ_REGISTERS_INT and not var.name.endswith(".init") and not var.name.endswith(".strlit"):
                 non_init_vars_present = True
                 break
         if non_init_vars_present:

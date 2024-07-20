@@ -12,7 +12,7 @@ class Command:
     def __init__(self, command_type : CommandType, instring = None, loc = None,  flags : int = 0, arg1 : int = 0, arg2 : int = 0):
         self.instring = instring
         self.loc = loc
-        self.addr = 0x00000000 # TODO
+        self.addr = 0x00000000
         
         self.command_type = command_type
         self.command_flags = flags
@@ -23,27 +23,19 @@ class Command:
         Command.command_list.append(self)
     
     def resolve(self):
-        # TODO: Probably not this:
         self.resolved = True
         return True
     
     def set_addr(self, addr : int, namespace : int = structs.GQ_PTR_NS_CART):
-        # TODO: Add a check to ensure that the namespace byte isn't already
-        #       set in the address.
         self.addr = structs.gq_ptr_apply_ns(namespace, addr)
 
     def to_bytes(self):
         if not self.resolve():
             # TODO: Raise a GqError here, or otherwise show the location of the error in source
             raise ValueError("Unresolved command symbols remain")
-
-        op = structs.GqOp(
-            opcode=self.command_type,
-            flags=self.command_flags,
-            arg1=self.arg1,
-            arg2=self.arg2
-        )
         
+        op = self.as_struct()
+
         if self.command_flags & structs.OpFlags.LITERAL_ARG2 and self.command_flags & structs.OpFlags.LITERAL_ARG1:
             return struct.pack(structs.GQ_OP_FORMAT_LITERAL_ARGS, *op)
         elif self.command_flags & structs.OpFlags.LITERAL_ARG1:
@@ -53,11 +45,22 @@ class Command:
 
         return struct.pack(structs.GQ_OP_FORMAT, *op)
     
+    def as_struct(self):
+        return structs.GqOp(
+            opcode=self.command_type,
+            flags=self.command_flags,
+            arg1=self.arg1,
+            arg2=self.arg2
+        )
+
+    def cmd_list(self) -> list:
+        return [self.as_struct()]
+
     def size(self):
         return structs.GQ_OP_SIZE
 
     def __repr__(self) -> str:
-        return f"Command({self.command_type.name}:{self.command_flags:#0{4}x} {self.arg1:#0{10}x} {self.arg2:#0{10}x});"
+        return f"{self.command_type.name}[{self.command_flags:#0{4}x}]({self.arg1:#0{10}x}, {self.arg2:#0{10}x})"
 
 class CommandDone(Command):
     def __init__(self):
@@ -242,8 +245,6 @@ class CommandGoto(Command):
         return f"GOTO {self.arg1:#0{10}x}"
 
 class CommandWithIntExpressionArgument(Command):
-    # TODO: Maybe track whether the expression is arg1 or arg2 or both?
-    #       But, for now, it'll be assumed that the expression is arg2.
     def __init__(self, command_type : CommandType, instring, loc, expr_or_operand : GqcIntOperand | IntExpression):
         super().__init__(command_type, instring, loc)
 
@@ -300,7 +301,12 @@ class CommandWithIntExpressionArgument(Command):
             return expr_bytes
         else:
             return b''
-        
+    
+    def set_addr(self, addr: int, namespace: int = structs.GQ_PTR_NS_CART):
+        super().set_addr(addr, namespace)
+        if self.arg2_is_expression:
+            self.expr_or_operand.set_addr(addr, namespace)
+
     def size(self):
         return self.expr_section_size() + super().size()
     
@@ -310,6 +316,20 @@ class CommandWithIntExpressionArgument(Command):
         
         return self.expr_section_bytes() + super().to_bytes()
     
+    def cmd_list(self) -> list:
+        if not self.resolve():
+            raise ValueError("Cannot serialize unresolved expression section")
+        
+        cmd_list = []
+
+        if self.arg2_is_expression:
+            for cmd in self.expr_or_operand.commands:
+                cmd_list += cmd.cmd_list()
+        
+        cmd_list += super().cmd_list()
+
+        return cmd_list
+
     def __repr__(self) -> str:
         if not self.resolve():
             return f"{self.command_type.name}: UNRESOLVED"
@@ -352,6 +372,7 @@ class CommandIf(CommandWithIntExpressionArgument):
         super().__init__(CommandType.GOTOIFN, instring, loc, condition)
         self.true_cmds = true_cmds
         self.false_cmds = false_cmds
+        self.goto_cmd = None
 
         self.true_section_size = 0
         for cmd in self.true_cmds:
@@ -388,6 +409,9 @@ class CommandIf(CommandWithIntExpressionArgument):
             for cmd in self.false_cmds:
                 if not cmd.resolve():
                     resolved = False
+        
+        if resolved and self.false_cmds:
+            self.goto_cmd = CommandGoto(None, None, self.addr + self.size())
 
         self.resolved = resolved
         return self.resolved
@@ -406,11 +430,8 @@ class CommandIf(CommandWithIntExpressionArgument):
             raise ValueError("Cannot serialize IF block without base address set")
         
         # If there's an expression section required, this will serialize it.
-        #  Otherwise, it will be an empty byte string.
-        cmd_bytes = self.expr_section_bytes()
-
-        # Next, serialize the GOTOIFN command.
-        cmd_bytes += super().to_bytes()
+        #  Otherwise, it will just be the GOTOIFN command.
+        cmd_bytes = super().to_bytes()
 
         # Next, serialize the true commands.
         for cmd in self.true_cmds:
@@ -419,7 +440,7 @@ class CommandIf(CommandWithIntExpressionArgument):
         # If there are false commands, we need to add a GOTO command to jump over them,
         #  and then serialize the false commands.
         if self.false_cmds:
-            cmd_bytes += CommandGoto(None, None, self.addr + self.size()).to_bytes()
+            cmd_bytes += self.goto_cmd.to_bytes()
             for cmd in self.false_cmds:
                 cmd_bytes += cmd.to_bytes()
         
@@ -433,6 +454,32 @@ class CommandIf(CommandWithIntExpressionArgument):
         false_address = self.addr + super().size() + self.true_section_size
         self.arg1 = false_address
 
+        addr_offset = 0
+        for cmd in self.true_cmds:
+            cmd.set_addr(self.addr + super().size() + addr_offset)
+            addr_offset += cmd.size()
+        
+        addr_offset = 0
+        if self.false_cmds:
+            for cmd in self.false_cmds:
+                cmd.set_addr(false_address + addr_offset)
+                addr_offset += cmd.size()
+
+    def cmd_list(self) -> list:
+        if not self.resolve():
+            raise ValueError("Cannot serialize unresolved IF block")
+        
+        cmd_list = super().cmd_list()
+
+        for cmd in self.true_cmds:
+            cmd_list += cmd.cmd_list()
+        
+        if self.false_cmds:
+            cmd_list += self.goto_cmd.cmd_list()
+            for cmd in self.false_cmds:
+                cmd_list += cmd.cmd_list()
+
+        return cmd_list
 
     def __repr__(self) -> str:
         if not self.resolve():
@@ -440,7 +487,7 @@ class CommandIf(CommandWithIntExpressionArgument):
 
         return f"{self.expr_or_operand.commands if self.arg2_is_expression else ''} {super().__repr__()} {self.true_cmds} {(repr(CommandGoto(None, None, self.addr + self.size())) + ' ') if self.false_cmds else ''}{self.false_cmds if self.false_cmds else ''}"
 
-class CommandLoop():
+class CommandLoop(Command):
     def __init__(self, instring, loc, commands : list):
         self.instring = instring
         self.loc = loc
@@ -448,12 +495,9 @@ class CommandLoop():
         self.addr = 0x00000000
         self.done_addr = 0x00000000
         self.resolved = False
+        self.command_type = CommandType.LOOP_NOP
 
         self.commands.append(CommandGoto(instring, loc, form='continue'))
-
-    def set_addr(self, addr : int, namespace : int = structs.GQ_PTR_NS_CART):
-        self.addr = structs.gq_ptr_apply_ns(namespace, addr)
-        self.done_addr = self.addr + self.size()
     
     def size(self):
         size = 0
@@ -473,13 +517,22 @@ class CommandLoop():
                 if cmd.false_cmds:
                     self.set_goto_addrs(cmd.false_cmds)
 
+    def set_addr(self, addr : int, namespace : int = structs.GQ_PTR_NS_CART):
+        self.addr = structs.gq_ptr_apply_ns(namespace, addr)
+        self.done_addr = self.addr + self.size()
+        
+        self.set_goto_addrs(self.commands)
+
+        addr_offset = 0
+        for cmd in self.commands:
+            cmd.set_addr(self.addr + addr_offset)
+            addr_offset += cmd.size()
+
     def resolve(self):
         if self.resolved:
             return True
         
         resolved = True
-
-        self.set_goto_addrs(self.commands)
 
         for cmd in self.commands:
             if not cmd.resolve():
@@ -488,6 +541,44 @@ class CommandLoop():
         self.resolved = resolved
         return self.resolved
     
+    def to_bytes(self):
+        if not self.resolve():
+            # This also confirms that the condition is resolved.
+            raise ValueError("Cannot serialize unresolved LOOP block")
+
+        if not self.addr:
+            raise ValueError("Cannot serialize LOOP block without base address set")
+        
+        if not self.done_addr:
+            raise ValueError("Cannot serialize LOOP block without done address set")
+        
+        # If there's an expression section required, this will serialize it.
+        #  Otherwise, it will be an empty byte string.
+        cmd_bytes = b''
+        for cmd in self.commands:
+            cmd_bytes += cmd.to_bytes()
+        
+        # Note: self.commands includes the looping GOTO command, so we don't need to add it here.
+        
+        return cmd_bytes
+
+    def cmd_list(self) -> list:
+        if not self.resolve():
+            raise ValueError("Cannot serialize unresolved LOOP block")
+        
+        cmd_list = []
+        
+        for cmd in self.commands:
+            cmd_list += cmd.cmd_list()
+        
+        return cmd_list
+
+    def __repr__(self) -> str:
+        if not self.resolve():
+            return f"LOOP: UNRESOLVED"
+
+        return f"LOOP {self.commands}"
+
 class CommandTimer(CommandWithIntExpressionArgument):
     def __init__(self, instring, loc, interval : GqcIntOperand | IntExpression):
         super().__init__(CommandType.TIMER, instring, loc, interval)

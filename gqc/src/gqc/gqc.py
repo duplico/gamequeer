@@ -61,21 +61,15 @@ def compile(input : pathlib.Path, no_mem_map : bool, out_dir : pathlib.Path):
     with open(input, 'r') as f:
         parsed = parser.parse(f)
 
-    # TODO: animation processing
-    #       currently handled inside the parse actions
-
-    # TODO: lightcue processing
-
     # Place symbols into the symbol table
-    # TODO: select the correct output stream
     mem_map_path = out_dir / 'map.txt'
+    cmd_asm_path = out_dir / 'cmds.gqasm'
     if no_mem_map:
         mem_map_path = os.devnull
+        cmd_asm_path = os.devnull
 
-    with open(mem_map_path, 'w') as map_file:
-        symbol_table = linker.create_symbol_table(table_dest=map_file)
-
-    # TODO: Any additional linking tasks
+    with open(mem_map_path, 'w') as map_file, open(cmd_asm_path, 'w') as cmd_asm_file:
+        symbol_table = linker.create_symbol_table(table_dest=map_file, cmd_dest=cmd_asm_file)
 
     # Code generation
     output_code = linker.generate_code(parsed, symbol_table)
