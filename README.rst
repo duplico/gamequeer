@@ -110,11 +110,11 @@ Installing gqc to your system
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The only real dependencies for gqc are Python 3.10 or later, pip, and ffmpeg. Pip will install
-the other Python dependencies. To install gqc to your system, run `pip install` on the
+the other Python dependencies. To install gqc to your system, run ``pip install`` on the
 wheel file that was built in the previous step. Use of a virtual environment, pyenv, or
 similar is recommended.
 
-I use a pyenv environment initialized with `pyenv virtualenv 3.10.0 gamequeer`.
+I use a pyenv environment initialized with ``pyenv virtualenv 3.10.0 gamequeer``.
 
 To install the gqc module, run:
 
@@ -122,13 +122,13 @@ To install the gqc module, run:
 
     pip install build/gqc-0.1.0-py3-none-any.whl
 
-Note that depending on your distribution, `pip` may be need to be invoked using `pip3`, 
-`python3 -m pip`, or something else.
+Note that depending on your distribution, ``pip`` may be need to be invoked using ``pip3``, 
+``python3 -m pip``, or something else.
 
 Building the GameQueer Emulator
 -------------------------------
 
-To build the gamequeer emulator (a binary called `gamequeer`), make the following target:
+To build the gamequeer emulator (a binary called ``gamequeer``), make the following target:
 
 .. code-block:: bash
 
@@ -176,7 +176,7 @@ Running a game image
 ====================
 
 The GameQueer emulator can run a game image directly, without needing to flash it to a physical
-cartridge. To run a game image, use the `gamequeer` command, passing the path to the game image
+cartridge. To run a game image, use the ``gamequeer`` command, passing the path to the game image
 as an argument. For example:
 
 .. code-block:: bash
@@ -202,16 +202,16 @@ which the gqc toolchain can set up and manage for you. This is how it knows wher
 game code and assets, to produce the final game image that can be flashed to a cartridge or run
 in the emulator.
 
-Simply put, a GameQueer game is made up of a `.gq` file, and a set of assets. The assets include
+Simply put, a GameQueer game is made up of a ``.gq`` file, and a set of assets. The assets include
 animations to be displayed on the OLED (which may be in any format that ffmpeg can read), and
 LED lighting cues, which are simple text files that describe the colors and patterns of the LEDs.
 
 Setting up your GameQueer workspace
 -----------------------------------
 
-Prerequisite: You must have the `gqc` module installed in your Python environment. It must be
-invokable with the `python -m gqc` command. If a different command is required to invoke gqc,
-you must set the `GQC_CMD` environment variable to that command.
+Prerequisite: You must have the ``gqc`` module installed in your Python environment. It must be
+invokable with the ``python -m gqc`` command. If a different command is required to invoke gqc,
+you must set the ``GQC_CMD`` environment variable to that command.
 
 A GameQueer workspace is a directory that contains all the assets and game source code required
 to build one or more GameQueer games. If your goal is to build multiple completely standalone
@@ -224,7 +224,7 @@ To set up a new GameQueer game project, run the following command:
 
     python -m gqc init-dir /path/to/your/workspace
 
-This will create a new directory at `/path/to/your/workspace` with the following structure:
+This will create a new directory at ``/path/to/your/workspace`` with the following structure:
 
 .. code-block:: bash
 
@@ -241,40 +241,40 @@ This will create a new directory at `/path/to/your/workspace` with the following
     ├── Makefile
     └── Makefile.local
 
-The `assets` directory is where you'll put all your game assets. The `assets/animations` 
+The ``assets`` directory is where you'll put all your game assets. The ``assets/animations`` 
 directory is where you'll put all your animation files, which can be in any format that 
-ffmpeg can read. The `assets/lightcues` directory is where you'll put all your LED lighting 
-cue files. The `games` directory is where you'll put all your game source code. The `build/`
+ffmpeg can read. The ``assets/lightcues`` directory is where you'll put all your LED lighting 
+cue files. The ``games`` directory is where you'll put all your game source code. The ``build/``
 directory is used for build artifacts, including both intermediary files and the final game
 image. It's set to be ignored by the .gitignore file, and it can be cleaned up at any time
 to remove the build artifacts.
 
 The workspace directory is intended to be a git repository (or a subdirectory of one), so a
-`.gitignore` file is provided to ignore the `build` directory and other generated files.
+``.gitignore`` file is provided to ignore the ``build`` directory and other generated files.
 
 The Makefile provided can be used to build your games. It shouldn't need to change regularly,
-even when you add new games to the workspace. The `Makefile.local` file is a generated file
+even when you add new games to the workspace. The ``Makefile.local`` file is a generated file
 that contains the paths to the assets and games directories, and should not be edited by hand.
-Whenever you add a new game source file in the `games`` directory, you should update the
-`Makefile.local` file by running the following command:
+Whenever you add a new game source file in the ``games`` directory, you should update the
+``Makefile.local`` file by running the following command:
 
 .. code-block:: bash
 
     make Makefile.local
 
-This will update the `Makefile.local` file with paths to your game source files, and is
-equivalent to running the command `python -m gqc update-makefile-local .` from the workspace
+This will update the ``Makefile.local`` file with paths to your game source files, and is
+equivalent to running the command ``python -m gqc update-makefile-local .`` from the workspace
 directory. This will generate new make targets for all your games, and also update the
-`build` directory structure based on the layout of your `games` and `assets` directories.
+``build`` directory structure based on the layout of your ``games`` and ``assets`` directories.
 
-After you have run `make Makefile.local`, you can build your game using `make`. For example,
-if your game source file is `games/test.gq`, you can build it with the following command:
+After you have run ``make Makefile.local``, you can build your game using ``make``. For example,
+if your game source file is ``games/test.gq``, you can build it with the following command:
 
 .. code-block:: bash
 
     make build/test.gqgame
 
-This will build the game and place the resulting game image in the `build` directory.
+This will build the game and place the resulting game image in the ``build`` directory.
 
 Alternatively, you can build all the games in the workspace with the following command:
 
@@ -305,11 +305,11 @@ animation. Extensive testing has only been done with .mp4 files, but other forma
 work as well. The GameQueer compiler will automatically convert the video file into a format
 that can be displayed on the badge.
 
-Place the source video file in the `assets/animations` directory of your workspace. Games
+Place the source video file in the ``assets/animations`` directory of your workspace. Games
 will reference animations by their filename, relative to that directory. For example, if
-you create `assets/animations/test.mp4`, you can import it in a game source file as
-`test.mp4`. If you create `assets/animations/subdir/test.mp4`, you can import it as
-`subdir/test.mp4`. Multiple games (and, in fact, multiple animations within a single game)
+you create ``assets/animations/test.mp4``, you can import it in a game source file as
+``test.mp4``. If you create ``assets/animations/subdir/test.mp4``, you can import it as
+``subdir/test.mp4``. Multiple games (and, in fact, multiple animations within a single game)
 can reference the same animation file.
 
 Light cues
@@ -320,9 +320,9 @@ has five vertically-oriented RGB LEDs on either side, shining generally outwards
 each side are electrically paired; for example, whatever is displayed on the top LED on one side
 is also displayed on the top LED on the other side.
 
-Light cue files use the `.gqcue` extension and are placed in the `assets/lighting` directory of
+Light cue files use the ``.gqcue`` extension and are placed in the ``assets/lighting`` directory of
 your workspace. The file hierarchy works the same as for animations: if a game refers to
-`foo.gqcue`, it will look for that file at `assets/lighting/foo.gqcue`.
+``foo.gqcue``, it will look for that file at ``assets/lighting/foo.gqcue``.
 
 Lighting cue files have two sections: the color definition section, and the frame definition
 section. The color definition section is optional, and allows you to define custom colors by
@@ -350,17 +350,17 @@ Here's an example of a frame definition:
         }
     }
 
-The `duration` field is required. It specifies the duration of the frame in system ticks,
-which are 10ms each. So a duration of 100 is 1 second. The `transition` field is optional,
-and specifies how this frame transitions to the next. Valid values are either `"smooth"`
-or `"none"`, which is also the default if no transition type is specified. A smooth
+The ``duration`` field is required. It specifies the duration of the frame in system ticks,
+which are 10ms each. So a duration of 100 is 1 second. The ``transition`` field is optional,
+and specifies how this frame transitions to the next. Valid values are either ``"smooth"``
+or ``"none"``, which is also the default if no transition type is specified. A smooth
 transition gradually fades from this frame to the next over its entire duration. 
-Specifying `"none"` means this frame will hold steady for its duration, then abruptly change
+Specifying ``"none"`` means this frame will hold steady for its duration, then abruptly change
 to the next frame once it's complete.
 
-The `colors` field is required, and specifies the colors of the LEDs for this frame. There
+The ``colors`` field is required, and specifies the colors of the LEDs for this frame. There
 must be exactly 5 comma-separated colors, enclosed in curly braces. All named colors
-included in the Python `webcolors` package are supported here, but we recommend that
+included in the Python ``webcolors`` package are supported here, but we recommend that
 you stick with CSS color names.
 
 The color definition section allows you to define new colors by name, or overwrite the
@@ -384,8 +384,8 @@ Creating games
 
 GameQueer games are written in a specialized language designed to lend itself well to
 modestly interactive games with a focus on visual and lighting effects. The language
-uses some C-like syntax, but is much simpler. Every game is a single file with a `.gq`
-extension, and is placed in the `games` directory of your workspace.
+uses some C-like syntax, but is much simpler. Every game is a single file with a ``.gq``
+extension, and is placed in the ``games`` directory of your workspace.
 
 A GameQueer game has several global definition sections, which are used to define
 global variables, animations, light cues, and menus. The game is then divided into
@@ -478,35 +478,35 @@ Let's break it down into its parts.
 Game definition
 ^^^^^^^^^^^^^^^
 
-Every game must start with a `game` block, which contains basic information about the game.
-That information can be listed in any order, but it must include a numeric `id`, a string
-`title`, a string `author`, and the name of the starting stage. This section must be
+Every game must start with a ``game`` block, which contains basic information about the game.
+That information can be listed in any order, but it must include a numeric ``id``, a string
+``title``, a string ``author``, and the name of the starting stage. This section must be
 the first thing in the game file.
 
 The ID is a unique identifier for the game, and is used to distinguish it from other games.
-Its definition here shows an example of *numeric assignment* in gq, using the `=` operator.
-The only numeric type in gq is `int`, and it's a 32-bit signed integer.
+Its definition here shows an example of *numeric assignment* in gq, using the ``=`` operator.
+The only numeric type in gq is ``int``, and it's a 32-bit signed integer.
 
 The title is simply a display name for the game. Its assignment demonstrates *string
-assignment*, using the `:=` operator. Strings may be up to 22 characters long. The author
+assignment*, using the ``:=`` operator. Strings may be up to 22 characters long. The author
 field is also a display name, stored in a string, intended to record the author of the
 game.
 
-Finally, the `starting_stage` field is the name of the stage that the game should start in.
-This field uses the `=` operator, but is a special case. It's a *stage reference*, which
-probably shouldn't use the `=` operator, but it does. So sue me.
+Finally, the ``starting_stage`` field is the name of the stage that the game should start in.
+This field uses the ``=`` operator, but is a special case. It's a *stage reference*, which
+probably shouldn't use the ``=`` operator, but it does. So sue me.
 
 Variable definitions
 ^^^^^^^^^^^^^^^^^^^^
 
-All variables in gq have global scope. There are two types: `str` and `int`. As described
-above, `str` is the string type, which is an up-to 22 character string, and `int` is a
+All variables in gq have global scope. There are two types: ``str`` and ``int``. As described
+above, ``str`` is the string type, which is an up-to 22 character string, and ``int`` is a
 signed 32-bit integer. The variables are defined in sections that specify their storage
-class: `persistent`, which is stored on the game cartridge and persists between plays, and
-`volatile`, which is stored in RAM and is reset between plays.
+class: ``persistent``, which is stored on the game cartridge and persists between plays, and
+``volatile``, which is stored in RAM and is reset between plays.
 
-All variables require an initial value, which is set with the `=` operator for `int` and
-the `:=` operator for `str`.
+All variables require an initial value, which is set with the ``=`` operator for ``int`` and
+the ``:=`` operator for ``str``.
 
 The variable sections are optional. If you don't need any variables of a particular
 storage class, you may omit the section.
@@ -515,28 +515,28 @@ Menu definitions
 ^^^^^^^^^^^^^^^^
 
 GameQueer has a concept of modal menus, which may be called from any stage. Menus map
-an integer `value` to a string `label`. The `value` is returned to the game in an
-event when the menu selection is made. The `label` is what's displayed on the screen
+an integer ``value`` to a string ``label``. The ``value`` is returned to the game in an
+event when the menu selection is made. The ``label`` is what's displayed on the screen
 for the user to select. The values do not need to be contiguous, and they also do not
 need to be unique. I don't know why you would have non-unique labels in a menu, but
 technically that's also allowed.
 
-This section defines two callable menus, `YesNo` and `OkCancel`. The `YesNo` menu has
-two options, with values 1 and 0, and the `OkCancel` menu also has two options, with
-values 25 and -5. The values may be any supported `int`, and the labels may be any
-supported `str`.
+This section defines two callable menus, ``YesNo`` and ``OkCancel``. The ``YesNo`` menu has
+two options, with values 1 and 0, and the `Ok`Cancel` menu also has two options, with
+values 25 and -5. The values may be any supported ``int``, and the labels may be any
+supported ``str``.
 
 Animation definitions
 ^^^^^^^^^^^^^^^^^^^^^
 
-Animations are defined in the `animations` section. This section introduces a new
-operator, the `<-` or file load operator. In the animation section, the left-hand
+Animations are defined in the ``animations`` section. This section introduces a new
+operator, the ``<-`` or file load operator. In the animation section, the left-hand
 side of the file load operator specifies the name of an animation, and the right-hand
 side specifies the path to the animation file, plus an optional configuration block.
 
-The configuration block is optional, and currently only allows the `dithering` and
-`frame_rate` fields. The `dithering` field specifies the dithering algorithm to use
-when converting the video to the badge's display format. The `frame_rate` field
+The configuration block is optional, and currently only allows the ``dithering`` and
+``frame_rate`` fields. The ``dithering`` field specifies the dithering algorithm to use
+when converting the video to the badge's display format. The ``frame_rate`` field
 specifies the frame rate of the video, in frames per second. Note that frames are
 displayed in a 100 Hz loop, so the frame rate will be rounded to something that
 evenly divides 100. The compiler will emit a warning if the frame rate rounded.
@@ -545,7 +545,7 @@ The default frame rate is 25 fps.
 Light cue definitions
 ^^^^^^^^^^^^^^^^^^^^^
 
-Light cues are defined in the `lightcues` section. The syntax is the same as for
+Light cues are defined in the ``lightcues`` section. The syntax is the same as for
 animations, with the left-hand side of the file load operator specifying the name
 of the light cue, and the right-hand side specifying the path to the light cue file.
 There are no configuration options for light cues.
@@ -554,20 +554,20 @@ Stage definitions
 ^^^^^^^^^^^^^^^^^
 
 Stages are the main building blocks of a GameQueer game. Each game must have at least
-one stage, and the game starts in the stage specified in the `starting_stage` field of
-the game definition. Each stage is defined in a `stage` block.
+one stage, and the game starts in the stage specified in the ``starting_stage`` field of
+the game definition. Each stage is defined in a ``stage`` block.
 
-Each stage has some optional configuration declarations. A `bganim` declaration specifies
-the background animation to display on the OLED. A `bgcue` declaration specifies the
-looping background lighting cue to display on the LEDs. And, the `menu` declaration
+Each stage has some optional configuration declarations. A ``bganim`` declaration specifies
+the background animation to display on the OLED. A ``bgcue`` declaration specifies the
+looping background lighting cue to display on the LEDs. And, the ``menu`` declaration
 specifies the menu to display when the stage is entered. The menu will be displayed on top
 of the OLED animations.
 
 Aside from the configuration declarations, stages are comprised of event handlers. The
 event handlers are called in response to various events that occur during the game. The
-`enter` event is called when the stage is entered. The `input` event is called when a
-button is pressed. The `timer` event is called when a timer expires. The `bgdone` event
-is called when the background animation has completed. The `menu` event is called when
+``enter`` event is called when the stage is entered. The ``input`` event is called when a
+button is pressed. The ``timer`` event is called when a timer expires. The ``bgdone`` event
+is called when the background animation has completed. The ``menu`` event is called when
 a menu selection is made.
 
 Event commands
@@ -578,70 +578,129 @@ of commands that are executed in sequence.
 
 The following event types are allowed:
 
-* `enter`: Called when the stage is entered
-* `input(A)`: Called when button A is pressed
-* `input(B)`: Called when button B is pressed
-* `input(<-)`: Called when the D-Dial is rotated left
-* `input(->)`: Called when the D-Dial is rotated right
-* `input(-)`: Called when the D-Dial is clicked
-* `timer`: Called when a timer expires
-* `bgdone`: Called when the background animation has completed
-* `menu`: Called when a menu selection is made
+``enter``
+    Called when the stage is entered
+
+``input(A)``
+    Called when button A is pressed
+
+``input(B)``
+    Called when button B is pressed
+
+``input(<-)``
+    Called when the D-Dial is rotated left
+
+``input(->)``
+    Called when the D-Dial is rotated right
+
+``input(-)``
+    Called when the D-Dial is clicked
+
+``timer``
+    Called when a timer expires
+
+``bgdone``
+    Called when the background animation has completed
+
+``menu``
+    Called when a menu selection is made
 
 Inside an event, the following commands are available:
 
-* `cue`: Play a lighting cue by name; for example, `cue flash`
-* `play bganim`: Play a new background animation by name; for exmaple, `play bganim pop`
-* `gostage`: Go to a different stage; for example, `gostage end`
-* `timer`: Set a one-shot timer by a numeric expression. The interval is measured in
-    system ticks, which are 10ms each. For example, `timer 1000` sets a timer for 10 seconds.
+``cue``
+    Play a lighting cue by name; for example, ``cue flash``
+
+``play bganim``
+    Play a new background animation by name; for exmaple, ``play bganim pop``
+
+``gostage``
+    Go to a different stage; for example, ``gostage end``
+
+``timer``
+    Set a one-shot timer by a numeric expression. The interval is measured in
+    system ticks, which are 10ms each. For example, ``timer 1000`` sets a timer for 10 seconds.
 
 The following operators are available:
 
 Unary operators (one operand, right-associative):
-* `-`: Unary negation. The right hand side is negated. The value of the expression is the
+
+``-``
+    Unary negation. The right hand side is negated. The value of the expression is the
     negation of the right hand side.
-* `!`: Logical NOT. The right hand side is negated. The value of the expression is 1 if the
+
+``!``
+    Logical NOT. The right hand side is negated. The value of the expression is 1 if the
     right hand side is equal to 0, and 0 otherwise.
 
 Binary operators (two operands):
-* `=`: Numeric assignment. The integer variable on the left hand side is assigned the value
-  of the expression on the right hand side.
-* `:=`: String assignment. The string variable on the left hand side is assigned the value
+
+``=``
+    Numeric assignment. The integer variable on the left hand side is assigned the value
     of the expression on the right hand side.
-* `+`: Numeric addition. The left and right hand sides are added together.
-* `-`: Numeric subtraction. The right hand side is subtracted from the left hand side.
-* `*`: Numeric multiplication. The left and right hand sides are multiplied together.
-* `/`: Numeric division. The left hand side is divided by the right hand side.
-* `%`: Numeric modulo. The left hand side is divided by the right hand side, and the
-  expression takes the value of the remainder.
-* `==`: Numeric equality. The left and right hand sides are compared for equality. The value
-  of the expression is 1 if they are equal, and 0 if they are not.
-* `!=`: Numeric inequality. The left and right hand sides are compared for inequality. The
+
+``:=``
+    String assignment. The string variable on the left hand side is assigned the value
+    of the expression on the right hand side.
+
+``+``
+    Numeric addition. The left and right hand sides are added together.
+
+``-``
+    Numeric subtraction. The right hand side is subtracted from the left hand side.
+
+``*``
+    Numeric multiplication. The left and right hand sides are multiplied together.
+
+``/``
+    Numeric division. The left hand side is divided by the right hand side.
+
+``%``
+    Numeric modulo. The left hand side is divided by the right hand side, and the
+    expression takes the value of the remainder.
+
+``==``
+    Numeric equality. The left and right hand sides are compared for equality. The value
+    of the expression is 1 if they are equal, and 0 if they are not.
+
+``!=``
+    Numeric inequality. The left and right hand sides are compared for inequality. The
     value of the expression is 1 if they are not equal, and 0 if they are equal.
-* `>`, `>=`, `<`, and `<=`: Numeric comparison. The left and right hand sides are compared
-  for greater than, greater than or equal, less than, and less than or equal, respectively.
-  The value of the expression is 1 if the comparison is true, and 0 if it is false.
-* `&&`: Logical AND. The left and right hand sides are compared for truth. The value of the
+
+``>``, ``>=``, ``<``, and ``<=``
+    Numeric comparison. The left and right hand sides are compared
+    for greater than, greater than or equal, less than, and less than or equal, respectively.
+    The value of the expression is 1 if the comparison is true, and 0 if it is false.
+
+``&&``
+    Logical AND. The left and right hand sides are compared for truth. The value of the
     expression is 1 if both sides are true, and 0 if either side is false. Does NOT support
     short-circuit evaluation.
-* `||`: Logical OR. The left and right hand sides are compared for truth. The value of the
+
+``||``
+    Logical OR. The left and right hand sides are compared for truth. The value of the
     expression is 1 if either side is true, and 0 if both sides are false. Does NOT support
     short-circuit evaluation.
 
 The following control structures are available:
 
-* `if`: The `if` statement allows you to conditionally execute a block of code. The gqc
-    syntax for `if` statements is similar to C. The `if` statement must be followed by a
+``if``
+    The ``if`` statement allows you to conditionally execute a block of code. The gqc
+    syntax for ``if`` statements is similar to C. The ``if`` statement must be followed by a
     condition in parentheses, followed by the code to be executed if the condition is true.
     The code block may be a single command, or a block of commands enclosed in curly braces.
-    The `if` statement may be followed by an optional `else` statement, which is executed
-    if the condition is false. If the `else` statement is included, it must be followed by a
-    code block. It's permitted to use an `else if` structure.
-* (NOT YET IMPLEMENTED) `loop`: The `loop` statement allows you to execute a block of code
+    The ``if`` statement may be followed by an optional ``else`` statement, which is executed
+    if the condition is false. If the ``else`` statement is included, it must be followed by a
+    code block. It's permitted to use an ``else if`` structure.
+
+``loop``
+    The ``loop`` statement allows you to execute a block of code
     repeatedly. The loop statement must be followed by a command or a block of commands
-    enclosed in curly braces, which will be executed repeatedly until a `break` statement.
+    enclosed in curly braces, which will be executed repeatedly until a ``break`` statement.
     Note that there are no built-in conditionals for loops; you must implement it yourself
-    with `if` statements.
-* (NOT YET IMPLEMENTED) `break`: Exit the innermost loop.
-* (NOT YET IMPLEMENTED) `continue`: Skip the rest of the current iteration of the innermost loop.
+    with ``if`` statements.
+
+``break``
+    Exit the innermost loop.
+
+``continue``
+    Skip the rest of the current iteration of the innermost loop.

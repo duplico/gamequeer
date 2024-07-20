@@ -97,8 +97,13 @@ CmdAssignment:
 CmdIf:
     'if' '(' condition=IntExpr ')' true_cmds=StageCommands ('else' false_cmds=StageCommands)?;
 
+CmdLoop:
+    'loop' cmds=StageCommands;
+CmdLoopControl:
+    (cmd='break' | cmd='continue') ';';
+
 StageCommand:
-    CmdGoStage | CmdPlayBgAnim | CmdPlayCue | CmdTimer | CmdAssignment | CmdIf;
+    CmdGoStage | CmdPlayBgAnim | CmdPlayCue | CmdTimer | CmdAssignment | CmdIf | CmdLoop | CmdLoopControl;
 StageCommands:
     StageCommand | '{' cmds=StageCommand* '}';
 

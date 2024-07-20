@@ -7,8 +7,9 @@ from rich import print
 
 from .datamodel import Animation, Game, Stage, Variable, Event, Menu, LightCue
 from .datamodel import IntExpression, GqcIntOperand
-from .commands import CommandPlayBg, CommandGoStage, CommandSetVar, CommandCue
-from .commands import CommandTimer, CommandIf, Command
+from .commands import CommandPlayBg, CommandGoStage, CommandCue
+from .commands import CommandSetStr, CommandSetInt
+from .commands import CommandTimer, CommandIf, CommandGoto, CommandLoop, Command
 from .structs import EventType
 from . import structs
 
@@ -168,7 +169,7 @@ def parse_variable_definition_storageclass(instring, loc, toks):
     if Variable.storageclass_table[storageclass]:
         non_init_vars_present = False
         for var in Variable.storageclass_table[storageclass].values():
-            if not var.name in structs.GQ_REGISTER_INT_NAMES and not var.name.endswith(".init") and not var.name.endswith(".strlit"):
+            if not var.name in structs.GQ_REGISTERS_INT and not var.name.endswith(".init") and not var.name.endswith(".strlit"):
                 non_init_vars_present = True
                 break
         if non_init_vars_present:
@@ -259,14 +260,22 @@ def parse_command(instring, loc, toks):
     elif command == "gostage":
         return CommandGoStage(instring, loc, toks[1])
     elif command == 'setvar':
-        if isinstance(toks[2], GqcIntOperand):
-            return CommandSetVar(instring, loc, toks[3], toks[1], toks[2].value, src_is_literal=toks[2].is_literal)
-        elif isinstance(toks[2], IntExpression):
-            return CommandSetVar(instring, loc, toks[3], toks[1], toks[2], src_is_expression=True)
+        _, dst, src, datatype = toks
+        if datatype == 'str':
+            # TODO: Need to make this richer.
+            return CommandSetStr(instring, loc, dst, src)
         else:
-            return CommandSetVar(instring, loc, toks[3], toks[1], toks[2])
+            if isinstance(src, int):
+                src = GqcIntOperand(is_literal=True, value=src)
+            else:
+                assert isinstance(src, GqcIntOperand) or isinstance(src, IntExpression)
+                return CommandSetInt(instring, loc, dst, src)
     elif command == 'timer':
         return CommandTimer(instring, loc, toks[1])
+    elif command in ['break', 'continue']:
+        return CommandGoto(instring, loc, form=command)
+    elif command == 'loop':
+        return CommandLoop(instring, loc, toks[1])
     else:
         raise GqcParseError(f"Invalid command {command}", instring, loc)
 

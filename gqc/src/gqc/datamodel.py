@@ -317,11 +317,11 @@ class Variable:
         if self.storageclass != 'volatile':
             raise ValueError(f"Persistent variable {self.name} cannot be added to init table.")
         
-        from .commands import CommandSetVar
+        from .commands import CommandSetInt, CommandSetStr
         if self.datatype == "str":
-            return CommandSetVar(None, None, self.datatype, self.name, self.init_from.name)
+            return CommandSetStr(None, None, self.name, self.init_from.name)
         elif self.datatype == "int":
-            return CommandSetVar(None, None, self.datatype, self.name, self.value, src_is_literal=True)
+            return CommandSetInt(None, None, self.name, GqcIntOperand(is_literal=True, value=self.value))
         else:
             raise ValueError(f"Invalid datatype {self.datatype}")
 
@@ -835,6 +835,12 @@ class IntExpression:
         if len(self.expression_toks) == 0:
             raise ValueError("Empty expression")
         
+        self.result_symbol = self.get_result_symbol(self.expression_toks)
+
+        # If the result is in a register, we need to free it.
+        if self.result_symbol.value in structs.GQ_REGISTERS_INT:
+            self.free_register(self.result_symbol.value)
+        
         # TODO: Probably remove; this shouldn't be possible:
         # if len(self.expression_toks) == 1:
         #     if self.expression_toks[0].is_literal:
@@ -853,7 +859,7 @@ class IntExpression:
         self.used_registers.remove(reg)
 
     def get_result_symbol(self, subexpr : list) -> GqcIntOperand:
-        from .commands import CommandSetVar, CommandArithmetic
+        from .commands import CommandSetInt, CommandArithmetic
 
         if isinstance(subexpr, IntExpression):
             subexpr = subexpr.expression_toks
@@ -879,7 +885,7 @@ class IntExpression:
         # If the left operand is not a register, we need to load it into one.
         if operand0.is_literal or operand0.value not in structs.GQ_REGISTERS_INT:
             reg0 = self.alloc_register()
-            self.commands.append(CommandSetVar(None, None, 'int', reg0, operand0.value, src_is_literal=operand0.is_literal))
+            self.commands.append(CommandSetInt(None, None, reg0, operand0))
             operand0 = GqcIntOperand(is_literal=False, value=reg0)
 
         # The right operand does not need to be loaded into a register, because our commands
@@ -915,29 +921,22 @@ class IntExpression:
         
         resolved = True
 
-        self.result_symbol = self.get_result_symbol(self.expression_toks)
-
-        # If the result is in a register, we need to free it.
-        if self.result_symbol.value in structs.GQ_REGISTERS_INT:
-            self.free_register(self.result_symbol.value)
-
         for command in self.commands:
             if not command.resolve():
                 resolved = False
                 break
 
-        if not resolved:
-            # Cleanup
-            self.commands = []
-            for register in self.used_registers:
-                self.free_register(register)
-
         self.resolved = resolved
         return resolved
     
+    def set_addr(self, addr : int, namespace : int = structs.GQ_PTR_NS_CART):
+        self.addr = structs.gq_ptr_apply_ns(namespace, addr)
+        addr_offset = 0
+        for cmd in self.commands:
+            cmd.set_addr(addr + addr_offset, namespace)
+            addr_offset += cmd.size()
+
     def size(self):
-        if not self.resolve():
-            raise ValueError("Cannot calculate size of unresolved IntExpression")
         return sum(command.size() for command in self.commands)
 
     def __repr__(self) -> str:

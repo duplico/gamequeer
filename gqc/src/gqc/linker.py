@@ -23,7 +23,7 @@ def create_reserved_variables():
     for reg_name in structs.GQ_REGISTERS_INT:
         var = Variable('int', reg_name, 0, 'volatile')
 
-def create_symbol_table(table_dest = sys.stdout):
+def create_symbol_table(table_dest = sys.stdout, cmd_dest = sys.stdout):
     # Output order:
     # header (fixed size)
     # animations (fixed size by count)
@@ -199,6 +199,28 @@ def create_symbol_table(table_dest = sys.stdout):
     
     print(tabulate(section_table, headers=section_table_headers), file=table_dest)
 
+    cmds_table = []
+    cmds_table_headers = ['Address', 'Command', 'Flags', 'arg1', 'arg2']
+    next_expected_addr = list(Event.link_table.values())[0].event_statements[0].addr
+
+    # Now let's print a human readable list of all our commands.
+    for event in Event.link_table.values():
+        if event.addr != next_expected_addr:
+            print(f"WARNING: Event at address {event.addr:#0{10}x} is not contiguous with the previous event; expected {next_expected_addr:#0{10}x}.", file=sys.stderr)
+        
+        cmds_table.append((f"{event.addr:#0{PAD}x}", f'EVENT:{event.event_type.name}', '', '', ''))
+
+        next_expected_addr = event.addr + event.size()
+        for cmd in event.event_statements:
+            cmd_addr = cmd.addr
+            for cmd_struct in cmd.cmd_list():
+                cmds_table.append((f"{cmd_addr:#0{PAD}x}", cmd_struct.opcode.name, f'{cmd_struct.flags:#0{4}x}', f"{cmd_struct.arg1:#0{PAD}x}", f"{cmd_struct.arg2:#0{PAD}x}"))
+                cmd_addr += structs.GQ_OP_SIZE
+
+    print(tabulate(cmds_table, headers=cmds_table_headers), file=cmd_dest)
+
+    # print(cmds_by_addr)
+
     # Return the machine-readable symbol table for use in final code generation.
     return symbol_table
 
@@ -229,5 +251,6 @@ def generate_code(parsed, symbol_table : dict):
                 next_expected_addr += symbol.size()
                 output += symbol.to_bytes()
                 progress.update(task, advance=1)
+        progress.update(task, completed=symbol_count)
     
     return output

@@ -25,6 +25,8 @@ GQ_MAGIC_SIZE = 4
 GQ_MAGIC = b'GQ01'
 
 def gq_ptr_apply_ns(ns, ptr):
+    # TODO: Add a check to ensure that the namespace byte isn't already
+    #       set in the address.
     return (ns << 24) | (ptr & 0x00FFFFFF)
 
 def gq_ptr_get_ns(ptr):
@@ -135,7 +137,7 @@ class EventType(IntEnum):
 
 # TODO: read this from the C header instead
 class OpCode(IntEnum):
-    NOP = 0x00
+    LOOP_NOP = 0x00
     DONE = 0x01
     GOSTAGE = 0x02
     PLAYBG = 0x03
@@ -196,10 +198,6 @@ GQ_STAGE_SIZE = struct.calcsize(GQ_STAGE_FORMAT)
 
 GqReservedVariable = namedtuple('GqReservedVariable', 'name type description addr')
 
-GQ_REGISTER_INT_NAMES = [
-    'GQ_RI0', 'GQ_RI1', 'GQ_RI2', 'GQ_RI3', 'GQ_RI4', 'GQ_RI5', 'GQ_RI6', 'GQ_RI7'
-]
-
 GQ_RESERVED_INTS = [
     GqReservedVariable('GQI_GAME_ID', 'int', 'ID of the game', 0x000000),
     GqReservedVariable('GQI_MENU_ACTIVE', 'int', 'Menu active', 0x000004),
@@ -224,5 +222,5 @@ GQ_RESERVED_STRS = [
 # ]
 
 GQ_REGISTERS_INT = [
-    'GQ_RI0', 'GQ_RI1', 'GQ_RI2', 'GQ_RI3', 'GQ_RI4', 'GQ_RI5', 'GQ_RI6', 'GQ_RI7'
+    'GQ_RI0', 'GQ_RI1',
 ]

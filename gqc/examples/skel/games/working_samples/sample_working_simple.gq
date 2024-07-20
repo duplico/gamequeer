@@ -32,12 +32,12 @@ menus {
 }
 
 animations {
-    george <- "carhop.mp4" {
+    george <- "eat.gif" {
         dithering := "sierra2_4a";
         frame_rate = 25;
     }
 
-    george2 <- "selfie.mp4" {
+    george2 <- "dance.gif" {
         frame_rate = 28;
     }
 }
@@ -63,8 +63,16 @@ stage start {
         if (!D) {
             badge_id = 17;
             A = B + 3;
-        } else
+        } else if (D)
             badge_id = 18;
+        
+        loop {
+            badge_id = badge_id + 1;
+
+            if (badge_id == 50) {
+                break;
+            }
+        }
     }
 
     event input(A)

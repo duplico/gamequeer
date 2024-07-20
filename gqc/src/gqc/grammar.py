@@ -54,11 +54,14 @@ stage_event = "event" event_type event_statement
 event_type = "input" "(" event_input_button ")" | "bgdone" | "menu" | "enter" | "timer"
 event_input_button = "A" | "B" | "<-" | "->" | "-"
 event_statements = event_statement | "{" event_statement* "}"
-event_statement = play | cue | gostage | assignment_statement | if_statement | timer
+event_statement = play | cue | gostage | assignment_statement | if_statement | timer | continue | break | loop
 play = "play" "bganim" identifier ";"
 cue = "cue" identifier ";"
 gostage = "gostage" identifier ";"
 timer = "timer" int_expression ";"
+continue = "continue" ";"
+break = "break" ";"
+loop = "loop" event_statements
 
 assignment_statement = int_assignment | string_assignment
 int_assignment = identifier "=" int_expression ";"
@@ -179,13 +182,17 @@ def build_game_parser():
     if_statement = pp.Suppress("if") - pp.Suppress("(") - int_expression - pp.Suppress(")") - event_statements - pp.Optional(pp.Suppress("else") - event_statements)
     if_statement.set_parse_action(parse_if)
 
+    loop_statement = pp.Group(pp.Keyword("loop") - event_statements)
+    continue_statement = pp.Group(pp.Keyword("continue") - pp.Suppress(";"))
+    break_statement = pp.Group(pp.Keyword("break") - pp.Suppress(";"))
+
     # Other commands
     play = pp.Group(pp.Keyword("play") - pp.Keyword("bganim") - identifier - pp.Suppress(";"))
     cue = pp.Group(pp.Keyword("cue") - identifier - pp.Suppress(";"))
     gostage = pp.Group(pp.Keyword("gostage") - identifier - pp.Suppress(";"))
     timer = pp.Group(pp.Keyword("timer") - int_expression - pp.Suppress(";"))
 
-    event_statement = play | cue | gostage | timer | if_statement | assignment_statement
+    event_statement = play | cue | gostage | timer | if_statement | continue_statement | break_statement | loop_statement | assignment_statement
     event_statements << (pp.Group(event_statement | pp.Suppress("{") - pp.ZeroOrMore(event_statement) - pp.Suppress("}")))
 
     event_statement.set_parse_action(parse_command)
