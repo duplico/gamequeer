@@ -119,9 +119,15 @@ def create_symbol_table(table_dest = sys.stdout, cmd_dest = sys.stdout):
     events_ptr_start = menus_ptr_start + menus_ptr_offset
     events_ptr_offset = 0
 
-    # The stage table is next, because it depends upon references to the animations and menus, even though
-    #  it may before them in the final layout.
+    # Stages require two passes: first to assign addresses to the stages themselves,
+    #  then to handle all their component parts (especially the events).
+    # First pass (addressing):
     stage_ptr_offset = 0
+    for stage in Stage.stage_table.values():
+        stage.set_addr(stage_ptr_start + stage_ptr_offset)
+        stage_ptr_offset += structs.GQ_STAGE_SIZE
+
+    # Second pass (events):
     for stage in Stage.stage_table.values():
         for event_type in structs.EventType:
             if event_type in stage.events:
@@ -129,8 +135,6 @@ def create_symbol_table(table_dest = sys.stdout, cmd_dest = sys.stdout):
                 event.set_addr(events_ptr_start + events_ptr_offset)
                 events_ptr_offset += event.size()
 
-        stage.set_addr(stage_ptr_start + stage_ptr_offset)
-        stage_ptr_offset += structs.GQ_STAGE_SIZE
 
     init_ptr_start = events_ptr_start + events_ptr_offset
     init_ptr_offset = 0

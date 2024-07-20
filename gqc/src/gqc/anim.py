@@ -3,7 +3,7 @@ import pathlib
 
 from rich.progress import Progress
 
-def make_animation(progress: Progress, anim_src_path : pathlib.Path, output_dir : pathlib.Path, dithering : str = 'none', frame_rate : int = 25, height : int = 128, width : int = 128):
+def make_animation(progress: Progress, anim_src_path : pathlib.Path, output_dir : pathlib.Path, dithering : str = 'none', frame_rate : int = 25, height : int = -1, width : int = -1):
     # Set up the output directory
     output_dir.mkdir(parents=True, exist_ok=True)
     # Delete the old output files: anim.gif and frame*.bmp

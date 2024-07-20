@@ -30,7 +30,7 @@
 #define CART_FLASH_SIZE_MBYTES 16
 #define SAVE_FLASH_SIZE_MBYTES 16
 
-#define MAX_CONCURRENT_ANIMATIONS 4
+#define MAX_CONCURRENT_ANIMATIONS 5
 #define GQ_HEAP_SIZE              0x200
 
 #define GQ_MENU_MAX_OPTIONS 6
@@ -134,6 +134,16 @@ typedef enum gq_special_var_int {
     GQI_MENU_ACTIVE,
     GQI_MENU_VALUE,
     GQI_GAME_COLOR,
+    GQI_BGANIM_X,
+    GQI_BGANIM_Y,
+    GQI_FGANIM1_X,
+    GQI_FGANIM1_Y,
+    GQI_FGMASK1_X,
+    GQI_FGMASK1_Y,
+    GQI_FGANIM2_X,
+    GQI_FGANIM2_Y,
+    GQI_FGMASK2_X,
+    GQI_FGMASK2_Y,
     GQI_COUNT
 } gq_special_var_int;
 
@@ -152,6 +162,8 @@ typedef enum gq_event_type {
     GQ_EVENT_BGDONE,
     GQ_EVENT_MENU,
     GQ_EVENT_TIMER,
+    GQ_EVENT_FGDONE1,
+    GQ_EVENT_FGDONE2,
     GQ_EVENT_COUNT
 } gq_event_type;
 
@@ -183,7 +195,6 @@ typedef struct gq_menu {
 } __attribute__((packed)) gq_menu;
 
 extern Graphics_Context g_sContext;
-extern uint8_t bg_animating;
 extern uint8_t gq_heap[GQ_HEAP_SIZE];
 extern rgbcolor16_t gq_leds[5];
 extern gq_ledcue_t leds_cue;

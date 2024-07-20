@@ -16,7 +16,7 @@ typedef enum gq_op_code {
     GQ_OP_NOP     = 0x00,
     GQ_OP_DONE    = 0x01,
     GQ_OP_GOSTAGE = 0x02,
-    GQ_OP_PLAYBG  = 0x03,
+    GQ_OP_PLAY    = 0x03,
     GQ_OP_CUE     = 0x04,
     GQ_OP_SETVAR  = 0x05,
     GQ_OP_GOTO    = 0x06,
