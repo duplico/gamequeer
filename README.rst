@@ -599,49 +599,83 @@ Inside an event, the following commands are available:
 The following operators are available:
 
 Unary operators (one operand, right-associative):
-* `-`: Unary negation. The right hand side is negated. The value of the expression is the
+
+`-`
+    Unary negation. The right hand side is negated. The value of the expression is the
     negation of the right hand side.
-* `!`: Logical NOT. The right hand side is negated. The value of the expression is 1 if the
+
+`!`
+    Logical NOT. The right hand side is negated. The value of the expression is 1 if the
     right hand side is equal to 0, and 0 otherwise.
 
 Binary operators (two operands):
-* `=`: Numeric assignment. The integer variable on the left hand side is assigned the value
-  of the expression on the right hand side.
-* `:=`: String assignment. The string variable on the left hand side is assigned the value
+`=`
+    Numeric assignment. The integer variable on the left hand side is assigned the value
     of the expression on the right hand side.
-* `+`: Numeric addition. The left and right hand sides are added together.
-* `-`: Numeric subtraction. The right hand side is subtracted from the left hand side.
-* `*`: Numeric multiplication. The left and right hand sides are multiplied together.
-* `/`: Numeric division. The left hand side is divided by the right hand side.
-* `%`: Numeric modulo. The left hand side is divided by the right hand side, and the
-  expression takes the value of the remainder.
-* `==`: Numeric equality. The left and right hand sides are compared for equality. The value
-  of the expression is 1 if they are equal, and 0 if they are not.
-* `!=`: Numeric inequality. The left and right hand sides are compared for inequality. The
+
+`:=`
+    String assignment. The string variable on the left hand side is assigned the value
+    of the expression on the right hand side.
+
+`+`
+    Numeric addition. The left and right hand sides are added together.
+
+`-` 
+    Numeric subtraction. The right hand side is subtracted from the left hand side.
+
+`*` 
+    Numeric multiplication. The left and right hand sides are multiplied together.
+
+`/` 
+    Numeric division. The left hand side is divided by the right hand side.
+
+`%` 
+    Numeric modulo. The left hand side is divided by the right hand side, and the
+    expression takes the value of the remainder.
+
+`==` 
+    Numeric equality. The left and right hand sides are compared for equality. The value
+    of the expression is 1 if they are equal, and 0 if they are not.
+
+`!=` 
+    Numeric inequality. The left and right hand sides are compared for inequality. The
     value of the expression is 1 if they are not equal, and 0 if they are equal.
-* `>`, `>=`, `<`, and `<=`: Numeric comparison. The left and right hand sides are compared
-  for greater than, greater than or equal, less than, and less than or equal, respectively.
-  The value of the expression is 1 if the comparison is true, and 0 if it is false.
-* `&&`: Logical AND. The left and right hand sides are compared for truth. The value of the
+
+`>`, `>=`, `<`, and `<=` 
+    Numeric comparison. The left and right hand sides are compared
+    for greater than, greater than or equal, less than, and less than or equal, respectively.
+    The value of the expression is 1 if the comparison is true, and 0 if it is false.
+
+`&&` 
+    Logical AND. The left and right hand sides are compared for truth. The value of the
     expression is 1 if both sides are true, and 0 if either side is false. Does NOT support
     short-circuit evaluation.
-* `||`: Logical OR. The left and right hand sides are compared for truth. The value of the
+
+`||` 
+    Logical OR. The left and right hand sides are compared for truth. The value of the
     expression is 1 if either side is true, and 0 if both sides are false. Does NOT support
     short-circuit evaluation.
 
 The following control structures are available:
 
-* `if`: The `if` statement allows you to conditionally execute a block of code. The gqc
+`if` 
+    The `if` statement allows you to conditionally execute a block of code. The gqc
     syntax for `if` statements is similar to C. The `if` statement must be followed by a
     condition in parentheses, followed by the code to be executed if the condition is true.
     The code block may be a single command, or a block of commands enclosed in curly braces.
     The `if` statement may be followed by an optional `else` statement, which is executed
     if the condition is false. If the `else` statement is included, it must be followed by a
     code block. It's permitted to use an `else if` structure.
-* (NOT YET IMPLEMENTED) `loop`: The `loop` statement allows you to execute a block of code
+
+`loop` 
+    The `loop` statement allows you to execute a block of code
     repeatedly. The loop statement must be followed by a command or a block of commands
     enclosed in curly braces, which will be executed repeatedly until a `break` statement.
     Note that there are no built-in conditionals for loops; you must implement it yourself
     with `if` statements.
-* (NOT YET IMPLEMENTED) `break`: Exit the innermost loop.
-* (NOT YET IMPLEMENTED) `continue`: Skip the rest of the current iteration of the innermost loop.
+
+`break` 
+    Exit the innermost loop.
+    
+`continue`
+    Skip the rest of the current iteration of the innermost loop.
