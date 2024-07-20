@@ -250,9 +250,14 @@ class CommandWithIntExpressionArgument(Command):
         self.arg2_section_size = 0
         self.expr_or_operand = expr_or_operand
 
-        if not self.arg2_is_expression and expr_or_operand.is_literal:
+        if self.arg2_is_expression:
+            self.arg2_name = self.expr_or_operand.result_symbol.value
+            self.arg2_section_size = self.expr_or_operand.size()
+        elif expr_or_operand.is_literal:
             self.command_flags |= structs.OpFlags.LITERAL_ARG2
             self.arg2 = expr_or_operand.value
+        else:
+            self.arg2_name = expr_or_operand.value
         
         self.resolve()
     
@@ -262,18 +267,11 @@ class CommandWithIntExpressionArgument(Command):
 
         resolved = True
 
-        if self.arg2_is_expression:
-            if self.expr_or_operand.resolve():
-                self.arg2_name = self.expr_or_operand.result_symbol.value
-                self.arg2_section_size = self.expr_or_operand.size()
-            else:
-                resolved = False
-                return False
-        elif not self.expr_or_operand.is_literal:
-            self.arg2_name = self.expr_or_operand.value
+        if self.arg2_is_expression and not self.expr_or_operand.resolve():
+            resolved = False
+            return False
         
         # If the expression is a literal, it was already resolved in __init__.
-
         # If the expression is a reference, attempt to resolve the reference:
         if self.arg2_is_expression or not self.expr_or_operand.is_literal:
             if self.arg2_name in Variable.var_table:
@@ -288,9 +286,6 @@ class CommandWithIntExpressionArgument(Command):
         return self.resolved
     
     def expr_section_size(self):
-        if not self.resolve():
-            raise ValueError("Cannot calculate size of unresolved expression section")
-        
         return self.arg2_section_size
     
     def expr_section_bytes(self):
@@ -306,9 +301,6 @@ class CommandWithIntExpressionArgument(Command):
             return b''
         
     def size(self):
-        if not self.resolve():
-            raise ValueError("Cannot calculate size of unresolved expression section")
-        
         return self.expr_section_size() + super().size()
     
     def to_bytes(self):
@@ -358,9 +350,19 @@ class CommandIf(CommandWithIntExpressionArgument):
     def __init__(self, instring, loc, condition : GqcIntOperand | IntExpression, true_cmds : list, false_cmds : list = None):
         super().__init__(CommandType.GOTOIFN, instring, loc, condition)
         self.true_cmds = true_cmds
-        self.true_section_size = 0
         self.false_cmds = false_cmds
+
+        self.true_section_size = 0
+        for cmd in self.true_cmds:
+            self.true_section_size += cmd.size()
+        
         self.false_section_size = 0
+        if self.false_cmds:
+            for cmd in self.false_cmds:
+                self.false_section_size += cmd.size()
+        
+        if self.false_section_size != 0:
+            self.true_section_size += structs.GQ_OP_SIZE
 
         self.resolve()
     
@@ -376,32 +378,20 @@ class CommandIf(CommandWithIntExpressionArgument):
         # TODO: We can probably optimize away any literal conditionals.
 
         # Resolve the true commands.
-        self.true_section_size = 0
         for cmd in self.true_cmds:
-            if cmd.resolve():
-                self.true_section_size += cmd.size()
-            else:
+            if not cmd.resolve():
                 resolved = False
         
-        self.false_section_size = 0
         # Resolve the false commands.
         if self.false_cmds:
             for cmd in self.false_cmds:
-                if cmd.resolve():
-                    self.false_section_size += cmd.size()
-                else:
+                if not cmd.resolve():
                     resolved = False
-
-        if self.false_section_size != 0:
-            self.true_section_size += structs.GQ_OP_SIZE # Add the size of the GOTO command to the true section.
 
         self.resolved = resolved
         return self.resolved
     
     def size(self):
-        if not self.resolve():
-            raise ValueError("Cannot calculate size of unresolved IF block")
-        
         # The size of this if block is the size of the GOTOIFN command, plus the size of the true section,
         #  plus the size of the false section.
         return self.expr_section_size() + super().size() + self.true_section_size + self.false_section_size
