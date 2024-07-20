@@ -265,11 +265,10 @@ def parse_command(instring, loc, toks):
             # TODO: Need to make this richer.
             return CommandSetStr(instring, loc, dst, src)
         else:
-            if isinstance(src, GqcIntOperand):
-                return CommandSetInt(instring, loc, dst, src.value, src_is_literal=toks[2].is_literal)
-            elif isinstance(src, IntExpression):
-                return CommandSetInt(instring, loc, dst, src, src_is_expression=True)
+            if isinstance(src, int):
+                src = GqcIntOperand(is_literal=True, value=src)
             else:
+                assert isinstance(src, GqcIntOperand) or isinstance(src, IntExpression)
                 return CommandSetInt(instring, loc, dst, src)
     elif command == 'timer':
         return CommandTimer(instring, loc, toks[1])

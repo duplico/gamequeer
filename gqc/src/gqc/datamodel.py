@@ -321,7 +321,7 @@ class Variable:
         if self.datatype == "str":
             return CommandSetStr(None, None, self.name, self.init_from.name)
         elif self.datatype == "int":
-            return CommandSetInt(None, None, self.name, self.value, src_is_literal=True)
+            return CommandSetInt(None, None, self.name, GqcIntOperand(is_literal=True, value=self.value))
         else:
             raise ValueError(f"Invalid datatype {self.datatype}")
 
@@ -879,9 +879,7 @@ class IntExpression:
         # If the left operand is not a register, we need to load it into one.
         if operand0.is_literal or operand0.value not in structs.GQ_REGISTERS_INT:
             reg0 = self.alloc_register()
-            # TODO: remove:
-            # self.commands.append(CommandSetVar(None, None, 'int', reg0, operand0.value, src_is_literal=operand0.is_literal))
-            self.commands.append(CommandSetInt(None, None, reg0, operand0.value, src_is_literal=operand0.is_literal))
+            self.commands.append(CommandSetInt(None, None, reg0, operand0))
             operand0 = GqcIntOperand(is_literal=False, value=reg0)
 
         # The right operand does not need to be loaded into a register, because our commands
