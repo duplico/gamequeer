@@ -36,10 +36,8 @@
 #define GQ_MENU_MAX_OPTIONS 6
 
 typedef uint32_t t_gq_pointer;
-// TODO: make every int from the builder use this:
 typedef int32_t t_gq_int;
 
-// TODO: Is packing like this unsafe on ARM?
 typedef struct gq_header {
     uint8_t magic[GQ_MAGIC_SIZE]; // Magic number
     uint16_t id;                  // Numerical ID of the game
@@ -48,17 +46,15 @@ typedef struct gq_header {
     uint16_t stage_count;         // Number of stages
     t_gq_pointer starting_stage;  // Pointer to the starting stage
     t_gq_pointer startup_code;    // Pointer to the startup code.
-    uint16_t flags;               // TODO
+    uint16_t flags;               // TBD
     uint16_t crc16;               // CRC16 checksum of the header
 } __attribute__((packed)) gq_header;
-
-// TODO: Add variable table
 
 typedef struct gq_anim {
     uint16_t id;                // Numerical ID of the animation (sequential, 0-based)
     uint16_t frame_count;       // Number of frames
-    uint16_t ticks_per_frame;   // TODO
-    uint16_t flags;             // TODO
+    uint16_t ticks_per_frame;   // Number of 10ms system ticks each frame is shown for
+    uint16_t flags;             // TBD
     uint8_t width;              // Width of the animation
     uint8_t height;             // Height of the animation
     t_gq_pointer frame_pointer; // Pointer to the first gq_anim_frame
@@ -178,7 +174,7 @@ extern uint8_t gq_builtin_strs[];
 uint8_t load_game();
 uint8_t load_stage(t_gq_pointer stage_ptr);
 uint8_t load_animation(uint8_t index, t_gq_pointer anim_ptr);
-void anim_tick();
+void system_tick();
 void led_tick();
 void led_play_cue(t_gq_pointer cue_ptr, uint8_t background);
 void led_stop();

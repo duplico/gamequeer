@@ -152,7 +152,6 @@ this:
 
 then you'll need to build the emulator directly on your host system, or run it from inside the container.
 
-TODO: Docs for this case.
 
 Building the VSCode Extension
 -----------------------------

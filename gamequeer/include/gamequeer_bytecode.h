@@ -40,10 +40,6 @@ typedef enum gq_op_code {
     GQ_OP_COUNT
 } gq_op_code;
 
-// TODO: Technically we need to handle Endian-ness when deserializing
-// though, most of our target platforms are little endian anyway, so
-// maybe not critical
-
 typedef struct gq_op {
     uint8_t opcode;    // Opcode
     uint8_t flags;     // Flags
