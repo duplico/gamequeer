@@ -8,7 +8,7 @@ from rich import print
 from .datamodel import Animation, Game, Stage, Variable, Event, Menu, LightCue
 from .datamodel import IntExpression, GqcIntOperand
 from .commands import CommandPlayBg, CommandGoStage, CommandSetVar, CommandCue
-from .commands import CommandTimer, CommandIf, Command
+from .commands import CommandTimer, CommandIf, CommandGoto, CommandLoop, Command
 from .structs import EventType
 from . import structs
 
@@ -267,6 +267,10 @@ def parse_command(instring, loc, toks):
             return CommandSetVar(instring, loc, toks[3], toks[1], toks[2])
     elif command == 'timer':
         return CommandTimer(instring, loc, toks[1])
+    elif command in ['break', 'continue']:
+        return CommandGoto(instring, loc, form=command)
+    elif command == 'loop':
+        return CommandLoop(instring, loc, toks[1])
     else:
         raise GqcParseError(f"Invalid command {command}", instring, loc)
 
