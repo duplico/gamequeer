@@ -83,11 +83,7 @@ if_statement = "if" "(" int_expression ")" event_statements ("else" event_statem
 
 """
 
-# TODO: Add support for literals
-
 VAR_STRING_MAXLEN = 21
-
-# TODO: Add an event type for lighting cue completion
 
 def build_game_parser():
     # Define the grammar

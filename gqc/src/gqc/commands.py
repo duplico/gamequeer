@@ -79,7 +79,6 @@ class CommandGoStage(Command):
         if self.resolved:
             return True
 
-        # TODO: Extract constant for NULL:
         if self.stage_name in Stage.stage_table and Stage.stage_table[self.stage_name].addr != 0x00000000:
             self.arg1 = Stage.stage_table[self.stage_name].addr
             self.resolved = True
@@ -154,7 +153,6 @@ class CommandArithmetic(Command):
         super().__init__(command_type, instring, loc)
 
         if dst.is_literal:
-            # TODO: decode the code location.
             raise ValueError("Unmodifiable lvalue!")
         self.dst_name = dst.value
         self.src = src
@@ -200,8 +198,6 @@ class CommandSetStr(Command):
 
         resolved = True
 
-        # TODO: Test for null differently:
-        # TODO: Test for valid memory namespaces:
         if self.dst_name in Variable.var_table and Variable.var_table[self.dst_name].addr != 0x00000000:
             self.arg1 = Variable.var_table[self.dst_name].addr
         else:
@@ -356,8 +352,6 @@ class CommandSetInt(CommandWithIntExpressionArgument):
             resolved = False
             return False
 
-        # TODO: Test for null differently:
-        # TODO: Test for valid memory namespaces:
         if self.dst_name in Variable.var_table and Variable.var_table[self.dst_name].addr != 0x00000000:
             self.arg1 = Variable.var_table[self.dst_name].addr
         else:
@@ -396,8 +390,6 @@ class CommandIf(CommandWithIntExpressionArgument):
             return False
 
         resolved = True
-
-        # TODO: We can probably optimize away any literal conditionals.
 
         # Resolve the true commands.
         for cmd in self.true_cmds:

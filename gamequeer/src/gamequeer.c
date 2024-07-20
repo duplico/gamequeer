@@ -16,7 +16,7 @@ gq_stage stage_current;
 
 uint32_t curr_frame;
 uint8_t *frame_data;
-uint8_t gq_heap[GQ_HEAP_SIZE]; // TODO: Consider dynamically allocating?
+uint8_t gq_heap[GQ_HEAP_SIZE];
 
 uint8_t gq_builtin_ints[GQI_COUNT * GQ_INT_SIZE] = {
     0,
@@ -32,22 +32,19 @@ t_gq_int *menu_value  = (t_gq_int *) &gq_builtin_ints[GQI_MENU_VALUE * GQ_INT_SI
 
 char *game_title = (char *) &gq_builtin_strs[GQS_GAME_TITLE * GQ_STR_SIZE];
 
-gq_menu *menu_current; // TODO: don't dynamically allocate this
+gq_menu *menu_current;
 uint8_t menu_option_selected = 0;
 
 uint8_t timer_active = 0;
 t_gq_int timer_interval;
 t_gq_int timer_counter;
 
-// TODO: Move
 const uint32_t palette_bw[] = {0x000000, 0xffffff};
 const uint32_t palette_wb[] = {0xffffff, 0x000000};
 
-// TODO: Move
 void run_code(t_gq_pointer code_ptr);
 
 void menu_load(t_gq_pointer menu_ptr, t_gq_pointer menu_prompt) {
-    // TODO: assert !menu_active
     t_gq_int menu_option_count;
     t_gq_pointer menu_size;
 
@@ -62,8 +59,6 @@ void menu_load(t_gq_pointer menu_ptr, t_gq_pointer menu_prompt) {
     // Initialize the menu options and activate it.
     menu_option_selected = 0;
     *menu_active         = 1;
-
-    // TODO: flag to the main loop indicating we need to redraw.
 }
 
 void menu_close() {
@@ -73,8 +68,6 @@ void menu_close() {
 
     *menu_active = 0;
     free(menu_current);
-
-    // TODO: flag to the main loop indicating we need to redraw.
 }
 
 /**
@@ -95,7 +88,8 @@ uint8_t load_stage(t_gq_pointer stage_ptr) {
             return 0;
         }
     } else {
-        // TODO: Otherwise, clear the current animation
+        // If this stage has no animation, stop the current one.
+        bg_animating = 0;
     }
 
     if (stage_current.cue_bg_pointer) {
@@ -151,7 +145,10 @@ uint8_t load_game() {
 }
 
 uint8_t load_animation(uint8_t index, t_gq_pointer anim_ptr) {
-    // TODO: Assert index < MAX_CONCURRENT_ANIMATIONS
+    if (index >= MAX_CONCURRENT_ANIMATIONS) {
+        return 0;
+    }
+
     gq_anim_onscreen *anim = &current_animations[index];
 
     // Load the animation header
@@ -161,8 +158,8 @@ uint8_t load_animation(uint8_t index, t_gq_pointer anim_ptr) {
     }
 
     // Set up the parameters of the animation
-    anim->x      = 0; // TODO: Set
-    anim->y      = 0; // TODO: Set
+    anim->x      = 0;
+    anim->y      = 0;
     anim->in_use = 1;
     anim->frame  = 0;
     anim->ticks  = 0; // Set to 0 to draw the first frame immediately.
@@ -170,8 +167,7 @@ uint8_t load_animation(uint8_t index, t_gq_pointer anim_ptr) {
     return 1;
 }
 
-// TODO: rename this function because it draws the entire screen stack, not just the animations.
-void draw_animations() {
+void draw_oled_stack() {
     gq_anim_frame frame_current;
 
     // First, start with a blank slate.
@@ -188,7 +184,6 @@ void draw_animations() {
                 (uint8_t *) &frame_current,
                 current_animations[i].anim.frame_pointer + current_animations[i].frame * sizeof(gq_anim_frame),
                 sizeof(gq_anim_frame))) {
-            // TODO: Handle errors
             continue;
         }
 
@@ -213,16 +208,13 @@ void draw_animations() {
         free(frame_data);
     }
 
-    // Next, draw any labels
-    // TODO: Implement
-
     // Then, draw the menu, if there is one.
     if (*menu_active) {
         Graphics_Rectangle menu_background = {0, 0, 128, menu_current->option_count * 10};
         Graphics_setForegroundColor(&g_sContext, GRAPHICS_COLOR_BLACK);
         Graphics_fillRectangle(&g_sContext, &menu_background);
         Graphics_setForegroundColor(&g_sContext, GRAPHICS_COLOR_WHITE);
-        // TODO: make this look better.
+
         for (uint8_t i = 0; i < menu_current->option_count; i++) {
             Graphics_drawString(&g_sContext, menu_current->options[i].label, -1, 15, i * 10, 0);
             if (i == menu_option_selected) {
@@ -234,8 +226,7 @@ void draw_animations() {
     Graphics_flushBuffer(&g_sContext);
 }
 
-// TODO: Consider renaming, as this is the _system_ tick, not just animation tick
-void anim_tick() {
+void system_tick() {
     // Should be called by the 100 Hz system tick
     uint8_t need_to_redraw = 0;
 
@@ -262,7 +253,6 @@ void anim_tick() {
         current_animations[i].ticks = current_animations[i].anim.ticks_per_frame;
         if (current_animations[i].frame >= current_animations[i].anim.frame_count) {
             // Animation is complete
-            // TODO: Handle events for other animations
             current_animations[i].in_use = 0;
             if (i == 0) {
                 // Background animation done, fire event.
@@ -273,8 +263,7 @@ void anim_tick() {
     }
 
     if (need_to_redraw) {
-        // TODO: Call this based on an event from the main loop, instead?
-        draw_animations();
+        draw_oled_stack();
     }
 }
 
@@ -370,7 +359,6 @@ void run_code(t_gq_pointer code_ptr) {
                 opcode = GQ_OP_DONE;
                 break;
             case GQ_OP_PLAYBG:
-                // TODO: bounds checking or whatever:
                 load_animation(0, cmd.arg1);
                 break;
             case GQ_OP_CUE:
@@ -439,7 +427,6 @@ void run_code(t_gq_pointer code_ptr) {
     } while (cmd.opcode != GQ_OP_DONE);
 }
 
-// TODO: Allow a mask?
 void handle_events() {
     for (uint16_t event_type = 0x0000; event_type < GQ_EVENT_COUNT; event_type++) {
         if (GQ_EVENT_GET(event_type)) {
@@ -455,7 +442,6 @@ void handle_events() {
                         break;
                     case GQ_EVENT_BUTTON_B:
                         // Cancel the menu
-                        // TODO: does this have meaning?
                         menu_close();
                         break;
                     case GQ_EVENT_BUTTON_L:

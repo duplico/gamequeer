@@ -19,12 +19,7 @@ void init() {
     Graphics_setBackgroundColor(&g_sContext, ClrBlack);
     Graphics_setFont(&g_sContext, &g_sFontFixed6x8);
     Graphics_clearDisplay(&g_sContext);
-
-    // TODO: load the local starting stage
 }
-
-// TODO: Implement RL7 graphics loading based on
-// https://github.com/duplico/qc16_badge/blob/master/ccs_workspace/qbadge/ui/graphics.c#L23
 
 int main(int argc, char *argv[]) {
     HAL_init(argc, argv);
@@ -32,15 +27,10 @@ int main(int argc, char *argv[]) {
 
     load_game();
 
-    // TODO: Add the LEDs
-    // TODO: Load the starting animation
     while (1) {
         // Perform the current animation step
-        anim_tick();
+        system_tick();
 
-        // TODO: Perform the current menu step
-
-        // TODO: Perform the current lighting cue step
         led_tick();
 
         // Perform polling for other event sources

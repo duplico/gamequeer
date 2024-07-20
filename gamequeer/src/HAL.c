@@ -21,14 +21,12 @@ uint8_t read_byte(t_gq_pointer ptr) {
         case GQ_PTR_NS_FRAM:
             return flash_fram[GQ_PTR_ADDR(ptr)];
         case GQ_PTR_NS_FBUF:
-            return 0; // TODO: Implement framebuffer
+            return 0;
         case GQ_PTR_NS_HEAP:
             return gq_heap[GQ_PTR_ADDR(ptr)];
         case GQ_PTR_BUILTIN_INT:
-            // TODO: bounds checking?
             return gq_builtin_ints[GQ_PTR_ADDR(ptr)];
         case GQ_PTR_BUILTIN_STR:
-            // TODO: bounds checking?
             return gq_builtin_strs[GQ_PTR_ADDR(ptr)];
         default:
             return 0;
@@ -47,7 +45,7 @@ uint8_t write_byte(t_gq_pointer ptr, uint8_t value) {
             flash_fram[GQ_PTR_ADDR(ptr)] = value;
             return 1;
         case GQ_PTR_NS_FBUF:
-            return 0; // TODO: Implement framebuffer
+            return 0;
         case GQ_PTR_NS_HEAP:
             gq_heap[GQ_PTR_ADDR(ptr)] = value;
             return 1;
@@ -103,7 +101,6 @@ void HAL_init(int argc, char *argv[]) {
     gfx_driver_init("Gamequeer");
     Graphics_initContext(&g_sContext, &g_gfx);
 
-    // TODO: Load the binary file cart image from the command line
     if (argc < 2) {
         fprintf(stderr, "Usage: %s <cart_image>\n", argv[0]);
         exit(1);
@@ -121,11 +118,7 @@ void HAL_init(int argc, char *argv[]) {
         exit(1);
     }
     size_t bytesRead = fread(flash_cart, sizeof(uint8_t), CART_FLASH_SIZE_MBYTES * 1024 * 1024, file);
-    // TODO: Validate the length in some other way:
-    // if (bytesRead != CART_FLASH_SIZE_MBYTES * 1024 * 1024) {
-    //     fprintf(stderr, "Error reading file: %s\n", filename);
-    //     exit(1);
-    // }
+
     if (file != stdin) {
         fclose(file);
     }

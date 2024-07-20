@@ -8,7 +8,6 @@ rgbcolor16_t gq_leds[5] = {
     0,
 };
 
-// TODO: Move this
 #define LEDS_SUBTICKS 4
 
 uint8_t leds_animating = 0;
@@ -24,7 +23,6 @@ uint8_t leds_cue_bg_saved                = 0;
 uint16_t leds_cue_bg_frame_index         = 0;
 uint16_t leds_cue_bg_frame_ticks_elapsed = 0;
 
-// TODO: not this:
 void led_setup_frame();
 
 void led_stop() {
@@ -166,8 +164,6 @@ void led_tick() {
                 // If the frame is not done and is a smooth transition, interpolate the colors.
                 for (uint8_t i = 0; i < 5; i++) {
                     // Interpolate the colors.
-                    // TODO: Consider pre-calculating this, if we have sufficient precision available
-                    //       that it won't cause jankiness.
                     gq_leds[i].r = leds_cue_color_curr[i].r +
                         ((leds_cue_color_next[i].r - leds_cue_color_curr[i].r) * leds_cue_frame_ticks_elapsed /
                          leds_cue_frame_curr.duration);

@@ -25,6 +25,9 @@ GQ_MAGIC_SIZE = 4
 GQ_MAGIC = b'GQ01'
 
 def gq_ptr_apply_ns(ns, ptr):
+    if ns < 0 or ns > 0xFF:
+        raise ValueError(f'Invalid namespace {ns}')
+        
     # TODO: Add a check to ensure that the namespace byte isn't already
     #       set in the address.
     return (ns << 24) | (ptr & 0x00FFFFFF)
@@ -47,7 +50,7 @@ GQ_INT_SIZE = struct.calcsize(GQ_INT_FORMAT)
 #     uint16_t stage_count;         // Number of stages
 #     t_gq_pointer starting_stage;  // Pointer to the starting stage
 #     t_gq_pointer startup_code;    // Pointer to the startup code.
-#     uint16_t flags;               // TODO
+#     uint16_t flags;               // TBD
 #     uint16_t crc16;               // CRC16 checksum of the header
 # } gq_header;
 GqHeader = namedtuple('GqHeader', 'magic id title anim_count stage_count starting_stage_ptr startup_code_ptr flags crc16')
@@ -57,8 +60,8 @@ GQ_HEADER_SIZE = struct.calcsize(GQ_HEADER_FORMAT)
 # typedef struct gq_anim {
 #     uint16_t id;                // Numerical ID of the animation (sequential, 0-based)
 #     uint16_t frame_count;       // Number of frames
-#     uint16_t ticks_per_frame;   // TODO
-#     uint16_t flags;             // TODO
+#     uint16_t ticks_per_frame;   // Ticks per frame
+#     uint16_t flags;             // TBD
 #     uint8_t width;              // Width of the animation
 #     uint8_t height;             // Height of the animation
 #     t_gq_pointer frame_pointer; // Pointer to the first gq_anim_frame
@@ -91,7 +94,7 @@ RGB_COLOR16_SIZE = struct.calcsize(RGB_COLOR16_FORMAT)
 #     rgbcolor8_t leds[5];
 # } __attribute__((packed)) gq_ledcue_frame_t;
 GqLedCueFrame = namedtuple('GqLedCueFrame', 'duration flags r0 g0 b0 r1 g1 b1 r2 g2 b2 r3 g3 b3 r4 g4 b4')
-GQ_LEDCUE_FRAME_FORMAT = f'<HB{"BBB" * 5}' # TODO: pack these elsewhere
+GQ_LEDCUE_FRAME_FORMAT = f'<HB{"BBB" * 5}'
 GQ_LEDCUE_FRAME_SIZE = struct.calcsize(GQ_LEDCUE_FRAME_FORMAT)
 
 # typedef struct gq_ledcue_t {
@@ -135,7 +138,6 @@ class EventType(IntEnum):
     MENU = 0x07
     TIMER = 0x08
 
-# TODO: read this from the C header instead
 class OpCode(IntEnum):
     LOOP_NOP = 0x00
     DONE = 0x01
@@ -208,18 +210,6 @@ GQ_RESERVED_STRS = [
     GqReservedVariable('GQS_GAME_NAME', 'str', 'Name of the game', 0x000000),
     GqReservedVariable('GQS_PLAYER_HANDLE', 'str', 'Player handle', 2 * GQ_STR_SIZE),
 ]
-
-# [
-#     GqReservedVariable('GQ_game_name', 'str', 'Name of the game', 0x000000),
-#     GqReservedVariable('GQ_game_id', 'int', 'ID of the game', 0x000004),
-#     # TODO: Space available here
-#     GqReservedVariable('GQ_player_handle', 'str', 'Player handle', 0x00000C),
-#     GqReservedVariable('GQ_player_id', 'int', 'Player ID', 0x000010),
-#     GqReservedVariable('GQ_player_seen', 'int', 'Player seen', 0x000014),
-#     GqReservedVariable('GQ_menu_value', 'int', 'Menu selection', 0x000018),
-#     GqReservedVariable('GQ_menu_label', 'str', 'Menu label', 0x00001C),
-#     GqReservedVariable('GQ_text_input', 'str', 'Text input', 0x000020),
-# ]
 
 GQ_REGISTERS_INT = [
     'GQ_RI0', 'GQ_RI1',
