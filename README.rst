@@ -633,6 +633,7 @@ Unary operators (one operand, right-associative):
     right hand side is equal to 0, and 0 otherwise.
 
 Binary operators (two operands):
+
 ``=``
     Numeric assignment. The integer variable on the left hand side is assigned the value
     of the expression on the right hand side.
@@ -665,7 +666,7 @@ Binary operators (two operands):
     Numeric inequality. The left and right hand sides are compared for inequality. The
     value of the expression is 1 if they are not equal, and 0 if they are equal.
 
-``>`, `>=`, `<`, and `<=``
+``>``, ``>=``, ``<``, and ``<=``
     Numeric comparison. The left and right hand sides are compared
     for greater than, greater than or equal, less than, and less than or equal, respectively.
     The value of the expression is 1 if the comparison is true, and 0 if it is false.
