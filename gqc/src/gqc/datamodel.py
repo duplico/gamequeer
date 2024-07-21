@@ -341,13 +341,15 @@ class Animation:
     link_table = dict() # OrderedDict not needed to remember order since Python 3.7
     next_id : str = 0
     
-    def __init__(self, name : str, source : str, dithering : str = 'none', frame_rate : int = 25):
+    def __init__(self, name : str, source : str, dithering : str = 'none', frame_rate : int = 25, w : int = 128, h : int = 128):
         self.frame_pointer = 0x00000000
         self.addr = 0x00000000
         self.name = name
         self.source = source
         self.dithering = dithering
         self.ticks_per_frame = 100 // frame_rate
+        self.width = w
+        self.height = h
 
         self.id = Animation.next_id
         Animation.next_id += 1
@@ -371,6 +373,10 @@ class Animation:
                 make_animation_kwargs['dithering'] = dithering
             if frame_rate:
                 make_animation_kwargs['frame_rate'] = frame_rate
+            if self.width:
+                make_animation_kwargs['width'] = self.width
+            if self.height:
+                make_animation_kwargs['height'] = self.height
 
             self.src_path = pathlib.Path() / 'assets' / 'animations' / source
             self.dst_path = pathlib.Path() / 'build' / 'assets' / 'animations' / Game.game_name / name
@@ -432,6 +438,8 @@ class Animation:
             sha256_hash = hashlib.sha256(contents)
         sha256_hash.update(str(self.ticks_per_frame).encode('ascii'))
         sha256_hash.update(self.dithering.encode('ascii'))
+        sha256_hash.update(str(self.width).encode('ascii'))
+        sha256_hash.update(str(self.height).encode('ascii'))
         from . import __version__
         sha256_hash.update(__version__.encode('ascii'))
         return sha256_hash.hexdigest()

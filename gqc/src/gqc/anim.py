@@ -3,7 +3,7 @@ import pathlib
 
 from rich.progress import Progress
 
-def make_animation(progress: Progress, anim_src_path : pathlib.Path, output_dir : pathlib.Path, dithering : str = 'none', frame_rate : int = 24):
+def make_animation(progress: Progress, anim_src_path : pathlib.Path, output_dir : pathlib.Path, dithering : str = 'none', frame_rate : int = 25, height : int = -1, width : int = -1):
     # Set up the output directory
     output_dir.mkdir(parents=True, exist_ok=True)
     # Delete the old output files: anim.gif and frame*.bmp
@@ -19,10 +19,10 @@ def make_animation(progress: Progress, anim_src_path : pathlib.Path, output_dir 
     # Load the source file
     in_file = ffmpeg.input(anim_src_path)
 
-    # Scale the video to 128x128
-    scaled = in_file.filter('scale', h=128, w=-1)
-    # Crop the video to 128x128
-    cropped = scaled.filter('crop', w=128, h=128)
+    # Scale the video to make its height or width the specified size
+    # TODO: Decide if we want to scale the video to the specified size or crop it
+    scaled = in_file.filter('scale', h=height, w=width)
+    cropped = scaled
     # Create the palette
     black = ffmpeg.input('color=c=0x000000:r=1:d=1:s=8x16', f='lavfi')
     white = ffmpeg.input('color=c=0xffffff:r=1:d=1:s=8x16', f='lavfi')

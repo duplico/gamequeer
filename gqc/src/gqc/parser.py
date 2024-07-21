@@ -7,7 +7,7 @@ from rich import print
 
 from .datamodel import Animation, Game, Stage, Variable, Event, Menu, LightCue
 from .datamodel import IntExpression, GqcIntOperand
-from .commands import CommandPlayBg, CommandGoStage, CommandCue
+from .commands import CommandPlay, CommandGoStage, CommandCue
 from .commands import CommandSetStr, CommandSetInt
 from .commands import CommandTimer, CommandIf, CommandGoto, CommandLoop, Command
 from .structs import EventType
@@ -104,6 +104,14 @@ def parse_event_definition(instring, loc, toks):
     elif toks[1] == 'timer':
         event_type = EventType.TIMER
         event_statements = toks[2]
+    elif toks[1] == 'fgdone':
+        if toks[2] == 1:
+            event_type = EventType.FGDONE1
+        elif toks[2] == 2:
+            event_type = EventType.FGDONE2
+        else:
+            raise GqcParseError(f"Invalid fgdone number {toks[2]}: expected 1 or 2", instring, loc)
+        event_statements = toks[3]
     
     return Event(event_type, event_statements)
 
@@ -120,14 +128,9 @@ def parse_animation_definition(instring, loc, toks):
 
     if toks[2]:
         for opt in toks[2]:
-            if opt[0] == "frame_rate":
-                if frame_rate in kwargs:
-                    raise GqcParseError(f"Duplicate frame_rate for animation {name}", instring, loc)
-                kwargs['frame_rate'] = opt[1]
-            elif opt[0] == "dithering":
-                if dithering in kwargs:
-                    raise GqcParseError(f"Duplicate dithering for animation {name}", instring, loc)
-                kwargs["dithering"] = opt[1]
+            if opt[0] in kwargs:
+                raise GqcParseError(f"Duplicate option {opt[0]} for animation {name}", instring, loc)
+            kwargs[opt[0]] = opt[1]
 
     try:
         return Animation(name, source, **kwargs)
@@ -229,6 +232,22 @@ def parse_if(instring, loc, toks):
 
     return CommandIf(instring, loc, condition, true_block, false_cmds=false_block)
 
+def parse_play(instring, loc, toks):
+    toks = toks[0]
+    _, anim_type, anim_name = toks
+    
+    if anim_type[0] == 'bganim':
+        anim_index = 0
+    elif anim_type[0] == 'fganim':
+        anim_index = 1 + (anim_type[1]-1) * 2 # 1 -> 1; 2 -> 3
+    elif anim_type[0] == 'fgmask':
+        anim_index = 2 + (anim_type[1]-1) * 2 # 1 -> 2; 2 -> 4
+    
+    if anim_index > 4: # TODO: Constant
+        raise GqcParseError(f"Animation type/number out of bounds!", instring, loc)
+    
+    return CommandPlay(instring, loc, anim_name, anim_index)
+
 def parse_command(instring, loc, toks):
     toks = toks[0]
 
@@ -239,12 +258,7 @@ def parse_command(instring, loc, toks):
     # Otherwise, parse it:
     command = toks[0]
 
-    if command == "play":
-        if toks[1] == 'bganim':
-            return CommandPlayBg(instring, loc, toks[2])
-        else:
-            raise GqcParseError(f"Invalid play subcommand {command}", instring, loc)
-    elif command == "cue":
+    if command == "cue":
         if toks[1] not in LightCue.cue_table:
             raise GqcParseError(f"Undefined cue {toks[1]}", instring, loc)
         return CommandCue(instring, loc, toks[1])

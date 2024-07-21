@@ -138,12 +138,14 @@ class EventType(IntEnum):
     BGDONE = 0x06
     MENU = 0x07
     TIMER = 0x08
+    FGDONE1 = 0x09
+    FGDONE2 = 0x0A
 
 class OpCode(IntEnum):
     LOOP_NOP = 0x00
     DONE = 0x01
     GOSTAGE = 0x02
-    PLAYBG = 0x03
+    PLAY = 0x03
     CUE = 0x04
     SETVAR = 0x05
     GOTO = 0x06
@@ -206,6 +208,12 @@ GQ_RESERVED_INTS = [
     GqReservedVariable('GQI_MENU_ACTIVE', 'int', 'Menu active', 0x000004),
     GqReservedVariable('GQI_MENU_VALUE', 'int', 'Menu selection', 0x000008),
     GqReservedVariable('GQI_GAME_COLOR', 'int', 'Color of the game cartridge', 0x00000C),
+    GqReservedVariable('GQI_BGANIM_X', 'int', 'Background animation X', 0x000010),
+    GqReservedVariable('GQI_BGANIM_Y', 'int', 'Background animation Y', 0x000014),
+    GqReservedVariable('GQI_FGANIM1_X', 'int', 'Foreground animation 0 X', 0x000018),
+    GqReservedVariable('GQI_FGANIM1_Y', 'int', 'Foreground animation 0 Y', 0x00001C),
+    GqReservedVariable('GQI_FGANIM2_X', 'int', 'Foreground animation 1 X', 0x000028),
+    GqReservedVariable('GQI_FGANIM2_Y', 'int', 'Foreground animation 1 Y', 0x00002C),
 ]
 
 GQ_RESERVED_STRS = [

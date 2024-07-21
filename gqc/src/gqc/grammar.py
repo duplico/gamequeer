@@ -3,7 +3,7 @@ import pyparsing as pp
 from .parser import parse_variable_definition, parse_variable_definition_storageclass
 from .parser import parse_animation_definition, parse_stage_definition, parse_game_definition
 from .parser import parse_event_definition, parse_command, parse_assignment, parse_lightcue_definition_section
-from .parser import parse_menu_definition, parse_bound_menu
+from .parser import parse_menu_definition, parse_bound_menu, parse_play
 from .parser import parse_int_expression, parse_int_operand, parse_str_literal, parse_if
 
 """
@@ -30,7 +30,7 @@ animation_definition_section = "animations" animation_assignments
 animation_assignments = animation_assignment | "{" animation_assignment* "}"
 animation_assignment = identifier <-:" file_source ";" | identifier <-:" file_source animation_options
 animation_options = animation_option | "{" animation_option* "}"
-animation_option = "frame_rate" "=" integer ";" | "dithering" ":=" string ";" | "x" "=" integer ";" | "y" "=" integer ";"
+animation_option = "frame_rate" "=" integer ";" | "dithering" ":=" string ";" | "w" "=" integer ";" | "h" "=" integer ";"
 
 lightcue_definition_section = "lightcues" file_assignments
 
@@ -51,11 +51,11 @@ stage_bganim = "bganim" identifier ";"
 stage_bgcue = "bgcue" identifier ";"
 stage_menu = "menu" identifier ";" | "menu" identifier "prompt" STRING ";"
 stage_event = "event" event_type event_statement
-event_type = "input" "(" event_input_button ")" | "bgdone" | "menu" | "enter" | "timer"
+event_type = "input" "(" event_input_button ")" | "bgdone" | "fgdone" "(" integer ")" | "menu" | "enter" | "timer"
 event_input_button = "A" | "B" | "<-" | "->" | "-"
 event_statements = event_statement | "{" event_statement* "}"
 event_statement = play | cue | gostage | assignment_statement | if_statement | timer | continue | break | loop
-play = "play" "bganim" identifier ";"
+play = "play" ("bganim" | ("fganim" | "fgmask") "(" int ")") identifier ";"
 cue = "cue" identifier ";"
 gostage = "gostage" identifier ";"
 timer = "timer" int_expression ";"
@@ -124,7 +124,7 @@ def build_game_parser():
     file_assignments = pp.Group(file_assignment | pp.Suppress("{") - pp.ZeroOrMore(file_assignment) - pp.Suppress("}"))
 
     # Animation sections
-    animation_option = pp.Group(pp.Keyword("frame_rate") - pp.Suppress("=") - integer - pp.Suppress(";") | pp.Keyword("dithering") - pp.Suppress(":=") - string - pp.Suppress(";")) | pp.Group(pp.Keyword("x") - pp.Suppress("=") - integer - pp.Suppress(";") | pp.Keyword("y") - pp.Suppress("=") - integer - pp.Suppress(";"))
+    animation_option = pp.Group(pp.Keyword("frame_rate") - pp.Suppress("=") - integer - pp.Suppress(";") | pp.Keyword("dithering") - pp.Suppress(":=") - string - pp.Suppress(";")) | pp.Group(pp.Keyword("w") - pp.Suppress("=") - integer - pp.Suppress(";") | pp.Keyword("h") - pp.Suppress("=") - integer - pp.Suppress(";"))
     animation_options = pp.Group(pp.Suppress(";") | animation_option | pp.Suppress("{") - pp.ZeroOrMore(animation_option) - pp.Suppress("}"))
     animation_assignment = pp.Group(identifier - pp.Suppress("<-") - file_source - animation_options)
     animation_assignments = pp.Group(animation_assignment | pp.Suppress("{") - pp.ZeroOrMore(animation_assignment) - pp.Suppress("}"))
@@ -183,7 +183,11 @@ def build_game_parser():
     break_statement = pp.Group(pp.Keyword("break") - pp.Suppress(";"))
 
     # Other commands
-    play = pp.Group(pp.Keyword("play") - pp.Keyword("bganim") - identifier - pp.Suppress(";"))
+    play_type = pp.Group(pp.Keyword("bganim") | (pp.Keyword("fganim") | pp.Keyword("fgmask")) - pp.Suppress("(") - integer - pp.Suppress(")"))
+    play = pp.Group(pp.Keyword("play") - play_type - identifier - pp.Suppress(";"))
+
+    play.set_parse_action(parse_play)
+
     cue = pp.Group(pp.Keyword("cue") - identifier - pp.Suppress(";"))
     gostage = pp.Group(pp.Keyword("gostage") - identifier - pp.Suppress(";"))
     timer = pp.Group(pp.Keyword("timer") - int_expression - pp.Suppress(";"))
@@ -195,7 +199,7 @@ def build_game_parser():
 
     # Event types
     event_input_button = pp.Keyword("A") | pp.Keyword("B") | pp.Keyword("<-") | pp.Keyword("->") | pp.Keyword("-")
-    event_type = pp.Keyword("input") - pp.Suppress("(") - event_input_button - pp.Suppress(")") | pp.Keyword("timer") | pp.Keyword("bgdone") | pp.Keyword("menu") | pp.Keyword("enter")
+    event_type = pp.Keyword("input") - pp.Suppress("(") - event_input_button - pp.Suppress(")") | pp.Keyword("timer") | pp.Keyword("bgdone") | pp.Keyword("menu") | pp.Keyword("enter") | pp.Keyword("fgdone") - pp.Suppress("(") - integer - pp.Suppress(")")
 
     # General stage definition and options
     stage_bganim = pp.Group(pp.Keyword("bganim") - identifier - pp.Suppress(";"))

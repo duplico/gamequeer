@@ -8,7 +8,6 @@
 #include "grlib.h"
 
 gq_header game;
-uint8_t bg_animating = 0;
 
 gq_anim_onscreen current_animations[MAX_CONCURRENT_ANIMATIONS];
 
@@ -30,6 +29,12 @@ t_gq_int *game_id     = (t_gq_int *) &gq_builtin_ints[GQI_GAME_ID * GQ_INT_SIZE]
 t_gq_int *menu_active = (t_gq_int *) &gq_builtin_ints[GQI_MENU_ACTIVE * GQ_INT_SIZE];
 t_gq_int *menu_value  = (t_gq_int *) &gq_builtin_ints[GQI_MENU_VALUE * GQ_INT_SIZE];
 t_gq_int *game_color  = (t_gq_int *) &gq_builtin_ints[GQI_GAME_COLOR * GQ_INT_SIZE];
+t_gq_int *anim0_x     = (t_gq_int *) &gq_builtin_ints[GQI_BGANIM_X * GQ_INT_SIZE];
+t_gq_int *anim0_y     = (t_gq_int *) &gq_builtin_ints[GQI_BGANIM_Y * GQ_INT_SIZE];
+t_gq_int *anim1_x     = (t_gq_int *) &gq_builtin_ints[GQI_FGANIM1_X * GQ_INT_SIZE];
+t_gq_int *anim1_y     = (t_gq_int *) &gq_builtin_ints[GQI_FGANIM1_Y * GQ_INT_SIZE];
+t_gq_int *anim2_x     = (t_gq_int *) &gq_builtin_ints[GQI_FGANIM2_X * GQ_INT_SIZE];
+t_gq_int *anim2_y     = (t_gq_int *) &gq_builtin_ints[GQI_FGANIM2_Y * GQ_INT_SIZE];
 
 char *game_title = (char *) &gq_builtin_strs[GQS_GAME_TITLE * GQ_STR_SIZE];
 
@@ -83,14 +88,23 @@ uint8_t load_stage(t_gq_pointer stage_ptr) {
         return 0;
     }
 
+    // Stop all animations and reset their positions to (0, 0)
+    for (uint8_t i = 0; i < MAX_CONCURRENT_ANIMATIONS; i++) {
+        current_animations[i].in_use = 0;
+    }
+
+    *anim0_x = 0;
+    *anim0_y = 0;
+    *anim1_x = 0;
+    *anim1_y = 0;
+    *anim2_x = 0;
+    *anim2_y = 0;
+
     if (stage_current.anim_bg_pointer) {
         // If this stage has an animation, load it.
         if (!load_animation(0, stage_current.anim_bg_pointer)) {
             return 0;
         }
-    } else {
-        // If this stage has no animation, stop the current one.
-        bg_animating = 0;
     }
 
     if (stage_current.cue_bg_pointer) {
@@ -159,9 +173,6 @@ uint8_t load_animation(uint8_t index, t_gq_pointer anim_ptr) {
         return 0;
     }
 
-    // Set up the parameters of the animation
-    anim->x      = 0;
-    anim->y      = 0;
     anim->in_use = 1;
     anim->frame  = 0;
     anim->ticks  = 0; // Set to 0 to draw the first frame immediately.
@@ -179,6 +190,23 @@ void draw_oled_stack() {
     for (uint8_t i = 0; i < MAX_CONCURRENT_ANIMATIONS; i++) {
         if (!current_animations[i].in_use) {
             continue;
+        }
+
+        switch (i) { // TODO: Handle masks
+            case 0:
+                current_animations[i].x = *anim0_x;
+                current_animations[i].y = *anim0_y;
+                break;
+            case 1:
+            case 2:
+                current_animations[i].x = *anim1_x;
+                current_animations[i].y = *anim1_y;
+                break;
+            case 3:
+            case 4:
+                current_animations[i].x = *anim2_x;
+                current_animations[i].y = *anim2_y;
+                break;
         }
 
         // Load the current frame
@@ -259,6 +287,12 @@ void system_tick() {
             if (i == 0) {
                 // Background animation done, fire event.
                 GQ_EVENT_SET(GQ_EVENT_BGDONE);
+            } else if (i == 1) {
+                // Foreground animation 1 done, fire event.
+                GQ_EVENT_SET(GQ_EVENT_FGDONE1);
+            } else if (i == 3) {
+                // Foreground animation 2 done, fire event.
+                GQ_EVENT_SET(GQ_EVENT_FGDONE2);
             }
         }
         need_to_redraw = 1;
@@ -360,8 +394,9 @@ void run_code(t_gq_pointer code_ptr) {
                 load_stage(cmd.arg1);
                 opcode = GQ_OP_DONE;
                 break;
-            case GQ_OP_PLAYBG:
-                load_animation(0, cmd.arg1);
+            case GQ_OP_PLAY:
+                // TODO: check if it's literal
+                load_animation(cmd.arg2, cmd.arg1);
                 break;
             case GQ_OP_CUE:
                 led_play_cue(cmd.arg1, 0);

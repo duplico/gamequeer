@@ -88,10 +88,14 @@ class CommandGoStage(Command):
     def __repr__(self) -> str:
         return f"GOSTAGE {self.arg1}"
 
-class CommandPlayBg(Command):
-    def __init__(self, instring, loc, bganim : str):
-        super().__init__(CommandType.PLAYBG, instring, loc)
-        self.anim_name = bganim
+class CommandPlay(Command):
+    def __init__(self, instring, loc, anim_name : str, anim_index : int = 0):
+        super().__init__(CommandType.PLAY, instring, loc)
+        self.anim_name = anim_name
+        if anim_index > 4:
+            raise ValueError("Animation index must be between 0 and 4")
+        self.anim_index = anim_index
+        self.arg2 = anim_index # TODO: Permit expressions here?
     
     def resolve(self):
         if self.resolved:
@@ -100,7 +104,7 @@ class CommandPlayBg(Command):
         if self.anim_name in Animation.anim_table and Animation.anim_table[self.anim_name].addr != 0x00000000:
             self.arg1 = Animation.anim_table[self.anim_name].addr
             self.resolved = True
-        
+
         return self.resolved
     
     def __repr__(self) -> str:

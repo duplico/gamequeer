@@ -8,7 +8,8 @@
     "cmake.configureOnOpen": false,
     "files.associations": {
       "stdbool.h": "c",
-      "gamequeer_bytecode.h": "c"
+      "gamequeer_bytecode.h": "c",
+      "grlib.h": "c"
     },
     "cmake.generator": "Unix Makefiles",
     "cmake.sourceDirectory": "${workspaceFolder}/gamequeer",
