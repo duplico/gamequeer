@@ -17,6 +17,7 @@ volatile {
 persistent {
     int badges_seen = 0;
     str game_name_2 := "Test2";
+    int timer_speed = 10;
 }
 
 menus {
@@ -50,31 +51,41 @@ lightcues {
 }
 
 stage start {
-    // bganim george;
     bgcue test;
     menu OkCancel prompt "lol whatever";
 
     event enter {
-        play bganim george;
+        play bganim george2;
         cue flash;
 
         game_name := "foobar";
         badge_id = A + B * (5 + -C);
         D = !(badge_id == 17);
 
-        if (!D) {
-            badge_id = 17;
-            A = B + 3;
-        } else if (D)
-            badge_id = 18;
+        // if (!D) {
+        //     badge_id = 17;
+        //     A = B + 3;
+        // } else if (D)
+        //     badge_id = 18;
         
-        loop {
-            badge_id = badge_id + 1;
+        // loop {
+        //     badge_id = badge_id + 1;
 
-            if (badge_id == 50) {
-                break;
-            }
-        }
+        //     if (badge_id == 50) {
+        //         break;
+        //     }
+        // }
+
+        GQI_FGANIM1_X = 0;
+        GQI_FGANIM1_Y = 0;
+        play fganim(1) george;
+        timer timer_speed;
+    }
+
+    event timer {
+        GQI_FGANIM1_X = GQI_FGANIM1_X + 1;
+        GQI_FGANIM1_Y = GQI_FGANIM1_Y + 1;
+        timer timer_speed;
     }
 
     event input(A)
@@ -82,12 +93,27 @@ stage start {
 
     event bgdone {
         badge_id = 6;
-        gostage selfie;
     }
+
+    event fgdone(1) {
+        play fganim(1) george;
+    }
+
+    event menu {
+        if (GQI_MENU_VALUE == 1) {
+            gostage selfie;
+        }
+    }
+
 }
 
 stage selfie {
-    bganim george2;
+
+    event enter {
+        GQI_BGANIM_X = 16;
+        GQI_BGANIM_Y = 16;
+        play bganim george;
+    }
 
     event bgdone {
         timer badge_id + 5;

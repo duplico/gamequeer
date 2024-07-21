@@ -68,8 +68,8 @@ MenuDefinitionSection:
 // Stage commands
 CmdGoStage:
     'gostage' stage=ID ';';
-CmdPlayBgAnim:
-    'play' 'bganim' anim=ID ';';
+CmdPlayAnim:
+    'play' ('bganim' | (('fganim' | 'fgmask') '(' index=INT ')')) anim=ID ';';
 CmdPlayCue:
     'cue' cue=ID ';';
 CmdTimer:
@@ -103,14 +103,14 @@ CmdLoopControl:
     (cmd='break' | cmd='continue') ';';
 
 StageCommand:
-    CmdGoStage | CmdPlayBgAnim | CmdPlayCue | CmdTimer | CmdAssignment | CmdIf | CmdLoop | CmdLoopControl;
+    CmdGoStage | CmdPlayAnim | CmdPlayCue | CmdTimer | CmdAssignment | CmdIf | CmdLoop | CmdLoopControl;
 StageCommands:
     StageCommand | '{' cmds=StageCommand* '}';
 
 // Stage definitions
 
 EventType:
-    eventType='input' button=INPUTBUTTON | eventType='bgdone' | eventType='menu' | eventType='enter' | eventType='timer';
+    eventType='input' button=INPUTBUTTON | eventType='bgdone' | eventType='menu' | eventType='enter' | eventType='timer' | (eventType='fgdone' '(' index=INT ')');
 StageEvent:
     'event' EventType StageCommands;
 StageMenu:

@@ -49,6 +49,12 @@ uint8_t write_byte(t_gq_pointer ptr, uint8_t value) {
         case GQ_PTR_NS_HEAP:
             gq_heap[GQ_PTR_ADDR(ptr)] = value;
             return 1;
+        case GQ_PTR_BUILTIN_INT:
+            gq_builtin_ints[GQ_PTR_ADDR(ptr)] = value;
+            return 1;
+        case GQ_PTR_BUILTIN_STR:
+            gq_builtin_strs[GQ_PTR_ADDR(ptr)] = value;
+            return 1;
         default:
             return 0;
     }
