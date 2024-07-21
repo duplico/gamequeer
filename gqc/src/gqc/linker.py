@@ -159,6 +159,12 @@ def create_symbol_table(table_dest = sys.stdout, cmd_dest = sys.stdout):
     for cmd in Command.command_list:
         if not cmd.resolve():
             raise ValueError(f"Unresolved symbol in command {cmd}")
+    
+    # And in stages:
+    for stage in Stage.stage_table.values():
+        if not stage.resolve():
+            print(f"FATAL: Unresolved symbols remain in Stage `{stage.name}`: {', '.join(stage.unresolved_symbols)}", file=sys.stderr)
+            exit(1)
 
     symbol_table = {
         '.game' : Game.link_table,

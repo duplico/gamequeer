@@ -195,10 +195,11 @@ assert struct.calcsize(GQ_OP_FORMAT_LITERAL_ARG1) == GQ_OP_SIZE and struct.calcs
 #     t_gq_pointer anim_bg_pointer;                // Pointer to the background animation (NULL if none)
 #     t_gq_pointer cue_bg_pointer;                 // Pointer to the background lighting cue (NULL if none)
 #     t_gq_pointer menu_pointer;                   // Pointer to the menu definition for this stage
+#     t_gq_pointer menu_prompt_pointer;            // Pointer to the prompt for the menu
 #     t_gq_pointer event_commands[GQ_EVENT_COUNT]; // Event commands
 # } __attribute__((packed)) gq_stage;
-GqStage = namedtuple('GqStage', 'id anim_bg_pointer cue_bg_pointer menu_pointer event_commands')
-GQ_STAGE_FORMAT = f'<H{T_GQ_POINTER_FORMAT}{T_GQ_POINTER_FORMAT}{T_GQ_POINTER_FORMAT}{len(EventType)}{T_GQ_POINTER_FORMAT}'
+GqStage = namedtuple('GqStage', 'id anim_bg_pointer cue_bg_pointer menu_pointer menu_prompt_pointer event_commands')
+GQ_STAGE_FORMAT = f'<H{T_GQ_POINTER_FORMAT}{T_GQ_POINTER_FORMAT}{T_GQ_POINTER_FORMAT}{T_GQ_POINTER_FORMAT}{len(EventType)}{T_GQ_POINTER_FORMAT}'
 GQ_STAGE_SIZE = struct.calcsize(GQ_STAGE_FORMAT)
 
 GqReservedVariable = namedtuple('GqReservedVariable', 'name type description addr')

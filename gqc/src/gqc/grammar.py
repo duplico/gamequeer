@@ -152,7 +152,7 @@ def build_game_parser():
     string_literal = pp.QuotedString('"').setName("string_literal")
     string_operand = identifier | string_literal
 
-    string_literal.add_parse_action(parse_str_literal)
+    string_literal.set_parse_action(parse_str_literal)
 
     string_expression = string_operand
     string_assignment = pp.Keyword(":=") - string_expression - pp.Suppress(";")
@@ -204,7 +204,7 @@ def build_game_parser():
     # General stage definition and options
     stage_bganim = pp.Group(pp.Keyword("bganim") - identifier - pp.Suppress(";"))
     stage_bgcue = pp.Group(pp.Keyword("bgcue") - identifier - pp.Suppress(";"))
-    stage_menu = pp.Suppress("menu") - identifier - pp.Optional(pp.Suppress("prompt") - string) - pp.Suppress(";")
+    stage_menu = pp.Suppress("menu") - identifier - pp.Optional(pp.Suppress("prompt") - string_operand) - pp.Suppress(";")
     stage_event = pp.Group(pp.Keyword("event") - event_type - event_statements)
     stage_option = stage_bganim | stage_bgcue | stage_menu | stage_event
     stage_options = pp.Group(stage_option | pp.Suppress("{") - pp.ZeroOrMore(stage_option) - pp.Suppress("}"))
