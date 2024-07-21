@@ -52,7 +52,7 @@ lightcues {
 
 stage start {
     bgcue test;
-    menu OkCancel prompt "lol whatever";
+    menu OkCancel prompt game_name;
 
     event enter {
         play bganim george2;

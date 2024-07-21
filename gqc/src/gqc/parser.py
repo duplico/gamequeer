@@ -47,10 +47,9 @@ def parse_game_definition(instring, loc, toks):
 
 def parse_bound_menu(instring, loc, toks):
     menu_name = toks[0]
-    menu_prompt = ''
+    menu_prompt = None
     if len(toks) == 2:
         menu_prompt = toks[1]
-    
     return Stage.BoundMenu(menu_name, menu_prompt)
 
 def parse_stage_definition(instring, loc, toks):
@@ -296,10 +295,5 @@ def parse(text):
     except GqcParseError as ge:
         print(ge, file=sys.stderr)
         exit(1)
-    
-    for stage in Stage.stage_table.values():
-        if not stage.resolve():
-            print(f"FATAL: Unresolved symbols remain in Stage `{stage.name}`: {', '.join(stage.unresolved_symbols)}", file=sys.stderr)
-            exit(1)
 
     return parsed

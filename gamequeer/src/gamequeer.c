@@ -39,6 +39,8 @@ t_gq_int *anim2_y     = (t_gq_int *) &gq_builtin_ints[GQI_FGANIM2_Y * GQ_INT_SIZ
 char *game_title = (char *) &gq_builtin_strs[GQS_GAME_TITLE * GQ_STR_SIZE];
 
 gq_menu *menu_current;
+char menu_current_prompt[GQ_STR_SIZE];
+uint8_t menu_offset_y        = 0;
 uint8_t menu_option_selected = 0;
 
 uint8_t timer_active = 0;
@@ -61,6 +63,15 @@ void menu_load(t_gq_pointer menu_ptr, t_gq_pointer menu_prompt) {
     // Load the menu into RAM.
     menu_current = (gq_menu *) malloc(menu_size);
     gq_memcpy_ram((uint8_t *) menu_current, menu_ptr, menu_size);
+
+    // Load the menu prompt into RAM.
+    if (menu_prompt) {
+        gq_memcpy_ram((uint8_t *) menu_current_prompt, menu_prompt, GQ_STR_SIZE);
+        menu_offset_y = 18; // TODO: constant or something
+    } else {
+        menu_current_prompt[0] = '\0';
+        menu_offset_y          = 0;
+    }
 
     // Initialize the menu options and activate it.
     menu_option_selected = 0;
@@ -119,7 +130,7 @@ uint8_t load_stage(t_gq_pointer stage_ptr) {
 
     if (stage_current.menu_pointer) {
         // If this stage has a menu, load it.
-        menu_load(stage_current.menu_pointer, 0);
+        menu_load(stage_current.menu_pointer, stage_current.menu_prompt_pointer);
     }
 
     if (timer_active) {
@@ -139,10 +150,6 @@ uint8_t load_game() {
         return 0;
     }
 
-    if (!load_stage(game.starting_stage)) {
-        return 0;
-    }
-
     *game_id    = game.id;
     *game_color = game.color;
     memcpy(game_title, game.title, GQ_STR_SIZE);
@@ -156,6 +163,10 @@ uint8_t load_game() {
         gq_leds[i].b = 0x0000;
     }
     HAL_update_leds();
+
+    if (!load_stage(game.starting_stage)) {
+        return 0;
+    }
 
     return 1;
 }
@@ -240,15 +251,19 @@ void draw_oled_stack() {
 
     // Then, draw the menu, if there is one.
     if (*menu_active) {
-        Graphics_Rectangle menu_background = {0, 0, 128, menu_current->option_count * 10};
+        Graphics_Rectangle menu_background = {0, 0, 128, menu_offset_y + menu_current->option_count * 10};
         Graphics_setForegroundColor(&g_sContext, GRAPHICS_COLOR_BLACK);
         Graphics_fillRectangle(&g_sContext, &menu_background);
         Graphics_setForegroundColor(&g_sContext, GRAPHICS_COLOR_WHITE);
 
+        if (menu_current_prompt[0]) {
+            Graphics_drawString(&g_sContext, menu_current_prompt, -1, 6, 3, 0);
+        }
+
         for (uint8_t i = 0; i < menu_current->option_count; i++) {
-            Graphics_drawString(&g_sContext, menu_current->options[i].label, -1, 15, i * 10, 0);
+            Graphics_drawString(&g_sContext, menu_current->options[i].label, -1, 15, menu_offset_y + i * 10, 0);
             if (i == menu_option_selected) {
-                Graphics_drawString(&g_sContext, ">", -1, 6, i * 10, 0);
+                Graphics_drawString(&g_sContext, ">", -1, 6, menu_offset_y + i * 10, 0);
             }
         }
     }

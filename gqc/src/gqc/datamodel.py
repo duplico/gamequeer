@@ -122,6 +122,7 @@ class Stage:
         self.bganim_name = bganim
         self.bgcue_name = bgcue
         self.menu_def = menu
+        self.menu_prompt_addr = 0x00000000
         self.unresolved_symbols = []
 
         if name in Stage.stage_table:
@@ -167,13 +168,24 @@ class Stage:
             resolved = False
 
         # Attempt to resolve menu
-        if self.menu_def is None:
+        if not self.menu_def:
             self.menu = None
-        elif self.menu_def.menu_name in Menu.menu_table:
-            self.menu = Menu.menu_table[self.menu_def.menu_name]
         else:
-            self.unresolved_symbols.append(self.menu_def.menu_name)
-            resolved = False
+            if self.menu_def.menu_name in Menu.menu_table:
+                self.menu = Menu.menu_table[self.menu_def.menu_name]
+            else:
+                self.unresolved_symbols.append(self.menu_def.menu_name)
+                resolved = False
+            
+            if self.menu_def.menu_prompt:
+                if self.menu_def.menu_prompt in Variable.var_table:
+                    if Variable.var_table[self.menu_def.menu_prompt].datatype != 'str':
+                        raise ValueError(f"Menu prompt {self.menu_def.menu_prompt} is not a string")
+                    if Variable.var_table[self.menu_def.menu_prompt].addr:
+                        self.menu_prompt_addr = Variable.var_table[self.menu_def.menu_prompt].addr
+                    else:
+                        self.unresolved_symbols.append(self.menu_def.menu_prompt)
+                        resolved = False
 
         # Event statements resolve themselves at code generation time
 
@@ -189,9 +201,12 @@ class Stage:
         return structs.GQ_STAGE_SIZE
 
     def __repr__(self) -> str:
-        return f"Stage({self.name}, bganim={self.bganim_name}, bgcue={self.bgcue_name}, events={self.events})"
+        return f"Stage({self.name}, menu={self.menu_def} bganim={self.bganim_name}, bgcue={self.bgcue_name}, events={self.events})"
     
     def to_bytes(self):
+        if not self.resolve():
+            raise ValueError(f"Stage {self.name} has unresolved symbols: {self.unresolved_symbols}")
+        
         event_pointers = []
         for event_type in EventType:
             if event_type in self.events:
@@ -204,9 +219,12 @@ class Stage:
             anim_bg_pointer=self.bganim.addr if self.bganim else 0,
             cue_bg_pointer=self.bgcue.addr if self.bgcue else 0,
             menu_pointer=self.menu.addr if self.menu else 0,
+            menu_prompt_pointer = self.menu_prompt_addr,
             event_commands=event_pointers
         )
-        return struct.pack(structs.GQ_STAGE_FORMAT, stage.id, stage.anim_bg_pointer, stage.cue_bg_pointer, stage.menu_pointer, *stage.event_commands)
+
+        print(f'{self.menu_prompt_addr:08X}')
+        return struct.pack(structs.GQ_STAGE_FORMAT, stage.id, stage.anim_bg_pointer, stage.cue_bg_pointer, stage.menu_pointer, stage.menu_prompt_pointer, *stage.event_commands)
 
 class Variable:
     var_table = {}
