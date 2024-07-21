@@ -70,8 +70,8 @@ RUN gem install ceedling
 ENV RUBYOPT="-KU -E utf-8:utf-8"
 
 # Node stuff for langium:
-COPY gq-game-language/install-langium-deps.sh /workspaces/gamequeer/gq-game-language/
-RUN chmod +x /workspaces/gamequeer/gq-game-language/install-langium-deps.sh && /workspaces/gamequeer/gq-game-language/install-langium-deps.sh
+COPY --chmod=0774 gq-game-language/install-langium-deps.sh /workspaces/gamequeer/gq-game-language/
+RUN /workspaces/gamequeer/gq-game-language/install-langium-deps.sh
 
 # Python dependencies
 
