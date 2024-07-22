@@ -1,10 +1,10 @@
-=========================
-GameQueer Fantasy Console
-=========================
 .. image:: https://img.shields.io/badge/license-MIT-blue.svg
    :target: https://opensource.org/licenses/MIT
    :alt: License: MIT
-   
+
+About
+=====
+
 This repository contains the development toolchain for the GameQueer fantasy game console.
 
 GameQueer is a sort of `Fantasy Console <https://en.wikipedia.org/wiki/Fantasy_video_game_console>`_, 
