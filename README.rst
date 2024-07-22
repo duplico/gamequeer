@@ -2,8 +2,8 @@
    :target: https://opensource.org/licenses/MIT
    :alt: License: MIT
 
-About
-=====
+About GameQueer
+===============
 
 This repository contains the development toolchain for the GameQueer fantasy game console.
 
