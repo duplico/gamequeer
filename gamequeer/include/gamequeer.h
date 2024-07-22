@@ -40,8 +40,7 @@ typedef int32_t t_gq_int;
 
 typedef enum gq_game_color {
     GQ_COLOR_UNASSIGNED = 0x00,
-    GQ_COLOR_BLACK1,
-    GQ_COLOR_BLACK2,
+    GQ_COLOR_BLACK,
     GQ_COLOR_WHITE,
     GQ_COLOR_RED,
     GQ_COLOR_ORANGE,
