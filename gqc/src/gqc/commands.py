@@ -143,11 +143,15 @@ class CommandArithmetic(Command):
         '<=': CommandType.LE,
         '&&': CommandType.AND,
         '||': CommandType.OR,
+        '&': CommandType.BWAND,
+        '|': CommandType.BWOR,
+        '^': CommandType.BWXOR,
     }
 
     UNARY_OPERATORS = {
         '!': CommandType.NOT,
-        '-': CommandType.NEG
+        '-': CommandType.NEG,
+        '~': CommandType.BWNOT,
     }
 
     def __init__(self, command_type : CommandType, instring, loc, dst : GqcIntOperand, src : GqcIntOperand):

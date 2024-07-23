@@ -320,7 +320,7 @@ void run_arithmetic(gq_op *cmd) {
     t_gq_int arg2;
     t_gq_int result;
 
-    if (cmd->opcode == GQ_OP_NOT || cmd->opcode == GQ_OP_NEG) {
+    if (cmd->opcode == GQ_OP_NOT || cmd->opcode == GQ_OP_NEG || cmd->opcode == GQ_OP_BWNOT) {
         // These operations only have arg2 as an operand; arg1 is the result.
         // No need to load anything to arg1 for a unary operation.
     } else {
@@ -378,6 +378,18 @@ void run_arithmetic(gq_op *cmd) {
             break;
         case GQ_OP_NEG:
             result = -arg2;
+            break;
+        case GQ_OP_BWNOT:
+            result = ~arg2;
+            break;
+        case GQ_OP_BWAND:
+            result = arg1 & arg2;
+            break;
+        case GQ_OP_BWOR:
+            result = arg1 | arg2;
+            break;
+        case GQ_OP_BWXOR:
+            result = arg1 ^ arg2;
             break;
         default:
             return;
@@ -443,6 +455,10 @@ void run_code(t_gq_pointer code_ptr) {
             case GQ_OP_OR:
             case GQ_OP_NOT:
             case GQ_OP_NEG:
+            case GQ_OP_BWAND:
+            case GQ_OP_BWOR:
+            case GQ_OP_BWXOR:
+            case GQ_OP_BWNOT:
                 run_arithmetic(&cmd);
                 break;
             case GQ_OP_GOTOIFN:

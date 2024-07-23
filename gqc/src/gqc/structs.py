@@ -167,6 +167,10 @@ class OpCode(IntEnum):
     NEG = 0x15
     GOTOIFN = 0x16
     TIMER = 0x17
+    BWAND = 0x18
+    BWOR = 0x19
+    BWXOR = 0x1A
+    BWNOT = 0x1B
 
 class OpFlags(IntEnum):
     NONE = 0x00
