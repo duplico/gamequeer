@@ -222,11 +222,23 @@ GQ_RESERVED_INTS = [
     GqReservedVariable('GQI_FGANIM1_Y', 'int', 'Foreground animation 0 Y', 0x00001C),
     GqReservedVariable('GQI_FGANIM2_X', 'int', 'Foreground animation 1 X', 0x000028),
     GqReservedVariable('GQI_FGANIM2_Y', 'int', 'Foreground animation 1 Y', 0x00002C),
+    GqReservedVariable('GQI_LABEL1_X', 'int', 'Label 1 X', 0x000038),
+    GqReservedVariable('GQI_LABEL1_Y', 'int', 'Label 1 Y', 0x00003C),
+    GqReservedVariable('GQI_LABEL2_X', 'int', 'Label 2 X', 0x000040),
+    GqReservedVariable('GQI_LABEL2_Y', 'int', 'Label 2 Y', 0x000044),
+    GqReservedVariable('GQI_LABEL3_X', 'int', 'Label 3 X', 0x000048),
+    GqReservedVariable('GQI_LABEL3_Y', 'int', 'Label 3 Y', 0x00004C),
+    GqReservedVariable('GQI_LABEL4_X', 'int', 'Label 4 X', 0x000050),
+    GqReservedVariable('GQI_LABEL4_Y', 'int', 'Label 4 Y', 0x000054),
 ]
 
 GQ_RESERVED_STRS = [
     GqReservedVariable('GQS_GAME_NAME', 'str', 'Name of the game', 0x000000),
     GqReservedVariable('GQS_PLAYER_HANDLE', 'str', 'Player handle', 2 * GQ_STR_SIZE),
+    GqReservedVariable('GQS_LABEL1', 'str', 'Label 1', 3 * GQ_STR_SIZE),
+    GqReservedVariable('GQS_LABEL2', 'str', 'Label 2', 4 * GQ_STR_SIZE),
+    GqReservedVariable('GQS_LABEL3', 'str', 'Label 3', 5 * GQ_STR_SIZE),
+    GqReservedVariable('GQS_LABEL4', 'str', 'Label 4', 6 * GQ_STR_SIZE),
 ]
 
 GQ_REGISTERS_INT = [

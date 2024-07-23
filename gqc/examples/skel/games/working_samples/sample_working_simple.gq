@@ -120,6 +120,10 @@ stage selfie {
         GQI_BGANIM_X = 16;
         GQI_BGANIM_Y = 16;
         play bganim george;
+
+        GQI_LABEL2_X = 16;
+        GQI_LABEL2_Y = 64;
+        GQS_LABEL2 := "Hello, World!";
     }
 
     event bgdone {
