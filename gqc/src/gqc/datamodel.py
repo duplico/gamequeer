@@ -825,6 +825,7 @@ class IntExpression:
         self.resolved = False
         self.result_symbol = None
         self.commands = []
+        self.unresolved_symbols = []
 
         self.used_registers = set()
 
@@ -912,6 +913,7 @@ class IntExpression:
         for command in self.commands:
             if not command.resolve():
                 resolved = False
+                self.unresolved_symbols += command.unresolved_symbols
                 break
 
         self.resolved = resolved

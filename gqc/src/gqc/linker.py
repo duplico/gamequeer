@@ -158,7 +158,8 @@ def create_symbol_table(table_dest = sys.stdout, cmd_dest = sys.stdout):
     # Now, do one more pass to try to resolve any unresolved symbols in commands.
     for cmd in Command.command_list:
         if not cmd.resolve():
-            raise ValueError(f"Unresolved symbol in command {cmd}")
+            print(f"FATAL: Unresolved symbols remain in command {cmd}{(': ' + str(cmd.unresolved_symbols)) if cmd.unresolved_symbols else ''}", file=sys.stderr)
+            exit(1)
     
     # And in stages:
     for stage in Stage.stage_table.values():
