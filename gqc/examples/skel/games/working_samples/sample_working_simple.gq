@@ -43,6 +43,8 @@ animations {
     george2 <- "dance.gif" {
         frame_rate = 28;
     }
+
+    george3 <- "printer.jpg";
 }
 
 lightcues {
