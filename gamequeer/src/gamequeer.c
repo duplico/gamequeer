@@ -391,6 +391,12 @@ void run_arithmetic(gq_op *cmd) {
         case GQ_OP_BWXOR:
             result = arg1 ^ arg2;
             break;
+        case GQ_OP_BWSHL:
+            result = arg1 << arg2;
+            break;
+        case GQ_OP_BWSHR:
+            result = arg1 >> arg2;
+            break;
         default:
             return;
     }
@@ -459,6 +465,8 @@ void run_code(t_gq_pointer code_ptr) {
             case GQ_OP_BWOR:
             case GQ_OP_BWXOR:
             case GQ_OP_BWNOT:
+            case GQ_OP_BWSHL:
+            case GQ_OP_BWSHR:
                 run_arithmetic(&cmd);
                 break;
             case GQ_OP_GOTOIFN:

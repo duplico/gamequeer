@@ -171,6 +171,8 @@ class OpCode(IntEnum):
     BWOR = 0x19
     BWXOR = 0x1A
     BWNOT = 0x1B
+    BWSHL = 0x1C
+    BWSHR = 0x1D
 
 class OpFlags(IntEnum):
     NONE = 0x00

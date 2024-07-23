@@ -146,6 +146,8 @@ class CommandArithmetic(Command):
         '&': CommandType.BWAND,
         '|': CommandType.BWOR,
         '^': CommandType.BWXOR,
+        '<<': CommandType.BWSHL,
+        '>>': CommandType.BWSHR,
     }
 
     UNARY_OPERATORS = {
