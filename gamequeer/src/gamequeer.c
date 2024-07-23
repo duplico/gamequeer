@@ -186,7 +186,9 @@ uint8_t load_animation(uint8_t index, t_gq_pointer anim_ptr) {
 
     anim->in_use = 1;
     anim->frame  = 0;
-    anim->ticks  = 0; // Set to 0 to draw the first frame immediately.
+    anim->ticks  = anim->anim.ticks_per_frame;
+
+    GQ_EVENT_SET(GQ_EVENT_REFRESH);
 
     return 1;
 }
@@ -273,7 +275,6 @@ void draw_oled_stack() {
 
 void system_tick() {
     // Should be called by the 100 Hz system tick
-    uint8_t need_to_redraw = 0;
 
     if (timer_active) {
         timer_counter++;
@@ -310,11 +311,7 @@ void system_tick() {
                 GQ_EVENT_SET(GQ_EVENT_FGDONE2);
             }
         }
-        need_to_redraw = 1;
-    }
-
-    if (need_to_redraw) {
-        draw_oled_stack();
+        GQ_EVENT_SET(GQ_EVENT_REFRESH);
     }
 }
 
@@ -516,8 +513,11 @@ void handle_events() {
             }
 
         unblocked_events:
-            // Check whether this event type is used in the current stage.
-            if (!GQ_PTR_ISNULL(stage_current.event_commands[event_type])) {
+            if (event_type == GQ_EVENT_REFRESH) {
+                // Special event: refresh the OLED stack
+                draw_oled_stack();
+            } else if (!GQ_PTR_ISNULL(stage_current.event_commands[event_type])) {
+                // Otherwise, look for an event command to run in the current stage.
                 run_code(stage_current.event_commands[event_type]);
             }
         }

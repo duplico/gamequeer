@@ -163,6 +163,7 @@ typedef enum gq_event_type {
     GQ_EVENT_TIMER,
     GQ_EVENT_FGDONE1,
     GQ_EVENT_FGDONE2,
+    GQ_EVENT_REFRESH,
     GQ_EVENT_COUNT
 } gq_event_type;
 

@@ -223,7 +223,6 @@ class Stage:
             event_commands=event_pointers
         )
 
-        print(f'{self.menu_prompt_addr:08X}')
         return struct.pack(structs.GQ_STAGE_FORMAT, stage.id, stage.anim_bg_pointer, stage.cue_bg_pointer, stage.menu_pointer, stage.menu_prompt_pointer, *stage.event_commands)
 
 class Variable:
@@ -359,7 +358,7 @@ class Animation:
     link_table = dict() # OrderedDict not needed to remember order since Python 3.7
     next_id : str = 0
     
-    def __init__(self, name : str, source : str, dithering : str = 'none', frame_rate : int = 25, w : int = 128, h : int = 128):
+    def __init__(self, name : str, source : str, dithering : str = 'none', frame_rate : int = 25, duration: int = 100, w : int = 128, h : int = 128):
         self.frame_pointer = 0x00000000
         self.addr = 0x00000000
         self.name = name
@@ -427,6 +426,10 @@ class Animation:
             frame_paths = sorted(self.dst_path.glob('frame*.bmp'))
             animation_progress.update(binary_task, total=len(frame_paths))
             animation_progress.start_task(binary_task)
+
+            if len(frame_paths) == 1:
+                self.ticks_per_frame = duration
+
             for frame_path in frame_paths:
                 serialized_path = frame_path.with_suffix('.gqframe')
                 if ffmpeged and serialized_path.exists():
@@ -473,7 +476,7 @@ class Animation:
         return structs.GQ_ANIM_SIZE
 
     def __repr__(self) -> str:
-        return f"Animation('{self.name}', '{self.source}', {100/self.ticks_per_frame}, {repr(self.dithering)})"
+        return f"Animation('{self.name}', '{self.source}', {100/self.ticks_per_frame}, {repr(self.dithering)}, {self.frame_pointer:#0{10}x})"
     
     def to_bytes(self):
         anim_struct = structs.GqAnim(

@@ -140,6 +140,7 @@ class EventType(IntEnum):
     TIMER = 0x08
     FGDONE1 = 0x09
     FGDONE2 = 0x0A
+    REFRESH = 0x0B
 
 class OpCode(IntEnum):
     LOOP_NOP = 0x00
