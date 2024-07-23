@@ -223,7 +223,6 @@ class Stage:
             event_commands=event_pointers
         )
 
-        print(f'{self.menu_prompt_addr:08X}')
         return struct.pack(structs.GQ_STAGE_FORMAT, stage.id, stage.anim_bg_pointer, stage.cue_bg_pointer, stage.menu_pointer, stage.menu_prompt_pointer, *stage.event_commands)
 
 class Variable:
