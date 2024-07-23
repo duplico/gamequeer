@@ -57,7 +57,7 @@ stage start {
     menu OkCancel prompt game_name;
 
     event enter {
-        play bganim george2;
+        play bganim george3;
         cue flash;
 
         game_name := "foobar";

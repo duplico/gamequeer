@@ -38,7 +38,7 @@ def make_animation_from_video(progress: Progress, anim_src_path : pathlib.Path, 
             raise ValueError(f"ffmpeg error; Raw output of ffmpeg follows: \n\n{e.stderr.decode()}")
         progress.update(task, advance=1)
 
-def make_animation_from_image(progress: Progress, anim_src_path : pathlib.Path, output_dir : pathlib.Path, dithering : str = 'none', duration : int = 100, height : int = 128, width : int = 128):
+def make_animation_from_image(progress: Progress, anim_src_path : pathlib.Path, output_dir : pathlib.Path, dithering : str = 'none', height : int = 128, width : int = 128):
     # Load the source file
     in_img = Image.open(anim_src_path)
 
@@ -83,7 +83,7 @@ def make_animation(progress: Progress, anim_src_path : pathlib.Path, output_dir 
     
     # Check whether the source file is a video or an image
     if anim_src_path.suffix in ['.bmp', '.png', '.jpg', '.jpeg']:
-        make_animation_from_image(progress, anim_src_path, output_dir, dithering, duration, height, width)
+        make_animation_from_image(progress, anim_src_path, output_dir, dithering, height, width)
     else:
         make_animation_from_video(progress, anim_src_path, output_dir, dithering, frame_rate, height, width)
 
