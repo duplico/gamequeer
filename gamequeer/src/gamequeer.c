@@ -25,25 +25,29 @@ uint8_t gq_builtin_strs[GQS_COUNT * GQ_STR_SIZE] = {
     0,
 };
 
-t_gq_int *game_id         = (t_gq_int *) &gq_builtin_ints[GQI_GAME_ID * GQ_INT_SIZE];
-t_gq_int *menu_active     = (t_gq_int *) &gq_builtin_ints[GQI_MENU_ACTIVE * GQ_INT_SIZE];
-t_gq_int *menu_value      = (t_gq_int *) &gq_builtin_ints[GQI_MENU_VALUE * GQ_INT_SIZE];
-t_gq_int *game_color      = (t_gq_int *) &gq_builtin_ints[GQI_GAME_COLOR * GQ_INT_SIZE];
-t_gq_int *anim0_x         = (t_gq_int *) &gq_builtin_ints[GQI_BGANIM_X * GQ_INT_SIZE];
-t_gq_int *anim0_y         = (t_gq_int *) &gq_builtin_ints[GQI_BGANIM_Y * GQ_INT_SIZE];
-t_gq_int *anim1_x         = (t_gq_int *) &gq_builtin_ints[GQI_FGANIM1_X * GQ_INT_SIZE];
-t_gq_int *anim1_y         = (t_gq_int *) &gq_builtin_ints[GQI_FGANIM1_Y * GQ_INT_SIZE];
-t_gq_int *anim2_x         = (t_gq_int *) &gq_builtin_ints[GQI_FGANIM2_X * GQ_INT_SIZE];
-t_gq_int *anim2_y         = (t_gq_int *) &gq_builtin_ints[GQI_FGANIM2_Y * GQ_INT_SIZE];
-t_gq_int *label_pos[4][2] = {
-    {(t_gq_int *) &gq_builtin_ints[GQI_LABEL1_X * GQ_INT_SIZE],
-     (t_gq_int *) &gq_builtin_ints[GQI_LABEL1_Y * GQ_INT_SIZE]},
-    {(t_gq_int *) &gq_builtin_ints[GQI_LABEL2_X * GQ_INT_SIZE],
-     (t_gq_int *) &gq_builtin_ints[GQI_LABEL2_Y * GQ_INT_SIZE]},
-    {(t_gq_int *) &gq_builtin_ints[GQI_LABEL3_X * GQ_INT_SIZE],
-     (t_gq_int *) &gq_builtin_ints[GQI_LABEL3_Y * GQ_INT_SIZE]},
-    {(t_gq_int *) &gq_builtin_ints[GQI_LABEL4_X * GQ_INT_SIZE],
-     (t_gq_int *) &gq_builtin_ints[GQI_LABEL4_Y * GQ_INT_SIZE]},
+t_gq_int *game_id     = (t_gq_int *) &gq_builtin_ints[GQI_GAME_ID * GQ_INT_SIZE];
+t_gq_int *menu_active = (t_gq_int *) &gq_builtin_ints[GQI_MENU_ACTIVE * GQ_INT_SIZE];
+t_gq_int *menu_value  = (t_gq_int *) &gq_builtin_ints[GQI_MENU_VALUE * GQ_INT_SIZE];
+t_gq_int *game_color  = (t_gq_int *) &gq_builtin_ints[GQI_GAME_COLOR * GQ_INT_SIZE];
+t_gq_int *anim0_x     = (t_gq_int *) &gq_builtin_ints[GQI_BGANIM_X * GQ_INT_SIZE];
+t_gq_int *anim0_y     = (t_gq_int *) &gq_builtin_ints[GQI_BGANIM_Y * GQ_INT_SIZE];
+t_gq_int *anim1_x     = (t_gq_int *) &gq_builtin_ints[GQI_FGANIM1_X * GQ_INT_SIZE];
+t_gq_int *anim1_y     = (t_gq_int *) &gq_builtin_ints[GQI_FGANIM1_Y * GQ_INT_SIZE];
+t_gq_int *anim2_x     = (t_gq_int *) &gq_builtin_ints[GQI_FGANIM2_X * GQ_INT_SIZE];
+t_gq_int *anim2_y     = (t_gq_int *) &gq_builtin_ints[GQI_FGANIM2_Y * GQ_INT_SIZE];
+
+t_gq_int *label_x[4] = {
+    (t_gq_int *) &gq_builtin_ints[GQI_LABEL1_X * GQ_INT_SIZE],
+    (t_gq_int *) &gq_builtin_ints[GQI_LABEL2_X * GQ_INT_SIZE],
+    (t_gq_int *) &gq_builtin_ints[GQI_LABEL3_X * GQ_INT_SIZE],
+    (t_gq_int *) &gq_builtin_ints[GQI_LABEL4_X * GQ_INT_SIZE],
+};
+
+t_gq_int *label_y[4] = {
+    (t_gq_int *) &gq_builtin_ints[GQI_LABEL1_Y * GQ_INT_SIZE],
+    (t_gq_int *) &gq_builtin_ints[GQI_LABEL2_Y * GQ_INT_SIZE],
+    (t_gq_int *) &gq_builtin_ints[GQI_LABEL3_Y * GQ_INT_SIZE],
+    (t_gq_int *) &gq_builtin_ints[GQI_LABEL4_Y * GQ_INT_SIZE],
 };
 
 char *game_title = (char *) &gq_builtin_strs[GQS_GAME_TITLE * GQ_STR_SIZE];
@@ -154,8 +158,8 @@ uint8_t load_stage(t_gq_pointer stage_ptr) {
     for (uint8_t i = 0; i < 4; i++) {
         labels[i][0] = '\0';
 
-        label_pos[i][0] = 0;
-        label_pos[i][1] = 0;
+        *label_x[i] = 0;
+        *label_y[i] = 0;
     }
 
     if (timer_active) {
@@ -279,7 +283,7 @@ void draw_oled_stack() {
     // Draw the labels
     for (uint8_t i = 0; i < 4; i++) {
         if (labels[i][0]) {
-            Graphics_drawString(&g_sContext, labels[i], -1, label_pos[i][0], label_pos[i][1], 0);
+            Graphics_drawString(&g_sContext, labels[i], -1, *label_x[i], *label_y[i], 0);
         }
     }
 
