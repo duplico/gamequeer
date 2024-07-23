@@ -143,11 +143,24 @@ typedef enum gq_special_var_int {
     GQI_FGANIM2_Y,
     GQI_FGMASK2_X,
     GQI_FGMASK2_Y,
+    GQI_LABEL1_X,
+    GQI_LABEL1_Y,
+    GQI_LABEL2_X,
+    GQI_LABEL2_Y,
+    GQI_LABEL3_X,
+    GQI_LABEL3_Y,
+    GQI_LABEL4_X,
+    GQI_LABEL4_Y,
     GQI_COUNT
 } gq_special_var_int;
 
 typedef enum gq_special_var_str {
     GQS_GAME_TITLE = 0x00,
+    GQS_PLAYER_HANDLE,
+    GQS_LABEL1,
+    GQS_LABEL2,
+    GQS_LABEL3,
+    GQS_LABEL4,
     GQS_COUNT
 } gq_special_var_str;
 

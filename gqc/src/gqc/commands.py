@@ -13,6 +13,8 @@ class Command:
         self.instring = instring
         self.loc = loc
         self.addr = 0x00000000
+
+        self.unresolved_symbols = []
         
         self.command_type = command_type
         self.command_flags = flags
@@ -78,10 +80,14 @@ class CommandGoStage(Command):
     def resolve(self):
         if self.resolved:
             return True
+        
+        self.unresolved_symbols = []
 
         if self.stage_name in Stage.stage_table and Stage.stage_table[self.stage_name].addr != 0x00000000:
             self.arg1 = Stage.stage_table[self.stage_name].addr
             self.resolved = True
+        else:
+            self.unresolved_symbols.append(self.stage_name)
         
         return self.resolved
 
@@ -100,10 +106,14 @@ class CommandPlay(Command):
     def resolve(self):
         if self.resolved:
             return True
+        
+        self.unresolved_symbols = []
 
         if self.anim_name in Animation.anim_table and Animation.anim_table[self.anim_name].addr != 0x00000000:
             self.arg1 = Animation.anim_table[self.anim_name].addr
             self.resolved = True
+        else:
+            self.unresolved_symbols.append(self.anim_name)
 
         return self.resolved
     
@@ -118,10 +128,14 @@ class CommandCue(Command):
     def resolve(self):
         if self.resolved:
             return True
+        
+        self.unresolved_symbols = []
 
         if self.cue_name in LightCue.cue_table and LightCue.cue_table[self.cue_name].addr != 0x00000000:
             self.arg1 = LightCue.cue_table[self.cue_name].addr
             self.resolved = True
+        else:
+            self.unresolved_symbols.append(self.cue_name)
         
         return self.resolved
     
@@ -174,11 +188,13 @@ class CommandArithmetic(Command):
             return True
 
         resolved = True
+        self.unresolved_symbols = []
 
         # dst is guaranteed not to be a literal, so:
         if self.dst_name in Variable.var_table and Variable.var_table[self.dst_name].addr != 0x00000000:
             self.arg1 = Variable.var_table[self.dst_name].addr
         else:
+            self.unresolved_symbols.append(self.dst_name)
             resolved = False
         
         if self.src.is_literal:
@@ -187,6 +203,7 @@ class CommandArithmetic(Command):
         elif self.src.value in Variable.var_table and Variable.var_table[self.src.value].addr != 0x00000000:
             self.arg2 = Variable.var_table[self.src.value].addr
         else:
+            self.unresolved_symbols.append(self.src.value)
             resolved = False
         
         self.resolved = resolved
@@ -207,15 +224,18 @@ class CommandSetStr(Command):
             return True
 
         resolved = True
+        self.unresolved_symbols = []
 
         if self.dst_name in Variable.var_table and Variable.var_table[self.dst_name].addr != 0x00000000:
             self.arg1 = Variable.var_table[self.dst_name].addr
         else:
+            self.unresolved_symbols.append(self.dst_name)
             resolved = False
 
         if self.src_name in Variable.var_table and Variable.var_table[self.src_name].addr != 0x00000000:
             self.arg2 = Variable.var_table[self.src_name].addr
         else:
+            self.unresolved_symbols.append(self.src_name)
             resolved = False
         
         # Rudimentary type checking:
@@ -274,6 +294,7 @@ class CommandWithIntExpressionArgument(Command):
             return True
 
         resolved = True
+        self.unresolved_symbols = []
 
         if self.arg2_is_expression and not self.expr_or_operand.resolve():
             resolved = False
