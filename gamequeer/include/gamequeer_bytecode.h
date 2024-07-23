@@ -41,6 +41,8 @@ typedef enum gq_op_code {
     GQ_OP_BWOR    = 0x19,
     GQ_OP_BWXOR   = 0x1A,
     GQ_OP_BWNOT   = 0x1B,
+    GQ_OP_BWSHL   = 0x1C,
+    GQ_OP_BWSHR   = 0x1D,
     GQ_OP_COUNT
 } gq_op_code;
 
