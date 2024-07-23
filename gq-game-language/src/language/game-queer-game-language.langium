@@ -78,11 +78,11 @@ CmdTimer:
 IntOperand:
     var=ID | val=INT;
 IntOperator:
-    operator=('+' | '-' | '*' | '/' | '%' | '&&' | '||' | '==' | '!=' | '<' | '>' | '<=' | '>=');
+    operator=('+' | '-' | '*' | '/' | '%' | '&&' | '||' | '==' | '!=' | '<' | '>' | '<=' | '>=' | '&' | '|' | '^');
 IntExprParen:
     '(' expr=IntExpr ')';
 IntUnaryExpr:
-    operator=('!' | '-') operand=IntExpr;
+    operator=('!' | '-' | '~') operand=IntExpr;
 IntExpr:
     IntOperand | IntOperand IntOperator IntExpr | IntExprParen | IntUnaryExpr;
 
@@ -114,7 +114,7 @@ EventType:
 StageEvent:
     'event' EventType StageCommands;
 StageMenu:
-    'menu' menu=ID ('prompt' prompt=STRING)? ';';
+    'menu' menu=ID ('prompt' prompt=(ID | STRING))? ';';
 StageBgAnim:
     'bganim' anim=ID ';';
 StageBgCue:

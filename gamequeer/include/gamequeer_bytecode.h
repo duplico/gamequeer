@@ -37,6 +37,10 @@ typedef enum gq_op_code {
     GQ_OP_NEG     = 0x15,
     GQ_OP_GOTOIFN = 0x16,
     GQ_OP_TIMER   = 0x17,
+    GQ_OP_BWAND   = 0x18,
+    GQ_OP_BWOR    = 0x19,
+    GQ_OP_BWXOR   = 0x1A,
+    GQ_OP_BWNOT   = 0x1B,
     GQ_OP_COUNT
 } gq_op_code;
 
