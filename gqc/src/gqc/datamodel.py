@@ -33,6 +33,7 @@ class Game:
         self.starting_stage_name = starting_stage
 
         self.startup_code_ptr = None
+        self.persistent_var_ptr = None
 
         if Game.game is not None:
             raise ValueError("Game already defined")
@@ -60,6 +61,7 @@ class Game:
     def to_bytes(self):
         if self.starting_stage is None:
             raise ValueError("Starting stage not defined")
+        
         header = structs.GqHeader(
             magic=structs.GQ_MAGIC,
             id=self.id,
@@ -68,6 +70,7 @@ class Game:
             stage_count=len(Stage.stage_table),
             starting_stage_ptr=self.starting_stage.addr,
             startup_code_ptr=self.startup_code_ptr,
+            persistent_var_ptr=self.persistent_var_ptr,
             color=0x00, # Unassigned.
             flags=0,
             crc16=0

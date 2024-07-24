@@ -35,6 +35,8 @@
 
 #define GQ_MENU_MAX_OPTIONS 6
 
+#define BADGES_ALLOWED 320
+
 typedef uint32_t t_gq_pointer;
 typedef int32_t t_gq_int;
 
@@ -64,6 +66,7 @@ typedef struct gq_header {
     uint16_t stage_count;         // Number of stages
     t_gq_pointer starting_stage;  // Pointer to the starting stage
     t_gq_pointer startup_code;    // Pointer to the startup code.
+    t_gq_pointer persistent_vars; // Pointer to the persistent variables
     uint8_t color;                // Color of the cartridge, as per gq_game_color - may be assigned at write-time.
     uint8_t flags;                // Reserved for future use
     uint16_t crc16;               // CRC16 checksum of the header

@@ -8,8 +8,8 @@ from rich import print
 from .datamodel import Animation, Game, Stage, Variable, Event, Menu, LightCue
 from .datamodel import IntExpression, GqcIntOperand
 from .commands import CommandPlay, CommandGoStage, CommandCue
-from .commands import CommandSetStr, CommandSetInt
-from .commands import CommandTimer, CommandIf, CommandGoto, CommandLoop, Command
+from .commands import CommandSetStr, CommandSetInt, CommandWithIntExpressionArgument
+from .commands import CommandTimer, CommandIf, CommandGoto, CommandLoop, Command, CommandType
 from .structs import EventType
 from . import structs
 
@@ -165,7 +165,7 @@ def parse_variable_definition_storageclass(instring, loc, toks):
     if Variable.storageclass_table[storageclass]:
         non_init_vars_present = False
         for var in Variable.storageclass_table[storageclass].values():
-            if not var.name in structs.GQ_REGISTERS_INT and not var.name.endswith(".init") and not var.name.endswith(".strlit"):
+            if not var.name in structs.GQ_REGISTERS_INT and not var.name.endswith(".init") and not var.name.endswith(".strlit") and not var.name.endswith(".builtin"):
                 non_init_vars_present = True
                 break
         if non_init_vars_present:
@@ -279,6 +279,10 @@ def parse_command(instring, loc, toks):
         return CommandGoto(instring, loc, form=command)
     elif command == 'loop':
         return CommandLoop(instring, loc, toks[1])
+    elif command == 'badge_set':
+        return CommandWithIntExpressionArgument(CommandType.QCSET, instring, loc, toks[1])
+    elif command == 'badge_clear':
+        return CommandWithIntExpressionArgument(CommandType.QCCLR, instring, loc, toks[1])
     else:
         raise GqcParseError(f"Invalid command {command}", instring, loc)
 

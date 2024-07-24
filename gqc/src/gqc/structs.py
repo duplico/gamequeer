@@ -1,9 +1,12 @@
+import math
 import struct
 from collections import namedtuple
 from enum import IntEnum
 
 # NB: These definitions must be kept strictly in sync with the corresponding
 #     structs defined in ../../../gamequeer/include/gamequeer.h
+
+BADGES_ALLOWED = 320
 
 GQ_STR_SIZE = 22
 GQ_POINTER_SIZE = 4
@@ -50,12 +53,13 @@ GQ_INT_SIZE = struct.calcsize(GQ_INT_FORMAT)
 #     uint16_t stage_count;         // Number of stages
 #     t_gq_pointer starting_stage;  // Pointer to the starting stage
 #     t_gq_pointer startup_code;    // Pointer to the startup code.
+#     t_gq_pointer persistent_vars; // Pointer to the persistent variables
 #     uint8_t color;                // Color of the game cartridge
 #     uint8_t flags;                // TBD
 #     uint16_t crc16;               // CRC16 checksum of the header
 # } gq_header;
-GqHeader = namedtuple('GqHeader', 'magic id title anim_count stage_count starting_stage_ptr startup_code_ptr color flags crc16')
-GQ_HEADER_FORMAT = f'<{GQ_MAGIC_SIZE}sH{GQ_STR_SIZE}sHH{T_GQ_POINTER_FORMAT}{T_GQ_POINTER_FORMAT}BBH'
+GqHeader = namedtuple('GqHeader', 'magic id title anim_count stage_count starting_stage_ptr startup_code_ptr persistent_var_ptr color flags crc16')
+GQ_HEADER_FORMAT = f'<{GQ_MAGIC_SIZE}sH{GQ_STR_SIZE}sHH{T_GQ_POINTER_FORMAT}{T_GQ_POINTER_FORMAT}{T_GQ_POINTER_FORMAT}BBH'
 GQ_HEADER_SIZE = struct.calcsize(GQ_HEADER_FORMAT)
 
 # typedef struct gq_anim {
@@ -173,6 +177,9 @@ class OpCode(IntEnum):
     BWNOT = 0x1B
     BWSHL = 0x1C
     BWSHR = 0x1D
+    QCGET = 0x1E
+    QCSET = 0x1F
+    QCCLR = 0x20
 
 class OpFlags(IntEnum):
     NONE = 0x00
@@ -240,6 +247,11 @@ GQ_RESERVED_STRS = [
     GqReservedVariable('GQS_LABEL3', 'str', 'Label 3', 4 * GQ_STR_SIZE),
     GqReservedVariable('GQS_LABEL4', 'str', 'Label 4', 5 * GQ_STR_SIZE),
 ]
+
+GQ_RESERVED_PERSISTENT = []
+
+for i in range(math.ceil(BADGES_ALLOWED / (8 * GQ_INT_SIZE))):
+    GQ_RESERVED_PERSISTENT.append(GqReservedVariable(f'GQ_PERSISTENT_BADGES_{i}.builtin', 'int', 0, 0x000000 + 8 * i * GQ_INT_SIZE))
 
 GQ_REGISTERS_INT = [
     'GQ_RI0', 'GQ_RI1',

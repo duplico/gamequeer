@@ -83,8 +83,10 @@ IntExprParen:
     '(' expr=IntExpr ')';
 IntUnaryExpr:
     operator=('!' | '-' | '~') operand=IntExpr;
+IntBadgeExpr:
+    operator='badge_get' '(' badge=IntExpr ')';
 IntExpr:
-    IntOperand | IntOperand IntOperator IntExpr | IntExprParen | IntUnaryExpr;
+    IntOperand | IntOperand IntOperator IntExpr | IntExprParen | IntUnaryExpr | IntBadgeExpr;
 
 CmdAssignmentInt:
     dst=ID '=' src=IntExpr ';';
@@ -102,8 +104,11 @@ CmdLoop:
 CmdLoopControl:
     (cmd='break' | cmd='continue') ';';
 
+BadgeCmd:
+    cmd=('badge_clear' | 'badge_set') id=IntExpr ';';
+
 StageCommand:
-    CmdGoStage | CmdPlayAnim | CmdPlayCue | CmdTimer | CmdAssignment | CmdIf | CmdLoop | CmdLoopControl;
+    BadgeCmd | CmdGoStage | CmdPlayAnim | CmdPlayCue | CmdTimer | CmdIf | CmdLoop | CmdLoopControl | CmdAssignment;
 StageCommands:
     StageCommand | '{' cmds=StageCommand* '}';
 
