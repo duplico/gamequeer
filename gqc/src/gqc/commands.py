@@ -168,6 +168,7 @@ class CommandArithmetic(Command):
         '!': CommandType.NOT,
         '-': CommandType.NEG,
         '~': CommandType.BWNOT,
+        'badge_get' : CommandType.QCGET
     }
 
     def __init__(self, command_type : CommandType, instring, loc, dst : GqcIntOperand, src : GqcIntOperand):

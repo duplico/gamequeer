@@ -54,7 +54,7 @@ stage_event = "event" event_type event_statement
 event_type = "input" "(" event_input_button ")" | "bgdone" | "fgdone" "(" integer ")" | "menu" | "enter" | "timer"
 event_input_button = "A" | "B" | "<-" | "->" | "-"
 event_statements = event_statement | "{" event_statement* "}"
-event_statement = play | cue | gostage | assignment_statement | if_statement | timer | continue | break | loop
+event_statement = play | cue | gostage | assignment_statement | if_statement | timer | continue | break | loop | badge_set | badge_clear
 play = "play" ("bganim" | ("fganim" | "fgmask") "(" int ")") identifier ";"
 cue = "cue" identifier ";"
 gostage = "gostage" identifier ";"
@@ -62,6 +62,9 @@ timer = "timer" int_expression ";"
 continue = "continue" ";"
 break = "break" ";"
 loop = "loop" event_statements
+badge_set = "badge_set" int_expression ";"
+badge_clear = "badge_clear" int_expression ";"
+badge_get = "badge_get" "(" int_expression ")" ";"
 
 assignment_statement = int_assignment | string_assignment
 int_assignment = identifier "=" int_expression ";"
@@ -71,7 +74,7 @@ int_operand = identifier | integer
 string_operand = identifier | string
 
 # Shorthand; see https://stackoverflow.com/a/23956778
-int_expression = pp.infixNotation(int_operand, [
+int_expression = badge_get | pp.infixNotation(int_operand, [
     (pp.oneOf('! - ~'), 1, pp.opAssoc.RIGHT),
     (pp.oneOf('* / %'), 2, pp.opAssoc.LEFT),
     (pp.oneOf('+ -'), 2, pp.opAssoc.LEFT),
@@ -163,8 +166,10 @@ def build_game_parser():
 
     int_operand = identifier | integer
     int_operand.set_parse_action(parse_int_operand)
+    
+    badge_get = pp.Forward()
 
-    int_expression = pp.infix_notation(int_operand, [
+    int_expression = badge_get | pp.infix_notation(int_operand, [
         (pp.oneOf('! - ~'), 1, pp.opAssoc.RIGHT),
         (pp.one_of('* / %'), 2, pp.opAssoc.LEFT),
         (pp.one_of('+ -'), 2, pp.opAssoc.LEFT),
@@ -191,6 +196,11 @@ def build_game_parser():
     break_statement = pp.Group(pp.Keyword("break") - pp.Suppress(";"))
 
     # Other commands
+    badge_set = pp.Group(pp.Keyword("badge_set") - int_expression - pp.Suppress(";"))
+    badge_clear = pp.Group(pp.Keyword("badge_clear") - int_expression - pp.Suppress(";"))
+    
+    badge_get << pp.Group(pp.Keyword("badge_get") - pp.Suppress("(") - int_expression - pp.Suppress(")"))
+
     play_type = pp.Group(pp.Keyword("bganim") | (pp.Keyword("fganim") | pp.Keyword("fgmask")) - pp.Suppress("(") - integer - pp.Suppress(")"))
     play = pp.Group(pp.Keyword("play") - play_type - identifier - pp.Suppress(";"))
 
@@ -200,7 +210,7 @@ def build_game_parser():
     gostage = pp.Group(pp.Keyword("gostage") - identifier - pp.Suppress(";"))
     timer = pp.Group(pp.Keyword("timer") - int_expression - pp.Suppress(";"))
 
-    event_statement = play | cue | gostage | timer | if_statement | continue_statement | break_statement | loop_statement | assignment_statement
+    event_statement = badge_set | badge_clear | play | cue | gostage | timer | if_statement | continue_statement | break_statement | loop_statement | assignment_statement
     event_statements << (pp.Group(event_statement | pp.Suppress("{") - pp.ZeroOrMore(event_statement) - pp.Suppress("}")))
 
     event_statement.set_parse_action(parse_command)

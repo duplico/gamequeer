@@ -43,8 +43,13 @@ typedef enum gq_op_code {
     GQ_OP_BWNOT   = 0x1B,
     GQ_OP_BWSHL   = 0x1C,
     GQ_OP_BWSHR   = 0x1D,
+    GQ_OP_QCGET   = 0x1E,
+    GQ_OP_QCSET   = 0x1F,
+    GQ_OP_QCCLR   = 0x20,
     GQ_OP_COUNT
 } gq_op_code;
+
+#define GQP_OFFSET_BADGES 0
 
 typedef struct gq_op {
     uint8_t opcode;    // Opcode

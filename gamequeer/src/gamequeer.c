@@ -351,6 +351,61 @@ void system_tick() {
     }
 }
 
+t_gq_int get_badge_word(t_gq_int badge_id) {
+    if (badge_id < 0 || badge_id >= BADGES_ALLOWED) {
+        return 0;
+        // TODO: Error flag?
+    }
+
+    t_gq_pointer badge_word_offset = badge_id / (GQ_INT_SIZE * 8);
+    return gq_load_int(game.persistent_vars + GQP_OFFSET_BADGES + badge_word_offset);
+}
+
+void set_badge_bit(t_gq_int badge_id, t_gq_int value) {
+    if (badge_id < 0 || badge_id >= BADGES_ALLOWED) {
+        return;
+    }
+
+    t_gq_pointer badge_word_offset = badge_id / (GQ_INT_SIZE * 8);
+    t_gq_pointer badge_word_ptr    = game.persistent_vars + GQP_OFFSET_BADGES + badge_word_offset;
+    t_gq_int badge_word            = gq_load_int(badge_word_ptr);
+
+    t_gq_int bit_offset = badge_id % (GQ_INT_SIZE * 8);
+    t_gq_int bit_mask   = 1 << bit_offset;
+
+    if (badge_word & bit_mask) {
+        // Bit is already set
+        if (value) {
+            return;
+        }
+    } else {
+        // Bit is already clear
+        if (!value) {
+            return;
+        }
+    }
+
+    if (value) {
+        badge_word |= bit_mask;
+    } else {
+        badge_word &= ~bit_mask;
+    }
+
+    gq_assign_int(badge_word_ptr, badge_word);
+}
+
+t_gq_int get_badge_bit(t_gq_int badge_id) {
+    if (badge_id < 0 || badge_id >= BADGES_ALLOWED) {
+        return 0;
+    }
+
+    t_gq_int badge_word = get_badge_word(badge_id);
+    t_gq_int bit_offset = badge_id % (GQ_INT_SIZE * 8);
+    t_gq_int bit_mask   = 1 << bit_offset;
+
+    return (badge_word & bit_mask) != 0;
+}
+
 void run_arithmetic(gq_op *cmd) {
     t_gq_int arg1;
     t_gq_int arg2;
@@ -433,6 +488,9 @@ void run_arithmetic(gq_op *cmd) {
         case GQ_OP_BWSHR:
             result = arg1 >> arg2;
             break;
+        case GQ_OP_QCGET:
+            result = get_badge_bit(arg2);
+            break;
         default:
             return;
     }
@@ -503,6 +561,7 @@ void run_code(t_gq_pointer code_ptr) {
             case GQ_OP_BWNOT:
             case GQ_OP_BWSHL:
             case GQ_OP_BWSHR:
+            case GQ_OP_QCGET:
                 run_arithmetic(&cmd);
                 break;
             case GQ_OP_GOTOIFN:
@@ -526,6 +585,20 @@ void run_code(t_gq_pointer code_ptr) {
                     timer_counter = 0;
                 } else {
                     timer_active = 0;
+                }
+                break;
+            case GQ_OP_QCSET:
+                if (cmd.flags & GQ_OPF_LITERAL_ARG2) {
+                    set_badge_bit(cmd.arg2, 1);
+                } else {
+                    set_badge_bit(gq_load_int(cmd.arg2), 1);
+                }
+                break;
+            case GQ_OP_QCCLR:
+                if (cmd.flags & GQ_OPF_LITERAL_ARG2) {
+                    set_badge_bit(cmd.arg2, 0);
+                } else {
+                    set_badge_bit(gq_load_int(cmd.arg2), 0);
                 }
                 break;
             default:

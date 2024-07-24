@@ -19,6 +19,9 @@ def create_reserved_variables():
         var = Variable('str', gq_var.name, gq_var.description, 'builtin_str')
         var.set_addr(gq_var.addr, namespace=structs.GQ_PTR_BUILTIN_STR)
     
+    for gq_var in structs.GQ_RESERVED_PERSISTENT:
+        var = Variable(gq_var.type, gq_var.name, gq_var.description, 'persistent')
+
     # Create the reserved integer registers for the game:
     for reg_name in structs.GQ_REGISTERS_INT:
         var = Variable('int', reg_name, 0, 'volatile')
@@ -95,6 +98,7 @@ def create_symbol_table(table_dest = sys.stdout, cmd_dest = sys.stdout):
     # First, allocate memory on-cart for the persistent variables
     vars_ptr_start = cuedata_ptr_start + cuedata_ptr_offset
     vars_ptr_offset = 0
+    Game.game.persistent_var_ptr = vars_ptr_start
     for var in list(Variable.storageclass_table['persistent'].values()):
         var.set_addr(vars_ptr_start + vars_ptr_offset)
         vars_ptr_offset += var.size()
