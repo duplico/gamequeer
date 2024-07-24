@@ -69,7 +69,7 @@ badge_get = "badge_get" "(" int_expression ")" ";"
 
 assignment_statement = int_assignment | string_assignment
 int_assignment = identifier "=" int_expression ";"
-string_assignment = identifier ":=" string_expression ";"
+string_assignment = identifier ":=" (string_cast | string_expression) ";"
 
 int_operand = identifier | integer
 string_operand = identifier | string
@@ -86,6 +86,8 @@ int_expression = badge_get | pp.infixNotation(int_operand, [
     ('|', 2, pp.opAssoc.LEFT),
     (pp.oneOf('&& ||'), 2, pp.opAssoc.LEFT),
 ])
+
+string_cast = 'str' '(' int_expression ')'
 
 string_expression = string_operand | string_operand '+' string_expression
 
@@ -159,23 +161,10 @@ def build_game_parser():
     event_statements = pp.Forward()
     
     # Assignments and expressions
-    string_literal = pp.QuotedString('"').setName("string_literal")
-    string_operand = identifier | string_literal
-
-    string_literal.set_parse_action(parse_str_literal)
-
-    string_expression = pp.infix_notation(string_operand, [
-        ('+', 2, pp.opAssoc.LEFT),
-    ])
-    string_expression.set_parse_action(parse_str_expression)
-
-    string_assignment = pp.Keyword(":=") - string_expression - pp.Suppress(";")
-
+    badge_get = pp.Forward()
+    
     int_operand = identifier | integer
     int_operand.set_parse_action(parse_int_operand)
-    
-    badge_get = pp.Forward()
-
     int_expression = badge_get | pp.infix_notation(int_operand, [
         (pp.oneOf('! - ~'), 1, pp.opAssoc.RIGHT),
         (pp.one_of('* / %'), 2, pp.opAssoc.LEFT),
@@ -190,8 +179,19 @@ def build_game_parser():
     ])
     int_expression.set_parse_action(parse_int_expression)
     int_assignment = pp.Keyword("=") - int_expression - pp.Suppress(";")
-    assignment_statement = pp.Group(identifier - (string_assignment | int_assignment))
+    
+    string_literal = pp.QuotedString('"').setName("string_literal")
+    string_literal.set_parse_action(parse_str_literal)
+    string_cast = pp.Group(pp.Suppress("str") - pp.Suppress("(") - int_expression - pp.Suppress(")"))
+    string_operand = identifier | string_literal
+    string_expression = pp.infix_notation(string_operand, [
+        ('+', 2, pp.opAssoc.LEFT),
+    ])
+    string_expression.set_parse_action(parse_str_expression)
 
+    string_assignment = pp.Keyword(":=") - (string_cast | string_expression) - pp.Suppress(";")
+
+    assignment_statement = pp.Group(identifier - (string_assignment | int_assignment))
     assignment_statement.add_parse_action(parse_assignment)
 
     # Flow control
