@@ -6,7 +6,7 @@ import pyparsing as pp
 from rich.progress import Progress
 from rich import print
 
-from .parser import GqcParseError
+from . import GqcParseError
 from .datamodel import CueColor, LightCueFrame, LightCue
 
 def parse_cue(text) -> LightCue:

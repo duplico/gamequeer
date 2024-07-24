@@ -11,12 +11,7 @@ from .commands import CommandPlay, CommandGoStage, CommandCue
 from .commands import CommandSetStr, CommandSetInt, CommandWithIntExpressionArgument
 from .commands import CommandTimer, CommandIf, CommandGoto, CommandLoop, Command, CommandType
 from .structs import EventType
-from . import structs
-
-class GqcParseError(Exception):
-    def __init__(self, message, s, loc):
-        message = f"Error at line {pp.lineno(loc, s)}, column {pp.col(loc, s)}: {message}"
-        super().__init__(message)
+from . import structs, GqcParseError
 
 def parse_game_definition(instring, loc, toks):
     toks = toks[0]
@@ -231,7 +226,7 @@ def parse_str_literal(instring, loc, toks):
 
 def parse_str_expression(instring, loc, toks):
     toks = toks[0]
-    if isinstance(toks[0], str):
+    if isinstance(toks, str):
         return toks
 
     if len(toks) > 3:
@@ -262,7 +257,10 @@ def parse_play(instring, loc, toks):
     if anim_index > 4: # TODO: Constant
         raise GqcParseError(f"Animation type/number out of bounds!", instring, loc)
     
-    return CommandPlay(instring, loc, anim_name, anim_index)
+    try:
+        return CommandPlay(instring, loc, anim_name, anim_index)
+    except ValueError as ve:
+        raise GqcParseError(str(ve), instring, loc)
 
 def parse_command(instring, loc, toks):
     toks = toks[0]

@@ -947,6 +947,8 @@ class StrExpression:
         self.result_symbol = None
         self.commands = []
         self.unresolved_symbols = []
+        
+        self.used_registers = set()
 
         if len(self.expression_toks) == 0:
             raise ValueError("Empty expression")
@@ -974,12 +976,12 @@ class StrExpression:
 
         if isinstance(subexpr, str):
             return subexpr
-        elif len(subexpr) > 2:
+        elif len(subexpr) != 3:
             raise ValueError(f"Invalid subexpression length {len(subexpr)}: should be [operand, operator, operand]")
         
-        # len(subexpr) == 2 past here.
+        # len(subexpr) == 3 past here.
         operand0 = self.get_result_symbol(subexpr[0])
-        operand1 = self.get_result_symbol(subexpr[1])
+        operand1 = self.get_result_symbol(subexpr[2])
         operator = subexpr[1]
 
         # If the left operand is not a register, we need to load it into one.
