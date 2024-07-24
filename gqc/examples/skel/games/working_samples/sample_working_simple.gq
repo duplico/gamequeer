@@ -64,9 +64,9 @@ stage start {
         D = !(badge_id == 17);
 
         if (badge_get(badge_id)) {
-            badge_clear(badge_id);
+            badge_clear badge_id;
         } else {
-            badge_set(badge_id);
+            badge_set badge_id;
         }
 
         B = 1 ^ 3;
