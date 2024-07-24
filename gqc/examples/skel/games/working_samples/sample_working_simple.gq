@@ -13,6 +13,7 @@ volatile {
     int D = 0;
     str game_name := "Test";
     str display_text := "";
+    str temp_str := "";
 }
 
 persistent {
@@ -92,7 +93,8 @@ stage start {
             }
         }
 
-        display_text := "Hello, " + game_name + "!";
+        temp_str := str(badge_id);
+        display_text := "Hello, ID" + temp_str + "!";
 
         GQI_FGANIM1_X = 0;
         GQI_FGANIM1_Y = 0;

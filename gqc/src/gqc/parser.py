@@ -7,7 +7,7 @@ from rich import print
 
 from .datamodel import Animation, Game, Stage, Variable, Event, Menu, LightCue, StrExpression
 from .datamodel import IntExpression, GqcIntOperand
-from .commands import CommandPlay, CommandGoStage, CommandCue
+from .commands import CommandPlay, CommandGoStage, CommandCue, CommandCastStr
 from .commands import CommandSetStr, CommandSetInt, CommandWithIntExpressionArgument
 from .commands import CommandTimer, CommandIf, CommandGoto, CommandLoop, Command, CommandType
 from .structs import EventType
@@ -281,7 +281,14 @@ def parse_command(instring, loc, toks):
     elif command == 'setvar':
         _, dst, src, datatype = toks
         if datatype == 'str':
-            return CommandSetStr(instring, loc, dst, src)
+            if isinstance(src, str) or isinstance(src, StrExpression):
+                return CommandSetStr(instring, loc, dst, src)
+            else:
+                src = src[0]
+            if isinstance(src, GqcIntOperand) or isinstance(src, IntExpression):
+                return CommandCastStr(instring, loc, dst, src)
+            else:
+                raise GqcParseError(f"Invalid source {src} for string variable {dst}", instring, loc)
         else:
             if isinstance(src, int):
                 src = GqcIntOperand(is_literal=True, value=src)
@@ -309,7 +316,7 @@ def parse(text):
     try:
         parsed = gqc_game.parse_file(text, parseAll=True)
     except pp.ParseBaseException as pe:
-        print(pe.explain(), file=sys.stderr)
+        print(pe.explain(depth=0), file=sys.stderr)
         exit(1)
     except GqcParseError as ge:
         print(ge, file=sys.stderr)
