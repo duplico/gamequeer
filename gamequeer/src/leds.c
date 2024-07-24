@@ -61,7 +61,7 @@ void led_setup_frame() {
     }
 
     // Load the current frame into leds_cue_frame_curr:
-    gq_memcpy_ram(
+    gq_memcpy_to_ram(
         (uint8_t *) &leds_cue_frame_curr,
         leds_cue.frames + leds_cue_frame_index * sizeof(gq_ledcue_frame_t),
         sizeof(gq_ledcue_frame_t));
@@ -79,7 +79,7 @@ void led_setup_frame() {
         // We can load the next frame sequentially if the current frame isn't the last frame;
         // otherwise, we need to go back to the start if we're looping.
         gq_ledcue_frame_t leds_cue_frame_next;
-        gq_memcpy_ram(
+        gq_memcpy_to_ram(
             (uint8_t *) &leds_cue_frame_next,
             leds_cue.frames + ((leds_cue_frame_index + 1) % leds_cue.frame_count) * sizeof(gq_ledcue_frame_t),
             sizeof(gq_ledcue_frame_t));
@@ -107,7 +107,7 @@ void led_play_cue(t_gq_pointer cue_ptr, uint8_t background) {
     }
 
     // Load the new cue into RAM.
-    gq_memcpy_ram((uint8_t *) &leds_cue, cue_ptr, sizeof(gq_ledcue_t));
+    gq_memcpy_to_ram((uint8_t *) &leds_cue, cue_ptr, sizeof(gq_ledcue_t));
     leds_animating       = 1;
     leds_cue_frame_index = 0;
 

@@ -180,6 +180,7 @@ class OpCode(IntEnum):
     QCGET = 0x1E
     QCSET = 0x1F
     QCCLR = 0x20
+    STRCAT = 0x21
 
 class OpFlags(IntEnum):
     NONE = 0x00
@@ -254,5 +255,9 @@ for i in range(math.ceil(BADGES_ALLOWED / (8 * GQ_INT_SIZE))):
     GQ_RESERVED_PERSISTENT.append(GqReservedVariable(f'GQ_PERSISTENT_BADGES_{i}.builtin', 'int', 0, 0x000000 + 8 * i * GQ_INT_SIZE))
 
 GQ_REGISTERS_INT = [
-    'GQ_RI0', 'GQ_RI1',
+    'GQ_RI0.reg', 'GQ_RI1.reg',
+]
+
+GQ_REGISTERS_STR = [
+    'GQ_RS0.reg', 'GQ_RS1.reg',
 ]

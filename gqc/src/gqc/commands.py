@@ -2,9 +2,9 @@ import struct
 
 from gqc.structs import GQ_PTR_NS_CART
 
-from . import structs
+from . import structs, GqcParseError
 from .structs import OpCode as CommandType
-from .datamodel import Stage, Animation, LightCue, Variable, GqcIntOperand, IntExpression
+from .datamodel import Stage, Animation, LightCue, Variable, GqcIntOperand, IntExpression, StrExpression
 
 class Command:
     command_list = []
@@ -33,8 +33,7 @@ class Command:
 
     def to_bytes(self):
         if not self.resolve():
-            # TODO: Raise a GqError here, or otherwise show the location of the error in source
-            raise ValueError("Unresolved command symbols remain")
+            raise GqcParseError("Cannot serialize unresolved command with unresolved symbols", self.instring, self.loc)
         
         op = self.as_struct()
 
@@ -193,6 +192,8 @@ class CommandArithmetic(Command):
 
         # dst is guaranteed not to be a literal, so:
         if self.dst_name in Variable.var_table and Variable.var_table[self.dst_name].addr != 0x00000000:
+            if Variable.var_table[self.dst_name].datatype != 'int':
+                raise ValueError(f"Variable {self.dst_name} is not an int")
             self.arg1 = Variable.var_table[self.dst_name].addr
         else:
             self.unresolved_symbols.append(self.dst_name)
@@ -202,6 +203,8 @@ class CommandArithmetic(Command):
             self.arg2 = self.src.value
             self.command_flags |= structs.OpFlags.LITERAL_ARG2
         elif self.src.value in Variable.var_table and Variable.var_table[self.src.value].addr != 0x00000000:
+            if Variable.var_table[self.src.value].datatype != 'int':
+                raise ValueError(f"Variable {self.src.value} is not an int")
             self.arg2 = Variable.var_table[self.src.value].addr
         else:
             self.unresolved_symbols.append(self.src.value)
@@ -210,48 +213,6 @@ class CommandArithmetic(Command):
         self.resolved = resolved
         
         return self.resolved
-
-class CommandSetStr(Command):
-    def __init__(self, instring, loc, dst : str, src = None):
-        super().__init__(CommandType.SETVAR, instring, loc, arg1=None, arg2=None)
-        self.dst_name = dst
-        self.src_name = src
-        self.command_flags |= structs.OpFlags.TYPE_STR
-
-        self.resolve()
-    
-    def resolve(self):
-        if self.resolved:
-            return True
-
-        resolved = True
-        self.unresolved_symbols = []
-
-        if self.dst_name in Variable.var_table and Variable.var_table[self.dst_name].addr != 0x00000000:
-            self.arg1 = Variable.var_table[self.dst_name].addr
-        else:
-            self.unresolved_symbols.append(self.dst_name)
-            resolved = False
-
-        if self.src_name in Variable.var_table and Variable.var_table[self.src_name].addr != 0x00000000:
-            self.arg2 = Variable.var_table[self.src_name].addr
-        else:
-            self.unresolved_symbols.append(self.src_name)
-            resolved = False
-        
-        # Rudimentary type checking:
-        if self.src_name in Variable.var_table:
-            if Variable.var_table[self.src_name].datatype != 'str':
-                raise ValueError(f"Variable {self.src_name} is of type {Variable.var_table[self.src_name].datatype}, not str")
-        if self.dst_name in Variable.var_table:
-            if Variable.var_table[self.dst_name].datatype != 'str':
-                raise ValueError(f"Variable {self.dst_name} is of type {Variable.var_table[self.dst_name].datatype}, not str")
-
-        self.resolved = resolved
-        return self.resolved
-
-    def __repr__(self) -> str:
-        return f"SETSTR {self.dst_name} {self.src_name}"
 
 class CommandGoto(Command):
     def __init__(self, instring, loc, addr : int = 0x00000000, form : str = None):
@@ -298,6 +259,7 @@ class CommandWithIntExpressionArgument(Command):
         self.unresolved_symbols = []
 
         if self.arg2_is_expression and not self.expr_or_operand.resolve():
+            self.unresolved_symbols += self.expr_or_operand.unresolved_symbols
             resolved = False
             return False
         
@@ -310,6 +272,7 @@ class CommandWithIntExpressionArgument(Command):
                 if Variable.var_table[self.arg2_name].addr != 0x00000000:
                     self.arg2 = Variable.var_table[self.arg2_name].addr
                 else:
+                    self.unresolved_symbols.append(self.arg2_name)
                     resolved = False
         
         self.resolved = resolved
@@ -377,16 +340,18 @@ class CommandSetInt(CommandWithIntExpressionArgument):
         if self.resolved:
             return True
 
-        resolved = True
-
         # Resolve the expression section, if any:
         if not super().resolve():
-            resolved = False
             return False
+        
+        resolved = True
 
         if self.dst_name in Variable.var_table and Variable.var_table[self.dst_name].addr != 0x00000000:
+            if Variable.var_table[self.dst_name].datatype != 'int':
+                raise ValueError(f"Cannot assign int expression to non-int {self.dst_name}")
             self.arg1 = Variable.var_table[self.dst_name].addr
         else:
+            self.unresolved_symbols.append(self.dst_name)
             resolved = False
         
         self.resolved = resolved
@@ -606,3 +571,185 @@ class CommandLoop(Command):
 class CommandTimer(CommandWithIntExpressionArgument):
     def __init__(self, instring, loc, interval : GqcIntOperand | IntExpression):
         super().__init__(CommandType.TIMER, instring, loc, interval)
+
+class CommandWithStrExpressionArgument(Command):
+    def __init__(self, command_type : CommandType, instring, loc, expr_or_operand : str | StrExpression):
+        super().__init__(command_type, instring, loc)
+
+        self.arg2_is_expression = isinstance(expr_or_operand, StrExpression)
+        if not self.arg2_is_expression and not isinstance(expr_or_operand, str):
+            raise GqcParseError(f"Invalid string expression argument: {expr_or_operand}", instring, loc)
+        self.arg2_section_size = 0
+        self.expr_or_operand = expr_or_operand
+
+        if self.arg2_is_expression:
+            self.arg2_name = self.expr_or_operand.result_symbol
+            self.arg2_section_size = self.expr_or_operand.size()
+        else:
+            self.arg2_name = expr_or_operand
+        
+        self.resolve()
+    
+    def resolve(self):
+        if self.resolved:
+            return True
+
+        resolved = True
+        self.unresolved_symbols = []
+
+        if self.arg2_is_expression and not self.expr_or_operand.resolve():
+            self.unresolved_symbols += self.expr_or_operand.unresolved_symbols
+            resolved = False
+            return False
+        
+        # All string operands are references, so attempt to resolve:
+        if self.arg2_name in Variable.var_table:
+            if Variable.var_table[self.arg2_name].datatype != 'str':
+                raise ValueError(f"Variable {self.arg2_name} is not a string")
+            if Variable.var_table[self.arg2_name].addr != 0x00000000:
+                self.arg2 = Variable.var_table[self.arg2_name].addr
+            else:
+                self.unresolved_symbols.append(self.arg2_name)
+                resolved = False
+        else:
+            self.unresolved_symbols.append(self.arg2_name)
+            resolved = False
+        
+        self.resolved = resolved
+
+        return self.resolved
+    
+    def expr_section_size(self):
+        return self.arg2_section_size
+    
+    def expr_section_bytes(self):
+        if not self.resolve():
+            raise ValueError("Cannot serialize unresolved expression section")
+        
+        if self.arg2_is_expression:
+            expr_bytes = b''
+            for cmd in self.expr_or_operand.commands:
+                expr_bytes += cmd.to_bytes()
+            return expr_bytes
+        else:
+            return b''
+    
+    def set_addr(self, addr: int, namespace: int = structs.GQ_PTR_NS_CART):
+        super().set_addr(addr, namespace)
+        if self.arg2_is_expression:
+            self.expr_or_operand.set_addr(addr, namespace)
+
+    def size(self):
+        return self.expr_section_size() + super().size()
+    
+    def to_bytes(self):
+        if not self.resolve():
+            raise ValueError("Cannot serialize unresolved expression section")
+        
+        return self.expr_section_bytes() + super().to_bytes()
+    
+    def cmd_list(self) -> list:
+        if not self.resolve():
+            raise ValueError("Cannot serialize unresolved expression section")
+        
+        cmd_list = []
+
+        if self.arg2_is_expression:
+            for cmd in self.expr_or_operand.commands:
+                cmd_list += cmd.cmd_list()
+        
+        cmd_list += super().cmd_list()
+
+        return cmd_list
+
+    def __repr__(self) -> str:
+        if not self.resolve():
+            return f"{self.command_type.name}: UNRESOLVED"
+
+        return f"{self.expr_or_operand.commands if self.arg2_is_expression else ''} {super().__repr__()}"
+
+class CommandStrModify(Command):
+    OPERATORS = {
+        '+': CommandType.STRCAT,
+    }
+
+    UNARY_OPERATORS = {
+    }
+
+    def __init__(self, command_type : CommandType, instring, loc, dst_prefix: str, src_suffix: str):
+        if command_type not in CommandStrModify.OPERATORS.values():
+            raise ValueError(f"Invalid string operation")
+
+        if command_type in CommandStrModify.UNARY_OPERATORS.values():
+            raise ValueError(f"Unary string operations not supported")
+        
+        super().__init__(command_type, instring, loc)
+
+        self.dst_name = dst_prefix
+        self.src_name = src_suffix
+
+        self.resolve()
+    
+    def resolve(self) -> bool:
+        if self.resolved:
+            return True
+
+        resolved = True
+        self.unresolved_symbols = []
+
+        # From the context of our actual commands, there's no such thing as a string literal.
+
+        if self.dst_name in Variable.var_table and Variable.var_table[self.dst_name].addr != 0x00000000:
+            if Variable.var_table[self.dst_name].datatype != 'str':
+                raise ValueError(f"String operation requested with {self.dst_name} but type is {Variable.var_table[self.dst_name].datatype}, not str")
+            self.arg1 = Variable.var_table[self.dst_name].addr
+        else:
+            self.unresolved_symbols.append(self.dst_name)
+            resolved = False
+        
+        if self.src_name in Variable.var_table and Variable.var_table[self.src_name].addr != 0x00000000:
+            if Variable.var_table[self.src_name].datatype != 'str':
+                raise ValueError(f"String operation requested with {self.src_name} but type is {Variable.var_table[self.src_name].datatype}, not str")
+            self.arg2 = Variable.var_table[self.src_name].addr
+        else:
+            self.unresolved_symbols.append(self.src_name)
+            resolved = False
+        
+        self.resolved = resolved
+        
+        return self.resolved
+        
+class CommandSetStr(CommandWithStrExpressionArgument):
+    def __init__(self, instring, loc, dst : str, src = None):
+        self.dst_name = dst
+        super().__init__(CommandType.SETVAR, instring, loc, src)
+        self.command_flags |= structs.OpFlags.TYPE_STR
+
+        self.resolve()
+    
+    def resolve(self):
+        if self.resolved:
+            return True
+
+        if not super().resolve():
+            return False
+        
+        resolved = True
+
+        if self.dst_name in Variable.var_table and Variable.var_table[self.dst_name].addr != 0x00000000:
+            self.arg1 = Variable.var_table[self.dst_name].addr
+        else:
+            self.unresolved_symbols.append(self.dst_name)
+            resolved = False
+        
+        # Rudimentary type checking:
+        if self.dst_name in Variable.var_table:
+            if Variable.var_table[self.dst_name].datatype != 'str':
+                raise ValueError(f"Variable {self.dst_name} is of type {Variable.var_table[self.dst_name].datatype}, not str")
+
+        if self.arg1 == 0x00000000 or self.arg2 == 0x00000000:
+            self.unresolved_symbols.append('NULL')
+            resolved = False
+
+        self.resolved = resolved
+        return self.resolved

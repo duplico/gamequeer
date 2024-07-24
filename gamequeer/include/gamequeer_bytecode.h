@@ -46,6 +46,7 @@ typedef enum gq_op_code {
     GQ_OP_QCGET   = 0x1E,
     GQ_OP_QCSET   = 0x1F,
     GQ_OP_QCCLR   = 0x20,
+    GQ_OP_STRCAT  = 0x21,
     GQ_OP_COUNT
 } gq_op_code;
 

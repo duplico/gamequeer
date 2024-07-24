@@ -88,10 +88,19 @@ IntBadgeExpr:
 IntExpr:
     IntOperand | IntOperand IntOperator IntExpr | IntExprParen | IntUnaryExpr | IntBadgeExpr;
 
+StrOperand:
+    var=ID | val=STRING;
+StrOperator:
+    operator=('+');
+StrExprParen:
+    '(' expr=StrExpr ')';
+StrExpr:
+    StrOperand | StrOperand StrOperator StrExpr | StrExprParen;
+
 CmdAssignmentInt:
     dst=ID '=' src=IntExpr ';';
 CmdAssignmentStr:
-    dst=ID ':=' (src=ID | src=STRING) ';';
+    dst=ID ':=' (src=ID | src=StrExpr) ';';
 
 CmdAssignment:
     CmdAssignmentInt | CmdAssignmentStr;

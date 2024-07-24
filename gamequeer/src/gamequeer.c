@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -78,16 +79,16 @@ void menu_load(t_gq_pointer menu_ptr, t_gq_pointer menu_prompt) {
     t_gq_pointer menu_size;
 
     // Determine the size of the current menu based on its option count.
-    gq_memcpy_ram((uint8_t *) &menu_option_count, menu_ptr, GQ_INT_SIZE);
+    gq_memcpy_to_ram((uint8_t *) &menu_option_count, menu_ptr, GQ_INT_SIZE);
     menu_size = GQ_INT_SIZE + menu_option_count * sizeof(gq_menu_option);
 
     // Load the menu into RAM.
     menu_current = (gq_menu *) malloc(menu_size);
-    gq_memcpy_ram((uint8_t *) menu_current, menu_ptr, menu_size);
+    gq_memcpy_to_ram((uint8_t *) menu_current, menu_ptr, menu_size);
 
     // Load the menu prompt into RAM.
     if (menu_prompt) {
-        gq_memcpy_ram((uint8_t *) menu_current_prompt, menu_prompt, GQ_STR_SIZE);
+        gq_memcpy_to_ram((uint8_t *) menu_current_prompt, menu_prompt, GQ_STR_SIZE);
         menu_offset_y = 18; // TODO: constant or something
     } else {
         menu_current_prompt[0] = '\0';
@@ -116,7 +117,7 @@ void menu_close() {
  */
 uint8_t load_stage(t_gq_pointer stage_ptr) {
     // Load the stage header
-    if (!gq_memcpy_ram((uint8_t *) &stage_current, stage_ptr, sizeof(gq_stage))) {
+    if (!gq_memcpy_to_ram((uint8_t *) &stage_current, stage_ptr, sizeof(gq_stage))) {
         return 0;
     }
 
@@ -175,7 +176,7 @@ uint8_t load_stage(t_gq_pointer stage_ptr) {
 
 uint8_t load_game() {
     // Load the game header
-    if (!gq_memcpy_ram((uint8_t *) &game, GQ_PTR(GQ_PTR_NS_CART, 0), sizeof(gq_header))) {
+    if (!gq_memcpy_to_ram((uint8_t *) &game, GQ_PTR(GQ_PTR_NS_CART, 0), sizeof(gq_header))) {
         return 0;
     }
 
@@ -208,7 +209,7 @@ uint8_t load_animation(uint8_t index, t_gq_pointer anim_ptr) {
     gq_anim_onscreen *anim = &current_animations[index];
 
     // Load the animation header
-    if (!gq_memcpy_ram((uint8_t *) &anim->anim, anim_ptr, sizeof(gq_anim))) {
+    if (!gq_memcpy_to_ram((uint8_t *) &anim->anim, anim_ptr, sizeof(gq_anim))) {
         anim->in_use = 0;
         return 0;
     }
@@ -252,7 +253,7 @@ void draw_oled_stack() {
         }
 
         // Load the current frame
-        if (!gq_memcpy_ram(
+        if (!gq_memcpy_to_ram(
                 (uint8_t *) &frame_current,
                 current_animations[i].anim.frame_pointer + current_animations[i].frame * sizeof(gq_anim_frame),
                 sizeof(gq_anim_frame))) {
@@ -269,7 +270,7 @@ void draw_oled_stack() {
 
         // Load the frame data
         frame_data = (uint8_t *) malloc(frame_current.data_size);
-        if (!gq_memcpy_ram(frame_data, frame_current.data_pointer, frame_current.data_size)) {
+        if (!gq_memcpy_to_ram(frame_data, frame_current.data_pointer, frame_current.data_size)) {
             free(frame_data);
             return;
         }
@@ -416,10 +417,10 @@ void run_arithmetic(gq_op *cmd) {
         // No need to load anything to arg1 for a unary operation.
     } else {
         // All other operations have arg1 and arg2 as operands.
-        gq_memcpy_ram((uint8_t *) &arg1, cmd->arg1, GQ_INT_SIZE);
+        gq_memcpy_to_ram((uint8_t *) &arg1, cmd->arg1, GQ_INT_SIZE);
     }
     if (!(cmd->flags & GQ_OPF_LITERAL_ARG2)) {
-        gq_memcpy_ram((uint8_t *) &arg2, cmd->arg2, GQ_INT_SIZE);
+        gq_memcpy_to_ram((uint8_t *) &arg2, cmd->arg2, GQ_INT_SIZE);
     } else {
         arg2 = cmd->arg2;
     }
@@ -501,12 +502,17 @@ void run_arithmetic(gq_op *cmd) {
 void run_code(t_gq_pointer code_ptr) {
     gq_op cmd;
     gq_op_code opcode;
+
+    char result_str[GQ_STR_SIZE];
+    char arg1_str[GQ_STR_SIZE];
+    char arg2_str[GQ_STR_SIZE];
+
     if (GQ_PTR_ISNULL(code_ptr)) {
         return;
     }
 
     do {
-        gq_memcpy_ram((uint8_t *) &cmd, code_ptr, sizeof(gq_op));
+        gq_memcpy_to_ram((uint8_t *) &cmd, code_ptr, sizeof(gq_op));
         opcode = (gq_op_code) cmd.opcode;
 
         switch (opcode) {
@@ -600,6 +606,13 @@ void run_code(t_gq_pointer code_ptr) {
                 } else {
                     set_badge_bit(gq_load_int(cmd.arg2), 0);
                 }
+                break;
+            case GQ_OP_STRCAT:
+                // TODO: Break out into a function, maybe?
+                gq_memcpy_to_ram((uint8_t *) arg1_str, cmd.arg1, GQ_STR_SIZE);
+                gq_memcpy_to_ram((uint8_t *) arg2_str, cmd.arg2, GQ_STR_SIZE);
+                snprintf(result_str, GQ_STR_SIZE, "%s%s", arg1_str, arg2_str);
+                gq_memcpy_from_ram(cmd.arg1, (uint8_t *) result_str, GQ_STR_SIZE);
                 break;
             default:
                 break;
