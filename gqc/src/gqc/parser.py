@@ -5,7 +5,7 @@ from collections import namedtuple
 import pyparsing as pp
 from rich import print
 
-from .datamodel import Animation, Game, Stage, Variable, Event, Menu, LightCue
+from .datamodel import Animation, Game, Stage, Variable, Event, Menu, LightCue, StrExpression
 from .datamodel import IntExpression, GqcIntOperand
 from .commands import CommandPlay, CommandGoStage, CommandCue
 from .commands import CommandSetStr, CommandSetInt, CommandWithIntExpressionArgument
@@ -165,7 +165,7 @@ def parse_variable_definition_storageclass(instring, loc, toks):
     if Variable.storageclass_table[storageclass]:
         non_init_vars_present = False
         for var in Variable.storageclass_table[storageclass].values():
-            if not var.name in structs.GQ_REGISTERS_INT and not var.name.endswith(".init") and not var.name.endswith(".strlit") and not var.name.endswith(".builtin"):
+            if not var.name in structs.GQ_REGISTERS_INT and not var.name in structs.GQ_REGISTERS_STR and not var.name.endswith(".init") and not var.name.endswith(".strlit") and not var.name.endswith(".builtin"):
                 non_init_vars_present = True
                 break
         if non_init_vars_present:
@@ -218,11 +218,28 @@ def parse_int_expression(instring, loc, toks):
     toks = toks[0]
     if isinstance(toks, GqcIntOperand):
         return toks
+    
+    if len(toks) > 3:
+        rtoks = [toks[2:]]
+        toks = toks[:2]
+        toks.append(parse_int_expression(instring, loc, rtoks))
 
     return IntExpression(toks, instring, loc)
 
 def parse_str_literal(instring, loc, toks):
     return Variable.get_str_literal(toks[0])
+
+def parse_str_expression(instring, loc, toks):
+    toks = toks[0]
+    if isinstance(toks[0], str):
+        return toks
+
+    if len(toks) > 3:
+        rtoks = [toks[2:]]
+        toks = toks[:2]
+        toks.append(parse_str_expression(instring, loc, rtoks))
+    
+    return StrExpression(toks, instring, loc)
 
 def parse_if(instring, loc, toks):
     condition = toks[0]

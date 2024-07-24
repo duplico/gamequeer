@@ -5,6 +5,7 @@ from .parser import parse_animation_definition, parse_stage_definition, parse_ga
 from .parser import parse_event_definition, parse_command, parse_assignment, parse_lightcue_definition_section
 from .parser import parse_menu_definition, parse_bound_menu, parse_play
 from .parser import parse_int_expression, parse_int_operand, parse_str_literal, parse_if
+from .parser import parse_str_expression
 
 """
 Grammar for GQC language
@@ -68,7 +69,7 @@ badge_get = "badge_get" "(" int_expression ")" ";"
 
 assignment_statement = int_assignment | string_assignment
 int_assignment = identifier "=" int_expression ";"
-string_assignment = identifier ":=" identifier ";"
+string_assignment = identifier ":=" string_expression ";"
 
 int_operand = identifier | integer
 string_operand = identifier | string
@@ -85,6 +86,8 @@ int_expression = badge_get | pp.infixNotation(int_operand, [
     ('|', 2, pp.opAssoc.LEFT),
     (pp.oneOf('&& ||'), 2, pp.opAssoc.LEFT),
 ])
+
+string_expression = string_operand | string_operand '+' string_expression
 
 if_statement = "if" "(" int_expression ")" event_statements ("else" event_statements)?
 
@@ -161,7 +164,11 @@ def build_game_parser():
 
     string_literal.set_parse_action(parse_str_literal)
 
-    string_expression = string_operand
+    string_expression = pp.infix_notation(string_operand, [
+        ('+', 2, pp.opAssoc.LEFT),
+    ])
+    string_expression.set_parse_action(parse_str_expression)
+
     string_assignment = pp.Keyword(":=") - string_expression - pp.Suppress(";")
 
     int_operand = identifier | integer

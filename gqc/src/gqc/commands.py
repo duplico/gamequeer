@@ -193,6 +193,8 @@ class CommandArithmetic(Command):
 
         # dst is guaranteed not to be a literal, so:
         if self.dst_name in Variable.var_table and Variable.var_table[self.dst_name].addr != 0x00000000:
+            if Variable.var_table[self.dst_name].datatype != 'int':
+                raise ValueError(f"Variable {self.dst_name} is not an int")
             self.arg1 = Variable.var_table[self.dst_name].addr
         else:
             self.unresolved_symbols.append(self.dst_name)
@@ -202,6 +204,8 @@ class CommandArithmetic(Command):
             self.arg2 = self.src.value
             self.command_flags |= structs.OpFlags.LITERAL_ARG2
         elif self.src.value in Variable.var_table and Variable.var_table[self.src.value].addr != 0x00000000:
+            if Variable.var_table[self.src.value].datatype != 'int':
+                raise ValueError(f"Variable {self.src.value} is not an int")
             self.arg2 = Variable.var_table[self.src.value].addr
         else:
             self.unresolved_symbols.append(self.src.value)
@@ -210,48 +214,6 @@ class CommandArithmetic(Command):
         self.resolved = resolved
         
         return self.resolved
-
-class CommandSetStr(Command):
-    def __init__(self, instring, loc, dst : str, src = None):
-        super().__init__(CommandType.SETVAR, instring, loc, arg1=None, arg2=None)
-        self.dst_name = dst
-        self.src_name = src
-        self.command_flags |= structs.OpFlags.TYPE_STR
-
-        self.resolve()
-    
-    def resolve(self):
-        if self.resolved:
-            return True
-
-        resolved = True
-        self.unresolved_symbols = []
-
-        if self.dst_name in Variable.var_table and Variable.var_table[self.dst_name].addr != 0x00000000:
-            self.arg1 = Variable.var_table[self.dst_name].addr
-        else:
-            self.unresolved_symbols.append(self.dst_name)
-            resolved = False
-
-        if self.src_name in Variable.var_table and Variable.var_table[self.src_name].addr != 0x00000000:
-            self.arg2 = Variable.var_table[self.src_name].addr
-        else:
-            self.unresolved_symbols.append(self.src_name)
-            resolved = False
-        
-        # Rudimentary type checking:
-        if self.src_name in Variable.var_table:
-            if Variable.var_table[self.src_name].datatype != 'str':
-                raise ValueError(f"Variable {self.src_name} is of type {Variable.var_table[self.src_name].datatype}, not str")
-        if self.dst_name in Variable.var_table:
-            if Variable.var_table[self.dst_name].datatype != 'str':
-                raise ValueError(f"Variable {self.dst_name} is of type {Variable.var_table[self.dst_name].datatype}, not str")
-
-        self.resolved = resolved
-        return self.resolved
-
-    def __repr__(self) -> str:
-        return f"SETSTR {self.dst_name} {self.src_name}"
 
 class CommandGoto(Command):
     def __init__(self, instring, loc, addr : int = 0x00000000, form : str = None):
@@ -606,3 +568,100 @@ class CommandLoop(Command):
 class CommandTimer(CommandWithIntExpressionArgument):
     def __init__(self, instring, loc, interval : GqcIntOperand | IntExpression):
         super().__init__(CommandType.TIMER, instring, loc, interval)
+
+class CommandStrModify(Command):
+    OPERATORS = {
+        '+': CommandType.STRCAT,
+    }
+
+    UNARY_OPERATORS = {
+    }
+
+    def __init__(self, command_type : CommandType, instring, loc, dst_prefix: str, src_suffix: str):
+        if command_type not in CommandStrModify.OPERATORS.values():
+            raise ValueError(f"Invalid string operation")
+
+        if command_type in CommandStrModify.UNARY_OPERATORS.values():
+            raise ValueError(f"Unary string operations not supported")
+        
+        super().__init__(command_type, instring, loc)
+
+        self.dst_name = dst_prefix
+        self.src_name = src_suffix
+
+        self.resolve()
+    
+    def resolve(self) -> bool:
+        if self.resolved:
+            return True
+
+        resolved = True
+        self.unresolved_symbols = []
+
+        # From the context of our actual commands, there's no such thing as a string literal.
+
+        if self.dst_name in Variable.var_table and Variable.var_table[self.dst_name].addr != 0x00000000:
+            if Variable.var_table[self.dst_name].datatype != 'str':
+                raise ValueError(f"String operation requested with {self.dst_name} but type is {Variable.var_table[self.dst_name].datatype}, not str")
+            self.arg1 = Variable.var_table[self.dst_name].addr
+        else:
+            self.unresolved_symbols.append(self.dst_name)
+            resolved = False
+        
+        if self.src_name in Variable.var_table and Variable.var_table[self.src_name].addr != 0x00000000:
+            if Variable.var_table[self.src_name].datatype != 'str':
+                raise ValueError(f"String operation requested with {self.src_name} but type is {Variable.var_table[self.src_name].datatype}, not str")
+            self.arg2 = Variable.var_table[self.src_name].addr
+        else:
+            self.unresolved_symbols.append(self.src_name)
+            resolved = False
+        
+        self.resolved = resolved
+        
+        return self.resolved
+        
+
+class CommandSetStr(Command):
+    def __init__(self, instring, loc, dst : str, src = None):
+        super().__init__(CommandType.SETVAR, instring, loc, arg1=None, arg2=None)
+        self.dst_name = dst
+        self.src_name = src
+        self.command_flags |= structs.OpFlags.TYPE_STR
+
+        self.resolve()
+    
+    def resolve(self):
+        if self.resolved:
+            return True
+
+        resolved = True
+        self.unresolved_symbols = []
+
+        if self.dst_name in Variable.var_table and Variable.var_table[self.dst_name].addr != 0x00000000:
+            self.arg1 = Variable.var_table[self.dst_name].addr
+        else:
+            self.unresolved_symbols.append(self.dst_name)
+            resolved = False
+
+        if self.src_name in Variable.var_table and Variable.var_table[self.src_name].addr != 0x00000000:
+            self.arg2 = Variable.var_table[self.src_name].addr
+        else:
+            self.unresolved_symbols.append(self.src_name)
+            resolved = False
+        
+        # Rudimentary type checking:
+        if self.src_name in Variable.var_table:
+            if Variable.var_table[self.src_name].datatype != 'str':
+                raise ValueError(f"Variable {self.src_name} is of type {Variable.var_table[self.src_name].datatype}, not str")
+        if self.dst_name in Variable.var_table:
+            if Variable.var_table[self.dst_name].datatype != 'str':
+                raise ValueError(f"Variable {self.dst_name} is of type {Variable.var_table[self.dst_name].datatype}, not str")
+
+        if self.arg1 == 0x00000000 or self.arg2 == 0x00000000:
+            resolved = False
+
+        self.resolved = resolved
+        return self.resolved
+
+    def __repr__(self) -> str:
+        return f"SETSTR {self.dst_name} {self.src_name}"

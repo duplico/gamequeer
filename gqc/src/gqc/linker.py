@@ -25,6 +25,10 @@ def create_reserved_variables():
     # Create the reserved integer registers for the game:
     for reg_name in structs.GQ_REGISTERS_INT:
         var = Variable('int', reg_name, 0, 'volatile')
+    
+    # Create the reserved string registers for the game:
+    for reg_name in structs.GQ_REGISTERS_STR:
+        var = Variable('str', reg_name, '', 'volatile')
 
 def create_symbol_table(table_dest = sys.stdout, cmd_dest = sys.stdout):
     # Output order:
