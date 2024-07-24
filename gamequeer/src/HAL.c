@@ -69,9 +69,18 @@ uint8_t gq_memcpy(t_gq_pointer dest, t_gq_pointer src, uint32_t size) {
     return 1;
 }
 
-uint8_t gq_memcpy_ram(uint8_t *dest, t_gq_pointer src, uint32_t size) {
+uint8_t gq_memcpy_to_ram(uint8_t *dest, t_gq_pointer src, uint32_t size) {
     for (t_gq_pointer i = 0; i < size; i++) {
         dest[i] = read_byte(src + i);
+    }
+    return 1;
+}
+
+uint8_t gq_memcpy_from_ram(t_gq_pointer dest, uint8_t *src, uint32_t size) {
+    for (t_gq_pointer i = 0; i < size; i++) {
+        if (!write_byte(dest + i, src[i])) {
+            return 0;
+        }
     }
     return 1;
 }
