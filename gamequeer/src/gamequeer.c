@@ -284,7 +284,7 @@ void draw_oled_stack() {
     // Draw the labels
     for (uint8_t i = 0; i < 4; i++) {
         if (labels[i][0]) {
-            Graphics_drawString(&g_sContext, labels[i], -1, *label_x[i], *label_y[i], 0);
+            Graphics_drawString(&g_sContext, labels[i], -1, *label_x[i], *label_y[i], 1);
         }
     }
 
@@ -532,13 +532,32 @@ void run_code(t_gq_pointer code_ptr) {
                 led_play_cue(cmd.arg1, 0);
                 break;
             case GQ_OP_SETVAR:
-                if (cmd.flags & GQ_OPF_TYPE_INT) {
+                if (cmd.flags & GQ_OPF_TYPE_INT && cmd.flags & GQ_OPF_TYPE_STR) {
+                    // If both STR and INT flags are set, this is a cast from int to str.
+                    // TODO: This command is one of the danger zones. We have no type
+                    //  introspection available in the interpreter, so we have to rely on
+                    //  the compiler having generated good code. If it turns out that arg1
+                    //  is an int, then an overflow is possible, because this code treats it
+                    //  as a string.
+                    // On the other hand, the opposite isn't terribly concerning. If arg1
+                    //  is a string and arg2 is an int, then we'll probably print some garbage,
+                    //  but it won't hurt anything.
+                    if (cmd.flags & GQ_OPF_LITERAL_ARG2) {
+                        snprintf(result_str, GQ_STR_SIZE, "%d", cmd.arg2);
+                    } else {
+                        t_gq_int arg2_int = gq_load_int(cmd.arg2);
+                        snprintf(result_str, GQ_STR_SIZE, "%d", arg2_int);
+                    }
+                    gq_memcpy_from_ram(cmd.arg1, (uint8_t *) result_str, GQ_STR_SIZE);
+                } else if (cmd.flags & GQ_OPF_TYPE_INT) {
+                    // If only the INT flag is set, this is an int to int assignment.
                     if (cmd.flags & GQ_OPF_LITERAL_ARG2) {
                         gq_assign_int(cmd.arg1, cmd.arg2);
                     } else {
                         gq_memcpy(cmd.arg1, cmd.arg2, GQ_INT_SIZE);
                     }
                 } else if (cmd.flags & GQ_OPF_TYPE_STR) {
+                    // If only the STR flag is set, this is a str to str assignment.
                     gq_memcpy(cmd.arg1, cmd.arg2, GQ_STR_SIZE);
                 }
                 break;
@@ -629,6 +648,7 @@ void handle_events() {
             // If we're in a menu, hijack button events to navigate the menu.
             if (*menu_active) {
                 switch (event_type) {
+                    GQ_EVENT_SET(GQ_EVENT_REFRESH); // TODO: Only sometimes?
                     case GQ_EVENT_BUTTON_A:
                         // Select the current menu option
                         *menu_value = menu_current->options[menu_option_selected].value;

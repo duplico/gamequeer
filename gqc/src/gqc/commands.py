@@ -605,7 +605,7 @@ class CommandWithStrExpressionArgument(Command):
         # All string operands are references, so attempt to resolve:
         if self.arg2_name in Variable.var_table:
             if Variable.var_table[self.arg2_name].datatype != 'str':
-                raise ValueError(f"Variable {self.arg2_name} is not a string")
+                raise GqcParseError(f"Variable {self.arg2_name} is not a string", self.instring, self.loc)
             if Variable.var_table[self.arg2_name].addr != 0x00000000:
                 self.arg2 = Variable.var_table[self.arg2_name].addr
             else:
@@ -751,5 +751,41 @@ class CommandSetStr(CommandWithStrExpressionArgument):
             self.unresolved_symbols.append('NULL')
             resolved = False
 
+        self.resolved = resolved
+        return self.resolved
+
+class CommandCastStr(CommandWithIntExpressionArgument):
+    def __init__(self, instring, loc, dst : str, src : GqcIntOperand | IntExpression):
+        self.dst_name = dst
+        super().__init__(CommandType.SETVAR, instring, loc, src)
+        self.command_flags |= structs.OpFlags.TYPE_STR
+        self.command_flags |= structs.OpFlags.TYPE_INT
+
+        self.resolve()
+    
+    def resolve(self):
+        if self.resolved:
+            return True
+        
+        if not super().resolve():
+            return False
+        
+        resolved = True
+
+        if self.dst_name in Variable.var_table and Variable.var_table[self.dst_name].addr != 0x00000000:
+            self.arg1 = Variable.var_table[self.dst_name].addr
+        else:
+            self.unresolved_symbols.append(self.dst_name)
+            resolved = False
+        
+        # Rudimentary type checking:
+        if self.dst_name in Variable.var_table:
+            if Variable.var_table[self.dst_name].datatype != 'str':
+                raise ValueError(f"Variable {self.dst_name} is of type {Variable.var_table[self.dst_name].datatype}, not str")
+        
+        if self.arg1 == 0x00000000 or (self.arg2_is_expression and self.arg2 == 0x00000000):
+            self.unresolved_symbols.append('NULL')
+            resolved = False
+        
         self.resolved = resolved
         return self.resolved
