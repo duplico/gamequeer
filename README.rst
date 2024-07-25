@@ -26,3 +26,8 @@ and volatile variables, including their initialization tables.
 
 Also included is an emulator for the GameQueer console, which can be used to test games on a
 computer without needing to have a physical badge.
+
+Getting started
+===============
+
+https://github.com/duplico/gamequeer/wiki/Quick-Start
