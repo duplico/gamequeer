@@ -136,6 +136,7 @@ stage selfie {
 
         GQI_LABEL2_X = 16;
         GQI_LABEL2_Y = 64;
+        GQI_LABEL_FLAGS = GQI_LABEL_FLAGS | (3 << 4);
         GQS_LABEL2 := display_text;
     }
 
