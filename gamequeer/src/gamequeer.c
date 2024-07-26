@@ -287,7 +287,7 @@ void draw_oled_stack() {
     // Draw the labels
     for (uint8_t i = 0; i < 4; i++) {
         // Check the color flag (least significant bit)
-        if (*label_flags & 0b0001 << i * 4) {
+        if (*label_flags & 0b0001 << i * 8) {
             Graphics_setBackgroundColor(&g_sContext, GRAPHICS_COLOR_WHITE);
             Graphics_setForegroundColor(&g_sContext, GRAPHICS_COLOR_BLACK);
         } else {
@@ -297,7 +297,7 @@ void draw_oled_stack() {
 
         if (labels[i][0]) {
             Graphics_drawString(
-                &g_sContext, labels[i], -1, *label_x[i], *label_y[i], (*label_flags & (0b0010 << i * 4)) ? 1 : 0);
+                &g_sContext, labels[i], -1, *label_x[i], *label_y[i], (*label_flags & (0b0010 << i * 8)) ? 1 : 0);
         }
     }
 
