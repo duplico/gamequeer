@@ -238,6 +238,7 @@ GQ_RESERVED_INTS = [
     GqReservedVariable('GQI_LABEL3_Y', 'int', 'Label 3 Y', 0x00004C),
     GqReservedVariable('GQI_LABEL4_X', 'int', 'Label 4 X', 0x000050),
     GqReservedVariable('GQI_LABEL4_Y', 'int', 'Label 4 Y', 0x000054),
+    GqReservedVariable('GQI_LABEL_FLAGS', 'int', 'Label flags', 0x000058),
 ]
 
 GQ_RESERVED_STRS = [

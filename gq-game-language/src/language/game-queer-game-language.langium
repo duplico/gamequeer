@@ -78,7 +78,7 @@ CmdTimer:
 IntOperand:
     var=ID | val=INT;
 IntOperator:
-    operator=('+' | '-' | '*' | '/' | '%' | '&&' | '||' | '==' | '!=' | '<' | '>' | '<=' | '>=' | '&' | '|' | '^');
+    operator=('+' | '-' | '*' | '/' | '%' | '&&' | '||' | '==' | '!=' | '<' | '>' | '<=' | '>=' | '&' | '|' | '^' | '<<' | '>>');
 IntExprParen:
     '(' expr=IntExpr ')';
 IntUnaryExpr:
@@ -86,7 +86,7 @@ IntUnaryExpr:
 IntBadgeExpr:
     operator='badge_get' '(' badge=IntExpr ')';
 IntExpr:
-    IntOperand | IntOperand IntOperator IntExpr | IntExprParen | IntUnaryExpr | IntBadgeExpr;
+    IntBadgeExpr | IntExprParen | IntOperand | IntOperand IntOperator IntExpr | IntUnaryExpr;
 
 StrCast:
     operator='str' '(' expr=IntExpr ')';

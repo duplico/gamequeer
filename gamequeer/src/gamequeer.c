@@ -51,6 +51,8 @@ t_gq_int *label_y[4] = {
     (t_gq_int *) &gq_builtin_ints[GQI_LABEL4_Y * GQ_INT_SIZE],
 };
 
+t_gq_int *label_flags = (t_gq_int *) &gq_builtin_ints[GQI_LABEL_FLAGS * GQ_INT_SIZE];
+
 char *game_title = (char *) &gq_builtin_strs[GQS_GAME_TITLE * GQ_STR_SIZE];
 
 char *labels[4] = {
@@ -162,6 +164,7 @@ uint8_t load_stage(t_gq_pointer stage_ptr) {
         *label_x[i] = 0;
         *label_y[i] = 0;
     }
+    *label_flags = 0;
 
     if (timer_active) {
         // If a timer is active, stop it.
@@ -283,8 +286,18 @@ void draw_oled_stack() {
 
     // Draw the labels
     for (uint8_t i = 0; i < 4; i++) {
+        // Check the color flag (least significant bit)
+        if (*label_flags & 0b0001 << i * 4) {
+            Graphics_setBackgroundColor(&g_sContext, GRAPHICS_COLOR_WHITE);
+            Graphics_setForegroundColor(&g_sContext, GRAPHICS_COLOR_BLACK);
+        } else {
+            Graphics_setBackgroundColor(&g_sContext, GRAPHICS_COLOR_BLACK);
+            Graphics_setForegroundColor(&g_sContext, GRAPHICS_COLOR_WHITE);
+        }
+
         if (labels[i][0]) {
-            Graphics_drawString(&g_sContext, labels[i], -1, *label_x[i], *label_y[i], 1);
+            Graphics_drawString(
+                &g_sContext, labels[i], -1, *label_x[i], *label_y[i], (*label_flags & (0b0010 << i * 4)) ? 1 : 0);
         }
     }
 
