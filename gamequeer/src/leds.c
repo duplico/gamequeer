@@ -29,7 +29,7 @@ void led_stop() {
     // Stop the animation flag.
     leds_animating = 0;
     // Unsave any background cue.
-    leds_cue_bg_saved = 1;
+    leds_cue_bg_saved = 0;
 
     // Clear the current LED colors.
     for (uint8_t i = 0; i < 5; i++) {

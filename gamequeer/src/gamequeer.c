@@ -148,8 +148,8 @@ uint8_t load_stage(t_gq_pointer stage_ptr) {
     if (stage_current.cue_bg_pointer) {
         // If this stage has a background cue, play it.
         led_play_cue(stage_current.cue_bg_pointer, 1);
-    } else if (leds_animating && leds_cue.bgcue) {
-        // If we're currently playing a background cue, stop it.
+    } else if (leds_animating) {
+        // If we're currently playing a cue, stop it.
         led_stop();
     }
 
