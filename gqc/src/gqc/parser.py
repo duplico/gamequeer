@@ -45,7 +45,11 @@ def parse_bound_menu(instring, loc, toks):
     menu_prompt = None
     if len(toks) == 2:
         menu_prompt = toks[1]
-    return Stage.BoundMenu(menu_name, menu_prompt)
+    
+    try:
+        return Stage.BoundMenu(menu_name, menu_prompt)
+    except ValueError as ve:
+        raise GqcParseError(str(ve), instring, loc)
 
 def parse_stage_definition(instring, loc, toks):
     toks = toks[0]
@@ -68,7 +72,10 @@ def parse_stage_definition(instring, loc, toks):
         else:
             stage_kwargs[stage_option[0]] = stage_option[1]
 
-    return Stage(name, **stage_kwargs)
+    try:
+        return Stage(name, **stage_kwargs)
+    except ValueError as ve:
+        raise GqcParseError(str(ve), instring, loc)
 
 def parse_event_definition(instring, loc, toks):
     toks = toks[0]
@@ -107,7 +114,10 @@ def parse_event_definition(instring, loc, toks):
             raise GqcParseError(f"Invalid fgdone number {toks[2]}: expected 1 or 2", instring, loc)
         event_statements = toks[3]
     
-    return Event(event_type, event_statements)
+    try:
+        return Event(event_type, event_statements)
+    except ValueError as ve:
+        raise GqcParseError(str(ve), instring, loc)
 
 def parse_animation_definition(instring, loc, toks):
     toks = toks[0]
@@ -223,10 +233,16 @@ def parse_int_expression(instring, loc, toks):
         toks = toks[:2]
         toks.append(parse_int_expression(instring, loc, rtoks))
 
-    return IntExpression(toks, instring, loc)
+    try:
+        return IntExpression(toks, instring, loc)
+    except ValueError as ve:
+        raise GqcParseError(str(ve), instring, loc)
 
 def parse_str_literal(instring, loc, toks):
-    return Variable.get_str_literal(toks[0])
+    try:
+        return Variable.get_str_literal(toks[0])
+    except ValueError as ve:
+        raise GqcParseError(str(ve), instring, loc)
 
 def parse_str_expression(instring, loc, toks):
     toks = toks[0]
@@ -238,14 +254,20 @@ def parse_str_expression(instring, loc, toks):
         toks = toks[:2]
         toks.append(parse_str_expression(instring, loc, rtoks))
     
-    return StrExpression(toks, instring, loc)
+    try:
+        return StrExpression(toks, instring, loc)
+    except ValueError as ve:
+        raise GqcParseError(str(ve), instring, loc)
 
 def parse_if(instring, loc, toks):
     condition = toks[0]
     true_block = toks[1]
     false_block = toks[2] if len(toks) == 3 else None
 
-    return CommandIf(instring, loc, condition, true_block, false_cmds=false_block)
+    try:
+        return CommandIf(instring, loc, condition, true_block, false_cmds=false_block)
+    except ValueError as ve:
+        raise GqcParseError(str(ve), instring, loc)
 
 def parse_play(instring, loc, toks):
     toks = toks[0]
@@ -276,41 +298,46 @@ def parse_command(instring, loc, toks):
     # Otherwise, parse it:
     command = toks[0]
 
-    if command == "cue":
-        if toks[1] not in LightCue.cue_table:
-            raise GqcParseError(f"Undefined cue {toks[1]}", instring, loc)
-        return CommandCue(instring, loc, toks[1])
-    elif command == "gostage":
-        return CommandGoStage(instring, loc, toks[1])
-    elif command == 'setvar':
-        _, dst, src, datatype = toks
-        if datatype == 'str':
-            if isinstance(src, str) or isinstance(src, StrExpression):
-                return CommandSetStr(instring, loc, dst, src)
+    try:
+
+        if command == "cue":
+            if toks[1] not in LightCue.cue_table:
+                raise GqcParseError(f"Undefined cue {toks[1]}", instring, loc)
+            return CommandCue(instring, loc, toks[1])
+        elif command == "gostage":
+            return CommandGoStage(instring, loc, toks[1])
+        elif command == 'setvar':
+            _, dst, src, datatype = toks
+            if datatype == 'str':
+                if isinstance(src, str) or isinstance(src, StrExpression):
+                    return CommandSetStr(instring, loc, dst, src)
+                else:
+                    src = src[0]
+                if isinstance(src, GqcIntOperand) or isinstance(src, IntExpression):
+                    return CommandCastStr(instring, loc, dst, src)
+                else:
+                    raise GqcParseError(f"Invalid source {src} for string variable {dst}", instring, loc)
             else:
-                src = src[0]
-            if isinstance(src, GqcIntOperand) or isinstance(src, IntExpression):
-                return CommandCastStr(instring, loc, dst, src)
-            else:
-                raise GqcParseError(f"Invalid source {src} for string variable {dst}", instring, loc)
+                if isinstance(src, int):
+                    src = GqcIntOperand(is_literal=True, value=src)
+                else:
+                    assert isinstance(src, GqcIntOperand) or isinstance(src, IntExpression)
+                    return CommandSetInt(instring, loc, dst, src)
+        elif command == 'timer':
+            return CommandTimer(instring, loc, toks[1])
+        elif command in ['break', 'continue']:
+            return CommandGoto(instring, loc, form=command)
+        elif command == 'loop':
+            return CommandLoop(instring, loc, toks[1])
+        elif command == 'badge_set':
+            return CommandWithIntExpressionArgument(CommandType.QCSET, instring, loc, toks[1])
+        elif command == 'badge_clear':
+            return CommandWithIntExpressionArgument(CommandType.QCCLR, instring, loc, toks[1])
         else:
-            if isinstance(src, int):
-                src = GqcIntOperand(is_literal=True, value=src)
-            else:
-                assert isinstance(src, GqcIntOperand) or isinstance(src, IntExpression)
-                return CommandSetInt(instring, loc, dst, src)
-    elif command == 'timer':
-        return CommandTimer(instring, loc, toks[1])
-    elif command in ['break', 'continue']:
-        return CommandGoto(instring, loc, form=command)
-    elif command == 'loop':
-        return CommandLoop(instring, loc, toks[1])
-    elif command == 'badge_set':
-        return CommandWithIntExpressionArgument(CommandType.QCSET, instring, loc, toks[1])
-    elif command == 'badge_clear':
-        return CommandWithIntExpressionArgument(CommandType.QCCLR, instring, loc, toks[1])
-    else:
-        raise GqcParseError(f"Invalid command {command}", instring, loc)
+            raise GqcParseError(f"Invalid command {command}", instring, loc)
+        
+    except ValueError as ve:
+        raise GqcParseError(str(ve), instring, loc)
 
 def parse(text):
     # Import here to avoid circular import
