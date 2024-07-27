@@ -31,8 +31,6 @@ int main(int argc, char *argv[]) {
         // Perform the current animation step
         system_tick();
 
-        led_tick();
-
         // Perform polling for other event sources
         HAL_event_poll();
 
