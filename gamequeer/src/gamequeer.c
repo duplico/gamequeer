@@ -329,6 +329,10 @@ void draw_oled_stack() {
 void system_tick() {
     // Should be called by the 100 Hz system tick
 
+    // Handle the LEDs
+    led_tick();
+
+    // Handle timers
     if (timer_active) {
         timer_counter++;
         if (timer_counter >= timer_interval) {
@@ -337,6 +341,7 @@ void system_tick() {
         }
     }
 
+    // Tick any active animations
     for (uint8_t i = 0; i < MAX_CONCURRENT_ANIMATIONS; i++) {
         if (!current_animations[i].in_use) {
             continue;
