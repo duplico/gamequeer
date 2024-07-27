@@ -153,7 +153,13 @@ uint8_t load_stage(t_gq_pointer stage_ptr) {
         led_stop();
     }
 
-    menu_close();
+    // Clear all unhandled events
+    for (uint16_t event_type = 0x0000; event_type < GQ_EVENT_COUNT; event_type++) {
+        GQ_EVENT_CLR(event_type);
+    }
+
+    // Close the menu
+    menu_close(); // Sets GQ_EVENT_REFRESH
 
     if (stage_current.menu_pointer) {
         // If this stage has a menu, load it.
