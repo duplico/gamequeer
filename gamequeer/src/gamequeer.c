@@ -239,6 +239,8 @@ void draw_oled_stack() {
     gq_anim_frame frame_current;
 
     // First, start with a blank slate.
+    Graphics_setForegroundColor(&g_sContext, GRAPHICS_COLOR_WHITE);
+    Graphics_setBackgroundColor(&g_sContext, GRAPHICS_COLOR_BLACK);
     Graphics_clearDisplay(&g_sContext);
 
     // Then draw the animation stack.
@@ -295,16 +297,16 @@ void draw_oled_stack() {
 
     // Draw the labels
     for (uint8_t i = 0; i < 4; i++) {
-        // Check the color flag (least significant bit)
-        if (*label_flags & 0b0001 << i * 8) {
-            Graphics_setBackgroundColor(&g_sContext, GRAPHICS_COLOR_WHITE);
-            Graphics_setForegroundColor(&g_sContext, GRAPHICS_COLOR_BLACK);
-        } else {
-            Graphics_setBackgroundColor(&g_sContext, GRAPHICS_COLOR_BLACK);
-            Graphics_setForegroundColor(&g_sContext, GRAPHICS_COLOR_WHITE);
-        }
-
         if (labels[i][0]) {
+            // Check the color flag (least significant bit)
+            if (*label_flags & 0b0001 << i * 8) {
+                Graphics_setBackgroundColor(&g_sContext, GRAPHICS_COLOR_WHITE);
+                Graphics_setForegroundColor(&g_sContext, GRAPHICS_COLOR_BLACK);
+            } else {
+                Graphics_setBackgroundColor(&g_sContext, GRAPHICS_COLOR_BLACK);
+                Graphics_setForegroundColor(&g_sContext, GRAPHICS_COLOR_WHITE);
+            }
+
             Graphics_drawString(
                 &g_sContext, labels[i], -1, *label_x[i], *label_y[i], (*label_flags & (0b0010 << i * 8)) ? 1 : 0);
         }
@@ -313,9 +315,11 @@ void draw_oled_stack() {
     // Then, draw the menu, if there is one.
     if (*menu_active) {
         Graphics_Rectangle menu_background = {0, 0, 128, menu_offset_y + menu_current->option_count * 10};
+        Graphics_setBackgroundColor(&g_sContext, GRAPHICS_COLOR_WHITE);
         Graphics_setForegroundColor(&g_sContext, GRAPHICS_COLOR_BLACK);
         Graphics_fillRectangle(&g_sContext, &menu_background);
         Graphics_setForegroundColor(&g_sContext, GRAPHICS_COLOR_WHITE);
+        Graphics_setBackgroundColor(&g_sContext, GRAPHICS_COLOR_BLACK);
 
         if (menu_current_prompt[0]) {
             Graphics_drawString(&g_sContext, menu_current_prompt, -1, 6, 3, 0);
