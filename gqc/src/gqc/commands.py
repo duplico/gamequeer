@@ -177,7 +177,7 @@ class CommandArithmetic(Command):
         super().__init__(command_type, instring, loc)
 
         if dst.is_literal:
-            raise ValueError("Unmodifiable lvalue!")
+            raise GqcParseError(f"Cannot assign to literal {dst.value}", instring, loc)
         self.dst_name = dst.value
         self.src = src
         
@@ -193,7 +193,7 @@ class CommandArithmetic(Command):
         # dst is guaranteed not to be a literal, so:
         if self.dst_name in Variable.var_table and Variable.var_table[self.dst_name].addr != 0x00000000:
             if Variable.var_table[self.dst_name].datatype != 'int':
-                raise ValueError(f"Variable {self.dst_name} is not an int")
+                raise GqcParseError(f"Variable {self.dst_name} is not an int", self.instring, self.loc)
             self.arg1 = Variable.var_table[self.dst_name].addr
         else:
             self.unresolved_symbols.append(self.dst_name)
@@ -204,7 +204,7 @@ class CommandArithmetic(Command):
             self.command_flags |= structs.OpFlags.LITERAL_ARG2
         elif self.src.value in Variable.var_table and Variable.var_table[self.src.value].addr != 0x00000000:
             if Variable.var_table[self.src.value].datatype != 'int':
-                raise ValueError(f"Variable {self.src.value} is not an int")
+                raise GqcParseError(f"Variable {self.src.value} is not an int", self.instring, self.loc)
             self.arg2 = Variable.var_table[self.src.value].addr
         else:
             self.unresolved_symbols.append(self.src.value)
@@ -268,7 +268,7 @@ class CommandWithIntExpressionArgument(Command):
         if self.arg2_is_expression or not self.expr_or_operand.is_literal:
             if self.arg2_name in Variable.var_table:
                 if Variable.var_table[self.arg2_name].datatype != 'int':
-                    raise ValueError(f"Variable {self.arg2_name} is not an integer")
+                    raise GqcParseError(f"Variable {self.arg2_name} is not an int", self.instring, self.loc)
                 if Variable.var_table[self.arg2_name].addr != 0x00000000:
                     self.arg2 = Variable.var_table[self.arg2_name].addr
                 else:
@@ -283,7 +283,7 @@ class CommandWithIntExpressionArgument(Command):
     
     def expr_section_bytes(self):
         if not self.resolve():
-            raise ValueError("Cannot serialize unresolved expression section")
+            raise GqcParseError('Compiler error: Cannot serialize unresolved expression section', self.instring, self.loc)
         
         if self.arg2_is_expression:
             expr_bytes = b''
@@ -303,13 +303,13 @@ class CommandWithIntExpressionArgument(Command):
     
     def to_bytes(self):
         if not self.resolve():
-            raise ValueError("Cannot serialize unresolved expression section")
+            raise GqcParseError('Compiler error: Cannot serialize unresolved expression section', self.instring, self.loc)
         
         return self.expr_section_bytes() + super().to_bytes()
     
     def cmd_list(self) -> list:
         if not self.resolve():
-            raise ValueError("Cannot serialize unresolved expression section")
+            raise GqcParseError('Compiler error: Cannot serialize unresolved expression section', self.instring, self.loc)
         
         cmd_list = []
 
@@ -348,7 +348,7 @@ class CommandSetInt(CommandWithIntExpressionArgument):
 
         if self.dst_name in Variable.var_table and Variable.var_table[self.dst_name].addr != 0x00000000:
             if Variable.var_table[self.dst_name].datatype != 'int':
-                raise ValueError(f"Cannot assign int expression to non-int {self.dst_name}")
+                raise GqcParseError(f"Cannot assign int expression to non-int {self.dst_name}", self.instring, self.loc)
             self.arg1 = Variable.var_table[self.dst_name].addr
         else:
             self.unresolved_symbols.append(self.dst_name)
@@ -391,12 +391,14 @@ class CommandIf(CommandWithIntExpressionArgument):
         # Resolve the true commands.
         for cmd in self.true_cmds:
             if not cmd.resolve():
+                self.unresolved_symbols += cmd.unresolved_symbols
                 resolved = False
         
         # Resolve the false commands.
         if self.false_cmds:
             for cmd in self.false_cmds:
                 if not cmd.resolve():
+                    self.unresolved_symbols += cmd.unresolved_symbols
                     resolved = False
         
         if resolved and self.false_cmds:
@@ -413,10 +415,10 @@ class CommandIf(CommandWithIntExpressionArgument):
     def to_bytes(self):
         if not self.resolve():
             # This also confirms that the condition is resolved.
-            raise ValueError("Cannot serialize unresolved IF block")
+            raise GqcParseError(f"IF block contains unresolved symbols: {self.unresolved_symbols}", self.instring, self.loc)
 
         if not self.addr:
-            raise ValueError("Cannot serialize IF block without base address set")
+            raise GqcParseError("Compiler error: Cannot serialize IF block without base address set", self.instring, self.loc)
         
         # If there's an expression section required, this will serialize it.
         #  Otherwise, it will just be the GOTOIFN command.
@@ -437,7 +439,7 @@ class CommandIf(CommandWithIntExpressionArgument):
     
     def set_addr(self, addr: int, namespace: int = structs.GQ_PTR_NS_CART):
         if not self.resolve():
-            raise ValueError("Cannot set address of unresolved IF block")
+            raise GqcParseError(f"Cannot set IF block address with unresolved symbols: {self.unresolved_symbols}", self.instring, self.loc)
         
         super().set_addr(addr, namespace)
         false_address = self.addr + super().size() + self.true_section_size
@@ -456,7 +458,7 @@ class CommandIf(CommandWithIntExpressionArgument):
 
     def cmd_list(self) -> list:
         if not self.resolve():
-            raise ValueError("Cannot serialize unresolved IF block")
+            raise GqcParseError(f"Cannot serialize IF block with unresolved symbols: {self.unresolved_symbols}", self.instring, self.loc)
         
         cmd_list = super().cmd_list()
 
@@ -523,8 +525,11 @@ class CommandLoop(Command):
         
         resolved = True
 
+        self.unresolved_symbols = []
+
         for cmd in self.commands:
             if not cmd.resolve():
+                self.unresolved_symbols += cmd.unresolved_symbols
                 resolved = False
         
         self.resolved = resolved
@@ -533,13 +538,13 @@ class CommandLoop(Command):
     def to_bytes(self):
         if not self.resolve():
             # This also confirms that the condition is resolved.
-            raise ValueError("Cannot serialize unresolved LOOP block")
+            raise GqcParseError(f"LOOP block contains unresolved symbols: {self.unresolved_symbols}", self.instring, self.loc)
 
         if not self.addr:
-            raise ValueError("Cannot serialize LOOP block without base address set")
+            raise GqcParseError("Compiler error: Cannot serialize LOOP block without base address set", self.instring, self.loc)
         
         if not self.done_addr:
-            raise ValueError("Cannot serialize LOOP block without done address set")
+            raise GqcParseError("Compiler error: Cannot serialize LOOP block without done address set", self.instring, self.loc)
         
         # If there's an expression section required, this will serialize it.
         #  Otherwise, it will be an empty byte string.
@@ -553,7 +558,7 @@ class CommandLoop(Command):
 
     def cmd_list(self) -> list:
         if not self.resolve():
-            raise ValueError("Cannot serialize unresolved LOOP block")
+            raise GqcParseError(f"Cannot serialize LOOP block with unresolved symbols: {self.unresolved_symbols}", self.instring, self.loc)
         
         cmd_list = []
         
@@ -624,7 +629,7 @@ class CommandWithStrExpressionArgument(Command):
     
     def expr_section_bytes(self):
         if not self.resolve():
-            raise ValueError("Cannot serialize unresolved expression section")
+            raise GqcParseError(f"Expression section contains unresolved symbols: {self.unresolved_symbols}", self.instring, self.loc)
         
         if self.arg2_is_expression:
             expr_bytes = b''
@@ -644,13 +649,13 @@ class CommandWithStrExpressionArgument(Command):
     
     def to_bytes(self):
         if not self.resolve():
-            raise ValueError("Cannot serialize unresolved expression section")
+            raise GqcParseError(f"Cannot serialize expression section with unresolved symbols: {self.unresolved_symbols}", self.instring, self.loc)
         
         return self.expr_section_bytes() + super().to_bytes()
     
     def cmd_list(self) -> list:
         if not self.resolve():
-            raise ValueError("Cannot serialize unresolved expression section")
+            raise GqcParseError(f"Cannot serialize expression section with unresolved symbols: {self.unresolved_symbols}", self.instring, self.loc)
         
         cmd_list = []
 
@@ -701,7 +706,7 @@ class CommandStrModify(Command):
 
         if self.dst_name in Variable.var_table and Variable.var_table[self.dst_name].addr != 0x00000000:
             if Variable.var_table[self.dst_name].datatype != 'str':
-                raise ValueError(f"String operation requested with {self.dst_name} but type is {Variable.var_table[self.dst_name].datatype}, not str")
+                raise GqcParseError(f"String operation requested with {self.dst_name} but type is {Variable.var_table[self.dst_name].datatype}, not str", self.instring, self.loc)
             self.arg1 = Variable.var_table[self.dst_name].addr
         else:
             self.unresolved_symbols.append(self.dst_name)
@@ -709,7 +714,7 @@ class CommandStrModify(Command):
         
         if self.src_name in Variable.var_table and Variable.var_table[self.src_name].addr != 0x00000000:
             if Variable.var_table[self.src_name].datatype != 'str':
-                raise ValueError(f"String operation requested with {self.src_name} but type is {Variable.var_table[self.src_name].datatype}, not str")
+                raise GqcParseError(f"String operation requested with {self.src_name} but type is {Variable.var_table[self.src_name].datatype}, not str", self.instring, self.loc)
             self.arg2 = Variable.var_table[self.src_name].addr
         else:
             self.unresolved_symbols.append(self.src_name)
@@ -745,7 +750,7 @@ class CommandSetStr(CommandWithStrExpressionArgument):
         # Rudimentary type checking:
         if self.dst_name in Variable.var_table:
             if Variable.var_table[self.dst_name].datatype != 'str':
-                raise ValueError(f"Variable {self.dst_name} is of type {Variable.var_table[self.dst_name].datatype}, not str")
+                raise GqcParseError(f"Variable {self.dst_name} is of type {Variable.var_table[self.dst_name].datatype}, not str", self.instring, self.loc)
 
         if self.arg1 == 0x00000000 or self.arg2 == 0x00000000:
             self.unresolved_symbols.append('NULL')
@@ -781,7 +786,7 @@ class CommandCastStr(CommandWithIntExpressionArgument):
         # Rudimentary type checking:
         if self.dst_name in Variable.var_table:
             if Variable.var_table[self.dst_name].datatype != 'str':
-                raise ValueError(f"Variable {self.dst_name} is of type {Variable.var_table[self.dst_name].datatype}, not str")
+                raise GqcParseError(f"Variable {self.dst_name} is of type {Variable.var_table[self.dst_name].datatype}, not str", self.instring, self.loc)
         
         if self.arg1 == 0x00000000 or (self.arg2_is_expression and self.arg2 == 0x00000000):
             self.unresolved_symbols.append('NULL')
