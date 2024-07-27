@@ -455,6 +455,9 @@ class CommandIf(CommandWithIntExpressionArgument):
             for cmd in self.false_cmds:
                 cmd.set_addr(false_address + addr_offset)
                 addr_offset += cmd.size()
+        
+        if self.false_cmds:
+            self.goto_cmd.arg1 = false_address + addr_offset
 
     def cmd_list(self) -> list:
         if not self.resolve():
