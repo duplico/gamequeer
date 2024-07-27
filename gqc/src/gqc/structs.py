@@ -239,6 +239,7 @@ GQ_RESERVED_INTS = [
     GqReservedVariable('GQI_LABEL4_X', 'int', 'Label 4 X', 0x000050),
     GqReservedVariable('GQI_LABEL4_Y', 'int', 'Label 4 Y', 0x000054),
     GqReservedVariable('GQI_LABEL_FLAGS', 'int', 'Label flags', 0x000058),
+    GqReservedVariable('GQI_PLAYER_ID', 'int', 'Player ID', 0x00005C),
 ]
 
 GQ_RESERVED_STRS = [

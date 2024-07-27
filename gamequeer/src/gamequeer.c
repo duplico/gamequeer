@@ -53,6 +53,8 @@ t_gq_int *label_y[4] = {
 
 t_gq_int *label_flags = (t_gq_int *) &gq_builtin_ints[GQI_LABEL_FLAGS * GQ_INT_SIZE];
 
+t_gq_int *player_id = (t_gq_int *) &gq_builtin_ints[GQI_PLAYER_ID * GQ_INT_SIZE];
+
 char *game_title = (char *) &gq_builtin_strs[GQS_GAME_TITLE * GQ_STR_SIZE];
 
 char *labels[4] = {
@@ -182,6 +184,8 @@ uint8_t load_game() {
     if (!gq_memcpy_to_ram((uint8_t *) &game, GQ_PTR(GQ_PTR_NS_CART, 0), sizeof(gq_header))) {
         return 0;
     }
+
+    *player_id = 0; // TODO: Move
 
     *game_id    = game.id;
     *game_color = game.color;

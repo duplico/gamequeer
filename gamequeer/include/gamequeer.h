@@ -155,6 +155,7 @@ typedef enum gq_special_var_int {
     GQI_LABEL4_X,
     GQI_LABEL4_Y,
     GQI_LABEL_FLAGS,
+    GQI_PLAYER_ID,
     GQI_COUNT
 } gq_special_var_int;
 
