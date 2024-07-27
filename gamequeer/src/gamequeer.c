@@ -111,6 +111,7 @@ void menu_close() {
 
     *menu_active = 0;
     free(menu_current);
+    GQ_EVENT_SET(GQ_EVENT_REFRESH);
 }
 
 /**
@@ -168,10 +169,8 @@ uint8_t load_stage(t_gq_pointer stage_ptr) {
     }
     *label_flags = 0;
 
-    if (timer_active) {
-        // If a timer is active, stop it.
-        timer_active = 0;
-    }
+    // If a timer is active, stop it.
+    timer_active = 0;
 
     // Set stage entry event flag
     GQ_EVENT_SET(GQ_EVENT_ENTER);
@@ -529,6 +528,7 @@ void run_code(t_gq_pointer code_ptr) {
     }
 
     do {
+        // TODO: bounds checking for the code_ptr
         gq_memcpy_to_ram((uint8_t *) &cmd, code_ptr, sizeof(gq_op));
         opcode = (gq_op_code) cmd.opcode;
 
@@ -680,12 +680,14 @@ void handle_events() {
                         // Move the selection up
                         if (menu_option_selected > 0) {
                             menu_option_selected--;
+                            GQ_EVENT_SET(GQ_EVENT_REFRESH);
                         }
                         break;
                     case GQ_EVENT_BUTTON_R:
                         // Move the selection down
                         if (menu_option_selected < menu_current->option_count - 1) {
                             menu_option_selected++;
+                            GQ_EVENT_SET(GQ_EVENT_REFRESH);
                         }
                         break;
                     default:
