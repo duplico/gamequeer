@@ -161,12 +161,10 @@ def build_game_parser():
     event_statements = pp.Forward()
     
     # Assignments and expressions
-    badge_get = pp.Forward()
-    
     int_operand = identifier | integer
     int_operand.set_parse_action(parse_int_operand)
-    int_expression = badge_get | pp.infix_notation(int_operand, [
-        (pp.oneOf('! - ~'), 1, pp.opAssoc.RIGHT),
+    int_expression = pp.infix_notation(int_operand, [
+        (pp.oneOf('! - ~ badge_get'), 1, pp.opAssoc.RIGHT),
         (pp.one_of('* / %'), 2, pp.opAssoc.LEFT),
         (pp.one_of('+ -'), 2, pp.opAssoc.LEFT),
         (pp.one_of('<< >>'), 2, pp.opAssoc.LEFT),
@@ -179,7 +177,7 @@ def build_game_parser():
     ])
     int_expression.set_parse_action(parse_int_expression)
     int_assignment = pp.Keyword("=") - int_expression - pp.Suppress(";")
-    
+
     string_literal = pp.QuotedString('"').setName("string_literal")
     string_literal.set_parse_action(parse_str_literal)
     string_cast = pp.Group(pp.Suppress("str") - pp.Suppress("(") - int_expression - pp.Suppress(")"))
@@ -205,8 +203,6 @@ def build_game_parser():
     # Other commands
     badge_set = pp.Group(pp.Keyword("badge_set") - int_expression - pp.Suppress(";"))
     badge_clear = pp.Group(pp.Keyword("badge_clear") - int_expression - pp.Suppress(";"))
-    
-    badge_get << pp.Group(pp.Keyword("badge_get") - pp.Suppress("(") - int_expression - pp.Suppress(")"))
 
     play_type = pp.Group(pp.Keyword("bganim") | (pp.Keyword("fganim") | pp.Keyword("fgmask")) - pp.Suppress("(") - integer - pp.Suppress(")"))
     play = pp.Group(pp.Keyword("play") - play_type - identifier - pp.Suppress(";"))
