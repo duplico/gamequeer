@@ -50,7 +50,7 @@ def compile(input : pathlib.Path, no_mem_map : bool, out_dir : pathlib.Path):
     #  out_path/
     #  ├── assets/
     #  │   ├── animations/
-    #  │   └── lightcues/
+    #  │   └── lighting/
     #  ├── map.txt
     #  └── <game_name>.gqgame
 
@@ -83,7 +83,7 @@ def init_dir(base_dir : pathlib.Path, force : bool):
     directory_tree = [
         'assets',
         'assets/animations/',
-        'assets/lightcues/',
+        'assets/lighting/',
         'build',
         'games'
     ]
