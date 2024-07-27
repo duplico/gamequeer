@@ -179,6 +179,10 @@ def parse_lightcue_definition_section(instring, loc, toks):
         cue_source = pathlib.Path() / 'assets' / 'lighting' / cue[1]
 
         print(f"[blue]Light cue [italic]{cue_name}[/italic][/blue] from [underline]{cue_source}[/underline]")
+        
+        if not cue_source.exists():
+            raise GqcParseError(f"Light cue {cue_name} source {cue_source} not found", instring, loc)
+        
         with open(cue_source, 'r') as f:
             parsed_cue = parse_cue(f)
         try:
