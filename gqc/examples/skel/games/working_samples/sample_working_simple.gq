@@ -46,7 +46,9 @@ animations {
         frame_rate = 28;
     }
 
-    george3 <- "printer.jpg";
+    george3 <- "printer.jpg" {
+        duration = 500;
+    }
 }
 
 lightcues {
