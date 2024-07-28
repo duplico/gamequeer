@@ -62,36 +62,39 @@ stage start {
         play bganim george3;
         cue flash;
 
-        A = B + D + -5 - 7;
+        // A = B + D + -5 - 7;
 
-        game_name := "foobar";
-        D = !(badge_id == 17);
+        // game_name := "foobar";
+        // D = !(badge_id == 17);
 
         if (badge_get(badge_id)) {
             badge_clear badge_id;
         } else {
             badge_set badge_id;
         }
-        A = - - 5;
+        // A = - - 5;
 
-        B = 1 ^ 3;
-        C = 1 | 3;
-        A = 1 & 2;
-        A = ~A;
+        // B = 1 ^ 3;
+        // C = 1 | 3;
+        // A = 1 & 2;
+        // A = ~A;
 
-        if (!D) {
-            badge_id = 17;
-            A = B + 3;
-        } else if (D)
-            badge_id = 18;
+        // if (!D) {
+        //     badge_id = 17;
+        //     A = B + 3;
+        // } else if (D)
+        //     badge_id = 18;
         
+        badge_id = 0;
         loop {
-            badge_id = badge_id + 1 + B - 1;
+            badge_id = badge_id + 1;
 
             if (badge_id == 50) {
                 break;
             }
         }
+
+        A = 10 + badge_get(badge_id);
 
         temp_str := str(badge_id);
         display_text := "Hello, ID" + temp_str + "!";
@@ -105,6 +108,12 @@ stage start {
     event timer {
         GQI_FGANIM1_X = GQI_FGANIM1_X + 1;
         GQI_FGANIM1_Y = GQI_FGANIM1_Y + 1;
+        if (GQI_FGANIM1_X > 128) {
+            GQI_FGANIM1_X = -128;
+        }
+        if (GQI_FGANIM1_Y > 128) {
+            GQI_FGANIM1_Y = -128;
+        }
         timer timer_speed;
     }
 
@@ -133,6 +142,11 @@ stage selfie {
         GQI_BGANIM_X = 16;
         GQI_BGANIM_Y = 16;
         play bganim george;
+
+        GQI_LABEL1_X = 16;
+        GQI_LABEL1_Y = 16;
+        GQS_LABEL1 := "Row 1!";
+        GQI_LABEL_FLAGS = 3;
 
         GQI_LABEL2_X = 16;
         GQI_LABEL2_Y = 64;
