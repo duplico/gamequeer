@@ -31,7 +31,7 @@ animation_definition_section = "animations" animation_assignments
 animation_assignments = animation_assignment | "{" animation_assignment* "}"
 animation_assignment = identifier <-:" file_source ";" | identifier <-:" file_source animation_options
 animation_options = animation_option | "{" animation_option* "}"
-animation_option = "frame_rate" "=" integer ";" | "dithering" ":=" string ";" | "w" "=" integer ";" | "h" "=" integer ";"
+animation_option = "frame_rate" "=" integer ";" | "dithering" ":=" string ";" | "w" "=" integer ";" | "h" "=" integer ";" | "duration" "=" integer ";"
 
 lightcue_definition_section = "lightcues" file_assignments
 
@@ -136,7 +136,7 @@ def build_game_parser():
     file_assignments = pp.Group(file_assignment | pp.Suppress("{") - pp.ZeroOrMore(file_assignment) - pp.Suppress("}"))
 
     # Animation sections
-    animation_option = pp.Group(pp.Keyword("frame_rate") - pp.Suppress("=") - integer - pp.Suppress(";") | pp.Keyword("dithering") - pp.Suppress(":=") - string - pp.Suppress(";")) | pp.Group(pp.Keyword("w") - pp.Suppress("=") - integer - pp.Suppress(";") | pp.Keyword("h") - pp.Suppress("=") - integer - pp.Suppress(";"))
+    animation_option = pp.Group(pp.Keyword("frame_rate") - pp.Suppress("=") - integer - pp.Suppress(";") | pp.Keyword("dithering") - pp.Suppress(":=") - string - pp.Suppress(";")) | pp.Group(pp.Keyword("w") - pp.Suppress("=") - integer - pp.Suppress(";") | pp.Keyword("h") - pp.Suppress("=") - integer - pp.Suppress(";")) | pp.Group(pp.Keyword("duration") - pp.Suppress("=") - integer - pp.Suppress(";"))
     animation_options = pp.Group(pp.Suppress(";") | animation_option | pp.Suppress("{") - pp.ZeroOrMore(animation_option) - pp.Suppress("}"))
     animation_assignment = pp.Group(identifier - pp.Suppress("<-") - file_source - animation_options)
     animation_assignments = pp.Group(animation_assignment | pp.Suppress("{") - pp.ZeroOrMore(animation_assignment) - pp.Suppress("}"))
