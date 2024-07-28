@@ -47,7 +47,7 @@ FileAssignment:
 
 // Animation definition section
 AnimationOption: 
-    'frame_rate' '=' framerate=INT ';' | 'dithering' ':=' dithering=STRING ';' | 'w' '=' width=INT ';' | 'h' '=' height=INT ';';
+    'frame_rate' '=' framerate=INT ';' | 'dithering' ':=' dithering=STRING ';' | 'w' '=' width=INT ';' | 'h' '=' height=INT ';' | 'duration' '=' duration=INT ';';
 AnimationAssignment:
     FileAssignment (AnimationOption? ';' | '{' anim_options=AnimationOption* '}');
 AnimationDefinitionSection:
