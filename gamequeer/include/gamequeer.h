@@ -86,8 +86,8 @@ typedef struct gq_anim_onscreen {
     uint16_t ticks;  // Number of ticks until the next frame
     uint16_t frame;  // Current frame
     uint16_t in_use; // Whether the animation is in use
-    uint8_t x;       // X position of the animation
-    uint8_t y;       // Y position of the animation
+    int16_t x;       // X position of the animation
+    int16_t y;       // Y position of the animation
     gq_anim anim;    // Animation playing
 } __attribute__((packed)) gq_anim_onscreen;
 
