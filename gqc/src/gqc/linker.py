@@ -44,10 +44,10 @@ def create_symbol_table(table_dest = sys.stdout, cmd_dest = sys.stdout):
 
     frame_count = sum([len(anim.frames) for anim in Animation.anim_table.values()])
 
-    heap_ptr_start = structs.gq_ptr_apply_ns(structs.GQ_PTR_NS_HEAP, 0x000000)
+    heap_ptr_start = 0
     heap_ptr_offset = 0
 
-    cart_ptr_start = structs.gq_ptr_apply_ns(structs.GQ_PTR_NS_CART, 0x000000)
+    cart_ptr_start = 0
     header_ptr_start = cart_ptr_start
     anim_ptr_start = header_ptr_start + structs.GQ_HEADER_SIZE
     stage_ptr_start = anim_ptr_start + len(Animation.anim_table) * structs.GQ_ANIM_SIZE
@@ -79,7 +79,7 @@ def create_symbol_table(table_dest = sys.stdout, cmd_dest = sys.stdout):
             frames_ptr_offset += structs.GQ_ANIM_FRAME_SIZE
         
         # Point the animation to its first frame in the frame table
-        anim.set_frame_pointer(anim.frames[0].addr)
+        anim.set_frame_pointer(structs.gq_ptr_get_addr(anim.frames[0].addr, expected_namespace=structs.GQ_PTR_NS_CART))
         # Place the animation into the animation table, updating the pointer offsets.
         anim.set_addr(anim_ptr_start + anim_ptr_offset)
         anim_ptr_offset += structs.GQ_ANIM_SIZE
@@ -256,6 +256,10 @@ def generate_code(parsed, symbol_table : dict):
         task = progress.add_task(f"Generating code", total=symbol_count)
         for table in symbol_table.values():
             for addr, symbol in table.items():
+                if next_expected_addr >= structs.gq_ptr_apply_ns(structs.GQ_PTR_NS_CART, 0xFFFFFF):
+                    print(f"OVERSIZE GAME ERROR: Address space exhausted at {next_expected_addr:#0{10}x}.", file=sys.stderr)
+                    exit(1)
+
                 if structs.gq_ptr_get_ns(addr) != structs.GQ_PTR_NS_CART:
                     # Only emit code for the cartridge.
                     continue
@@ -268,6 +272,7 @@ def generate_code(parsed, symbol_table : dict):
                 next_expected_addr += symbol.size()
                 output += symbol.to_bytes()
                 progress.update(task, advance=1)
+
         progress.update(task, completed=symbol_count)
     
     return output
