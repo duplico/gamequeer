@@ -260,9 +260,11 @@ def generate_code(parsed, symbol_table : dict):
                     # Only emit code for the cartridge.
                     continue
                 if addr != symbol.addr:
-                    raise ValueError(f"Symbol at address {addr:#0{10}x} has an address mismatch with its symbol table entry.")
+                    print(f"COMPILER ERROR: Symbol at address {addr:#0{10}x} has an address mismatch with its symbol table entry.", file=sys.stderr)
+                    exit(1)
                 if addr != next_expected_addr:
-                    raise ValueError(f"Symbol at address {addr:#0{10}x} is not contiguous with the previous symbol.")
+                    print(f"COMPILER ERROR: While working on symbol {symbol}, expected address {next_expected_addr:#0{10}x} but got {addr:#0{10}x}.", file=sys.stderr)
+                    exit(1)
                 next_expected_addr += symbol.size()
                 output += symbol.to_bytes()
                 progress.update(task, advance=1)
