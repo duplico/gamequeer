@@ -46,9 +46,7 @@ animations {
         frame_rate = 28;
     }
 
-    george3 <- "printer.jpg" {
-        duration = 500;
-    }
+    george3 <- "pbj.gif";
 }
 
 lightcues {
@@ -101,8 +99,8 @@ stage start {
         temp_str := str(badge_id);
         display_text := "Hello, ID" + temp_str + "!";
 
-        GQI_FGANIM1_X = 0;
-        GQI_FGANIM1_Y = 0;
+        GQI_FGANIM1_X = -96;
+        GQI_FGANIM1_Y = -96;
         play fganim(1) george;
         timer timer_speed;
     }
@@ -111,10 +109,10 @@ stage start {
         GQI_FGANIM1_X = GQI_FGANIM1_X + 1;
         GQI_FGANIM1_Y = GQI_FGANIM1_Y + 1;
         if (GQI_FGANIM1_X > 128) {
-            GQI_FGANIM1_X = -128;
+            GQI_FGANIM1_X = -96;
         }
         if (GQI_FGANIM1_Y > 128) {
-            GQI_FGANIM1_Y = -128;
+            GQI_FGANIM1_Y = -96;
         }
         timer timer_speed;
     }
@@ -123,7 +121,7 @@ stage start {
         cue flash;
 
     event bgdone {
-        badge_id = 6;
+        play bganim george3;
     }
 
     event fgdone(1) {
