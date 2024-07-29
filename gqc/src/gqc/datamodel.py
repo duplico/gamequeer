@@ -497,8 +497,8 @@ class Frame:
     link_table = dict() # OrderedDict not needed to remember order since Python 3.7
 
     image_formats = dict(
-        # IMAGE_FMT_1BPP_COMP_RLE7=0x71,
-        IMAGE_FMT_1BPP_COMP_RLE4=0x41,
+        IMAGE_FMT_1BPP_COMP_RLE7=0x71,
+        # IMAGE_FMT_1BPP_COMP_RLE4=0x41,
         IMAGE_FMT_1BPP_UNCOMP=0x01
     )
 
@@ -523,8 +523,8 @@ class Frame:
 
         # Now, determine which of these image types is the smallest:
         image_types = dict(
-            # IMAGE_FMT_1BPP_COMP_RLE7=self.image_rle7_bytes(), # Re-add once the C side supports it
-            IMAGE_FMT_1BPP_COMP_RLE4=self.image_rle4_bytes(),
+            IMAGE_FMT_1BPP_COMP_RLE7=self.image_rle7_bytes(),
+            # IMAGE_FMT_1BPP_COMP_RLE4=self.image_rle4_bytes(),
             IMAGE_FMT_1BPP_UNCOMP=self.uncompressed_bytes()
         )
 

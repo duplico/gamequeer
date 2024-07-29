@@ -4,8 +4,8 @@
 #include <gfx.h>
 #include <grlib.h>
 
-#define OLED_VERTICAL_MAX   128
-#define OLED_HORIZONTAL_MAX 128
+#define OLED_VERTICAL_MAX   127
+#define OLED_HORIZONTAL_MAX 127
 
 #define LEDS_W 20
 #define LEDS_H (OLED_VERTICAL_MAX / 5)

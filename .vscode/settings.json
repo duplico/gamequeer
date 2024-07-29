@@ -9,7 +9,8 @@
     "files.associations": {
       "stdbool.h": "c",
       "gamequeer_bytecode.h": "c",
-      "grlib.h": "c"
+      "grlib.h": "c",
+      "stdint.h": "c"
     },
     "cmake.generator": "Unix Makefiles",
     "cmake.sourceDirectory": "${workspaceFolder}/gamequeer",

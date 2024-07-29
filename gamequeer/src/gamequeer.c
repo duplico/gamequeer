@@ -266,7 +266,7 @@ void draw_oled_stack() {
                 break;
         }
 
-        // Load the current frame
+        // Load the current frame metadata
         if (!gq_memcpy_to_ram(
                 (uint8_t *) &frame_current,
                 current_animations[i].anim.frame_pointer + current_animations[i].frame * sizeof(gq_anim_frame),
@@ -275,24 +275,14 @@ void draw_oled_stack() {
         }
 
         // Draw the frame on the screen
-        Graphics_Image img;
-        img.bPP       = frame_current.bPP;
-        img.xSize     = current_animations[i].anim.width;
-        img.ySize     = current_animations[i].anim.height;
-        img.numColors = 2;
-        img.pPalette  = palette_bw;
-
-        // Load the frame data
-        frame_data = (uint8_t *) malloc(frame_current.data_size);
-        if (!gq_memcpy_to_ram(frame_data, frame_current.data_pointer, frame_current.data_size)) {
-            free(frame_data);
-            return;
-        }
-
-        img.pPixel = frame_data;
-
-        Graphics_drawImage(&g_sContext, &img, current_animations[i].x, current_animations[i].y);
-        free(frame_data);
+        gq_draw_image(
+            &g_sContext,
+            frame_current.data_pointer,
+            frame_current.bPP,
+            current_animations[i].anim.width,
+            current_animations[i].anim.height,
+            current_animations[i].x,
+            current_animations[i].y);
     }
 
     // Draw the labels

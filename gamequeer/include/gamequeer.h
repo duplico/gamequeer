@@ -230,5 +230,13 @@ void led_tick();
 void led_play_cue(t_gq_pointer cue_ptr, uint8_t background);
 void led_stop();
 void handle_events();
+void gq_draw_image(
+    const Graphics_Context *context,
+    t_gq_pointer image_bytes,
+    int16_t bPP,
+    int16_t width,
+    int16_t height,
+    t_gq_int x,
+    t_gq_int y);
 
 #endif

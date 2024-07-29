@@ -29,6 +29,7 @@ add_executable(
     src/gamequeer.c
     src/HAL.c
     src/leds.c
+    src/oled.c
     # Graphics driver:
     src/grlib_gfx_driver/grlib_gfx_driver.c
     # gfx (Linux graphics library) sources:
