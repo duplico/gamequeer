@@ -33,6 +33,11 @@ def gq_ptr_apply_ns(ns, ptr):
         
     # TODO: Add a check to ensure that the namespace byte isn't already
     #       set in the address.
+    if ptr & GQ_PTR_NS_MASK:
+        print(f"ERROR: Attempting to set namespace on pointer {ptr:x} with namespace already set.")
+        print(f"       This can also occur in the case of a namespace overflow. It's likely that")
+        print(f"       this code section has exceeded the allowable size.")
+        exit(1)
     return (ns << 24) | (ptr & 0x00FFFFFF)
 
 def gq_ptr_get_ns(ptr):
