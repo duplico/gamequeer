@@ -7,192 +7,152 @@
 #include <gamequeer.h>
 
 void gq_draw_image(
-    const Graphics_Context *context, t_gq_pointer image, uint8_t width, uint8_t height, t_gq_int x, t_gq_int y) {
+    const Graphics_Context *context,
+    t_gq_pointer image_bytes,
+    int16_t bPP,
+    int16_t width,
+    int16_t height,
+    t_gq_int x,
+    t_gq_int y) {
+    // TODO: Add palette support.
+
     uint8_t render_byte;
-    int16_t bPP;
     const uint32_t palette[2] = {0, 1};
-}
+    int16_t x0, x1, x2;
+    uint16_t x_bit_offset, x_byte_offset, x_pixel_offset;
+    uint8_t y_offset = 0;
 
-/// More appropriate replacement function for Graphics_drawImage.
-void qc16gr_drawImage(const Graphics_Context *context, const Graphics_Image *bitmap, int16_t x, int16_t y) {
-    int16_t bPP, width, height, x0, x1, x2;
-    const uint32_t palette[2] = {0, 1};
-    const uint8_t *image;
+    uint8_t pixel_value;
+    uint8_t pixel_repeat;
+    uint8_t rle_type;
 
-    //
-    // Check the arguments.
-    //
-    assert(context);
-    assert(bitmap);
-
-    //
-    // Get the image format from the image data.
-    //
-    bPP = bitmap->bPP;
-
-    assert((bPP & 0x0f) == 1);
-
-    //
-    // Get the image width from the image data.
-    //
-    width = bitmap->xSize;
-
-    //
-    // Get the image height from the image data.
-    //
-    height = bitmap->ySize;
-
-    //
     // Return without doing anything if the entire image lies outside the
     // current clipping region.
-    //
     if ((x > context->clipRegion.xMax) || ((x + width - 1) < context->clipRegion.xMin) ||
         (y > context->clipRegion.yMax) || ((y + height - 1) < context->clipRegion.yMin)) {
         return;
     }
 
-    //
-    // Get the starting X offset within the image based on the current clipping
-    // region.
-    //
+    // Get the starting X offset within the image based on the current clipping region.
     if (x < context->clipRegion.xMin) {
         x0 = context->clipRegion.xMin - x;
     } else {
         x0 = 0;
     }
 
-    //
-    // Get the ending X offset within the image based on the current clipping
-    // region.
-    //
+    // Get the ending X offset within the image based on the current clipping region.
     if ((x + width - 1) > context->clipRegion.xMax) {
         x2 = context->clipRegion.xMax - x;
     } else {
         x2 = width - 1;
     }
 
-    //
-    // Reduce the height of the image, if required, based on the current
-    // clipping region.
-    //
+    // Reduce the height of the image, if required, based on the current clipping region.
     if ((y + height - 1) > context->clipRegion.yMax) {
         height = context->clipRegion.yMax - y + 1;
     }
 
-    // Check if palette is not valid
-    if (!palette) {
-        return;
-    }
+    if (bPP == 1) {
+        // Image is uncompressed; 1 bit per pixel.
 
-    //
-    // Get the image pixels from the image data.
-    //
-    image = bitmap->pPixel;
-
-    //
-    // Check if the image is not compressed.
-    //
-    if (!(bPP & 0xF0)) {
-        //
-        // The image is not compressed.  See if the top portion of the image
-        // lies above the clipping region.
-        //
+        // First, check to see if the top of the image needs to be cut off (and we need to skip ahead)
         if (y < context->clipRegion.yMin) {
-            //
             // Determine the number of rows that lie above the clipping region.
-            //
-            x1 = context->clipRegion.yMin - y;
+            y_offset = context->clipRegion.yMin - y;
 
-            //
-            // Skip past the data for the rows that lie above the clipping
-            // region.
-            //
-            image += (((width * bPP) + 7) / 8) * x1;
-
-            //
-            // Decrement the image height by the number of skipped rows.
-            //
-            height -= x1;
-
-            //
-            // Increment the starting Y coordinate by the number of skipped
-            // rows.
-            //
-            y += x1;
+            // Skip past the data for the rows that lie above the clipping region.
+            // image_bytes += (((width * bPP) + 7) / 8) * y_offset;
         }
 
-        while (height--) {
-            //
-            // Draw this row of image pixels.
-            //
-            Graphics_drawMultiplePixelsOnDisplay(
-                context->display, x + x0, y, x0 & 7, x2 - x0 + 1, bPP, image + ((x0 * bPP) / 8), palette);
+        while (y_offset < height) {
+            // Draw this row of image pixels, starting at x0 and ending at x2.
+            // Draw the pixels.
+            x_pixel_offset = x0;
+            x_bit_offset   = x0 % 8;
+            x_byte_offset  = y_offset * (width / 8) + (x0 / 8);
 
-            //
-            // Skip past the data for this row.
-            //
-            image += ((width * bPP) + 7) / 8;
+            while (x_pixel_offset <= x2) {
+                // Read the byte from the image data.
+                render_byte = read_byte(image_bytes + x_byte_offset);
 
-            //
-            // Increment the Y coordinate.
-            //
-            y++;
+                // Draw the current byte's worth of pixels (up to 8):
+                while (x_bit_offset < 8 && x_pixel_offset <= x2) {
+                    // Draw the pixel.
+                    Graphics_drawPixelOnDisplay(
+                        context->display,
+                        x + x_pixel_offset,
+                        y + y_offset,
+                        palette[(render_byte >> (7 - x_bit_offset)) & 0x01]);
+
+                    // Increment the pixel offset.
+                    x_pixel_offset++;
+                    x_bit_offset++;
+                }
+
+                x_bit_offset = 0;
+                x_byte_offset++;
+            }
+
+            y_offset++;
         }
     } else {
-        //
-        // The image is compressed with RLE4, RLE7 or RLE8 Algorithm
-        //
-
-        const uint8_t *pucData = image;
-        uint8_t ucRunLength, rleType;
-        uint16_t uiColor;
-
-        rleType = (bPP >> 4) & 0x0F;
-        bPP &= 0x0F;
-
-        uint16_t x_offset = 0;
-        uint16_t y_offset = 0;
+        // Image is compressed; RLE4 or RLE7
+        rle_type       = (bPP >> 4) & 0x0F;
+        x_pixel_offset = 0;
+        y_offset       = 0;
 
         do {
-            if (rleType == 8) // RLE 8 bit encoding
-            {
-                // Read Run Length
-                ucRunLength = *pucData++;
-                // Read Color Pointer
-                uiColor = *pucData++;
-            } else if (rleType == 7) // RLE 7 bit encoding
-            {
-                // Read Run Length
-                ucRunLength = (*pucData) >> 1;
-                // Read Color Pointer
-                uiColor = (*pucData++) & 0x01;
-            } else // rleType = 4; RLE 4 bit encoding
-            {
-                // Read Run Length
-                ucRunLength = (*pucData) >> 4;
-                // Read Color Pointer
-                uiColor = (*pucData++) & 0x0F;
+            render_byte = read_byte(image_bytes);
+            image_bytes++;
+
+            if (rle_type == 7) {
+                // RLE 7 bit encoding
+                pixel_repeat = (render_byte >> 1) + 1;
+                pixel_value  = render_byte & 0x01;
+            } else if (rle_type == 4) {
+                // TODO: We probably won't ever need this.
+                // RLE 4 bit encoding
+                pixel_repeat = (render_byte >> 4) + 1;
+                pixel_value  = render_byte & 0x0F;
+            } else {
+                // Invalid RLE type.
+                return;
             }
-            uiColor = (uint16_t) palette[uiColor];
 
-            // 0 = 1 pixel; 15 = 16, etc:
-            ucRunLength++;
-
-            while (ucRunLength--) {
-                Graphics_drawPixelOnDisplay(context->display, x + x_offset, y + y_offset, uiColor);
-
-                x_offset++;
-
-                if (x_offset == width) {
-                    x_offset = 0;
+            while (pixel_repeat--) {
+                if (x_pixel_offset == width) {
+                    x_pixel_offset = 0;
                     y_offset++;
-                    if (y_offset == height) {
-                        // done.
-                        break;
+
+                    if (y + y_offset > context->clipRegion.yMax) {
+                        return;
                     }
                 }
-            }
 
-        } while (y_offset < height);
+                if (x < x0) {
+                    x_pixel_offset++;
+                    continue;
+                }
+
+                if (x > x2) {
+                    x_pixel_offset++;
+                    continue;
+                }
+
+                if (y + y_offset < context->clipRegion.yMin) {
+                    x_pixel_offset++;
+                    continue;
+                }
+
+                if (y + y_offset > context->clipRegion.yMax || y_offset >= height) {
+                    // We're done here.
+                    return;
+                }
+
+                // If we're here, then (x,y) is inside the clipping region.
+                Graphics_drawPixelOnDisplay(context->display, x + x_pixel_offset, y + y_offset, palette[pixel_value]);
+                x_pixel_offset++;
+            }
+        } while (1);
     }
 }
