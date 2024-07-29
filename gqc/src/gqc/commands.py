@@ -447,13 +447,13 @@ class CommandIf(CommandWithIntExpressionArgument):
 
         addr_offset = 0
         for cmd in self.true_cmds:
-            cmd.set_addr(self.addr + super().size() + addr_offset)
+            cmd.set_addr(addr + super().size() + addr_offset, namespace)
             addr_offset += cmd.size()
         
         addr_offset = 0
         if self.false_cmds:
             for cmd in self.false_cmds:
-                cmd.set_addr(false_address + addr_offset)
+                cmd.set_addr(structs.gq_ptr_get_addr(false_address + addr_offset, expected_namespace=namespace), namespace)
                 addr_offset += cmd.size()
         
         if self.false_cmds:
@@ -519,7 +519,7 @@ class CommandLoop(Command):
 
         addr_offset = 0
         for cmd in self.commands:
-            cmd.set_addr(self.addr + addr_offset)
+            cmd.set_addr(addr + addr_offset, namespace)
             addr_offset += cmd.size()
 
     def resolve(self):

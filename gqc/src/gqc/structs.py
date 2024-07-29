@@ -1,3 +1,4 @@
+import sys
 import math
 import struct
 from collections import namedtuple
@@ -27,23 +28,33 @@ GQ_PTR_BUILTIN_STR = 0x81
 GQ_MAGIC_SIZE = 4
 GQ_MAGIC = b'GQ01'
 
+namespace_overflow_warned = False
+addr_wrong_namespace_warned = False
+
 def gq_ptr_apply_ns(ns, ptr):
     if ns < 0 or ns > 0xFF:
         raise ValueError(f'Invalid namespace {ns}')
         
-    # TODO: Add a check to ensure that the namespace byte isn't already
-    #       set in the address.
-    if ptr & GQ_PTR_NS_MASK:
-        print(f"ERROR: Attempting to set namespace on pointer {ptr:x} with namespace already set.")
-        print(f"       This can also occur in the case of a namespace overflow. It's likely that")
-        print(f"       this code section has exceeded the allowable size.")
-        exit(1)
+    global namespace_overflow_warned
+    if ptr & GQ_PTR_NS_MASK and not namespace_overflow_warned:
+        print(f"WARNING: Attempting to set namespace on pointer {ptr:x} with namespace already set.")
+        print(f"         This can also occur in the case of a namespace overflow. It's likely that")
+        print(f"         this code section has exceeded the allowable size.")
+        print(f"         Additional warnings of this type will be suppressed.")
+        namespace_overflow_warned = True
+
     return (ns << 24) | (ptr & 0x00FFFFFF)
 
 def gq_ptr_get_ns(ptr):
     return (ptr & GQ_PTR_NS_MASK) >> 24
 
-def gq_ptr_get_addr(ptr):
+def gq_ptr_get_addr(ptr, expected_namespace=None):
+    global addr_wrong_namespace_warned
+    if expected_namespace is not None and gq_ptr_get_ns(ptr) != expected_namespace and not addr_wrong_namespace_warned:
+        print(f'INTERNAL COMPILER WARNING: Expected namespace {expected_namespace}, got {gq_ptr_get_ns(ptr)}', file=sys.stderr)
+        print(f'                           Additional warnings of this type will be suppressed.', file=sys.stderr)
+        addr_wrong_namespace_warned = True
+
     return ptr & 0x00FFFFFF
 
 T_GQ_INT_FORMAT = 'i'
