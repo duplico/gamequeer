@@ -140,14 +140,14 @@ def create_symbol_table(table_dest = sys.stdout, cmd_dest = sys.stdout):
         for event_type in structs.EventType:
             if event_type in stage.events:
                 event = stage.events[event_type]
-                event.set_addr(events_ptr_start + events_ptr_offset)
+                event.set_addr(events_ptr_start + events_ptr_offset, namespace=structs.GQ_PTR_NS_CART)
                 events_ptr_offset += event.size()
 
 
     init_ptr_start = events_ptr_start + events_ptr_offset
     init_ptr_offset = 0
     init_table = dict()
-    Game.game.startup_code_ptr = init_ptr_start
+    Game.game.startup_code_ptr = structs.gq_ptr_apply_ns(structs.GQ_PTR_NS_CART, init_ptr_start)
 
     # Generate the volatile variables' initialization code.
     for var in list(Variable.storageclass_table['volatile'].values()):
@@ -159,7 +159,7 @@ def create_symbol_table(table_dest = sys.stdout, cmd_dest = sys.stdout):
     
     # Terminate the init code with a DONE
     done_cmd = CommandDone()
-    done_cmd.set_addr(init_ptr_start + init_ptr_offset)
+    done_cmd.set_addr(init_ptr_start + init_ptr_offset, namespace=structs.GQ_PTR_NS_CART)
     init_table[done_cmd.addr] = done_cmd
     init_ptr_offset += done_cmd.size()
 
