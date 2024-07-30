@@ -34,7 +34,9 @@
 #define MAX_CONCURRENT_ANIMATIONS 5
 #define GQ_HEAP_SIZE              0x200
 
-#define GQ_MENU_MAX_OPTIONS 6
+#define GQ_MENU_MAX_OPTIONS          6
+#define GQ_MENU_FLAG_MULTIPLE_CHOICE 1
+#define GQ_MENU_FLAG_TEXT            2
 
 #define BADGES_ALLOWED 320
 
@@ -167,6 +169,7 @@ typedef enum gq_special_var_str {
     GQS_LABEL2,
     GQS_LABEL3,
     GQS_LABEL4,
+    GQS_TEXTMENU_RESULT,
     GQS_COUNT
 } gq_special_var_str;
 

@@ -270,6 +270,7 @@ GQ_RESERVED_STRS = [
     GqReservedVariable('GQS_LABEL2', 'str', 'Label 2', 3 * GQ_STR_SIZE),
     GqReservedVariable('GQS_LABEL3', 'str', 'Label 3', 4 * GQ_STR_SIZE),
     GqReservedVariable('GQS_LABEL4', 'str', 'Label 4', 5 * GQ_STR_SIZE),
+    GqReservedVariable('GQS_TEXTMENU_RESULT', 'str', 'Text menu result', 6 * GQ_STR_SIZE),
 ]
 
 GQ_RESERVED_PERSISTENT = []

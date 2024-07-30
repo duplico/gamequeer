@@ -64,7 +64,10 @@ char *labels[4] = {
     (char *) &gq_builtin_strs[GQS_LABEL4 * GQ_STR_SIZE],
 };
 
-gq_menu *menu_current;
+char *textmenu_result = (char *) &gq_builtin_strs[GQS_TEXTMENU_RESULT * GQ_STR_SIZE];
+
+uint8_t menu_current_buffer[GQ_INT_SIZE + GQ_MENU_MAX_OPTIONS * sizeof(gq_menu_option)];
+gq_menu *menu_current = (gq_menu *) menu_current_buffer;
 char menu_current_prompt[GQ_STR_SIZE];
 uint8_t menu_offset_y        = 0;
 uint8_t menu_option_selected = 0;
@@ -87,7 +90,6 @@ void menu_load(t_gq_pointer menu_ptr, t_gq_pointer menu_prompt) {
     menu_size = GQ_INT_SIZE + menu_option_count * sizeof(gq_menu_option);
 
     // Load the menu into RAM.
-    menu_current = (gq_menu *) malloc(menu_size);
     gq_memcpy_to_ram((uint8_t *) menu_current, menu_ptr, menu_size);
 
     // Load the menu prompt into RAM.
@@ -110,7 +112,6 @@ void menu_close() {
     }
 
     *menu_active = 0;
-    free(menu_current);
     GQ_EVENT_SET(GQ_EVENT_REFRESH);
 }
 
@@ -308,7 +309,7 @@ void draw_oled_stack() {
     }
 
     // Then, draw the menu, if there is one.
-    if (*menu_active) {
+    if (*menu_active == GQ_MENU_FLAG_MULTIPLE_CHOICE) {
         Graphics_Rectangle menu_background = {0, 0, 128, menu_offset_y + menu_current->option_count * 10};
         Graphics_setBackgroundColor(&g_sContext, GRAPHICS_COLOR_WHITE);
         Graphics_setForegroundColor(&g_sContext, GRAPHICS_COLOR_BLACK);
@@ -668,44 +669,52 @@ void run_code(t_gq_pointer code_ptr) {
     } while (cmd.opcode != GQ_OP_DONE);
 }
 
+uint8_t handle_event_menu(uint16_t event_type) {
+    switch (event_type) {
+        GQ_EVENT_SET(GQ_EVENT_REFRESH); // TODO: Only sometimes?
+        case GQ_EVENT_BUTTON_A:
+            // Select the current menu option
+            *menu_value = menu_current->options[menu_option_selected].value;
+            menu_close();
+            GQ_EVENT_SET(GQ_EVENT_MENU);
+            break;
+        case GQ_EVENT_BUTTON_B:
+            // Cancel the menu
+            menu_close();
+            break;
+        case GQ_EVENT_BUTTON_L:
+            // Move the selection up
+            if (menu_option_selected > 0) {
+                menu_option_selected--;
+                GQ_EVENT_SET(GQ_EVENT_REFRESH);
+            }
+            break;
+        case GQ_EVENT_BUTTON_R:
+            // Move the selection down
+            if (menu_option_selected < menu_current->option_count - 1) {
+                menu_option_selected++;
+                GQ_EVENT_SET(GQ_EVENT_REFRESH);
+            }
+            break;
+        default:
+            return 0;
+            break;
+    }
+    return 1;
+}
+
 void handle_events() {
     for (uint16_t event_type = 0x0000; event_type < GQ_EVENT_COUNT; event_type++) {
         if (GQ_EVENT_GET(event_type)) {
             GQ_EVENT_CLR(event_type);
             // If we're in a menu, hijack button events to navigate the menu.
             if (*menu_active) {
-                switch (event_type) {
-                    GQ_EVENT_SET(GQ_EVENT_REFRESH); // TODO: Only sometimes?
-                    case GQ_EVENT_BUTTON_A:
-                        // Select the current menu option
-                        *menu_value = menu_current->options[menu_option_selected].value;
-                        menu_close();
-                        GQ_EVENT_SET(GQ_EVENT_MENU);
-                        break;
-                    case GQ_EVENT_BUTTON_B:
-                        // Cancel the menu
-                        menu_close();
-                        break;
-                    case GQ_EVENT_BUTTON_L:
-                        // Move the selection up
-                        if (menu_option_selected > 0) {
-                            menu_option_selected--;
-                            GQ_EVENT_SET(GQ_EVENT_REFRESH);
-                        }
-                        break;
-                    case GQ_EVENT_BUTTON_R:
-                        // Move the selection down
-                        if (menu_option_selected < menu_current->option_count - 1) {
-                            menu_option_selected++;
-                            GQ_EVENT_SET(GQ_EVENT_REFRESH);
-                        }
-                        break;
-                    default:
-                        goto unblocked_events;
-                        break;
-                }
+                if (!handle_event_menu(event_type))
+                    goto unblocked_events;
                 continue;
             }
+
+            // Or else, if we're in a TEXT menu, do the same:
 
         unblocked_events:
             if (event_type == GQ_EVENT_REFRESH) {
