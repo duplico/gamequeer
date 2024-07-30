@@ -47,7 +47,8 @@ menu_option = INT ":" STRING ";"
 
 stage_definition_section = "stage" identifier stage_options
 stage_options = stage_option | "{" stage_option* "}"
-stage_option = stage_bganim | stage_bgcue | stage_menu | stage_event
+stage_option = stage_bganim | stage_bgcue | stage_menu | stage_event | stage_textmenu
+stage_textmenu = "textmenu" ["prompt" STRING] ";"
 stage_bganim = "bganim" identifier ";"
 stage_bgcue = "bgcue" identifier ";"
 stage_menu = "menu" identifier ";" | "menu" identifier "prompt" STRING ";"
@@ -226,8 +227,9 @@ def build_game_parser():
     stage_bganim = pp.Group(pp.Keyword("bganim") - identifier - pp.Suppress(";"))
     stage_bgcue = pp.Group(pp.Keyword("bgcue") - identifier - pp.Suppress(";"))
     stage_menu = pp.Suppress("menu") - identifier - pp.Optional(pp.Suppress("prompt") - string_operand) - pp.Suppress(";")
+    stage_textmenu = pp.Group(pp.Keyword("textmenu") - pp.Optional(pp.Keyword("prompt") - string_operand) - pp.Suppress(";"))
     stage_event = pp.Group(pp.Keyword("event") - event_type - event_statements)
-    stage_option = stage_bganim | stage_bgcue | stage_menu | stage_event
+    stage_option = stage_bganim | stage_bgcue | stage_menu | stage_event | stage_textmenu
     stage_options = pp.Group(stage_option | pp.Suppress("{") - pp.ZeroOrMore(stage_option) - pp.Suppress("}"))
     stage_definition_section = pp.Group(pp.Suppress("stage") - identifier - stage_options)
 

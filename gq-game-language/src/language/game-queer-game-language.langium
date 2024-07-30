@@ -131,13 +131,15 @@ StageEvent:
     'event' EventType StageCommands;
 StageMenu:
     'menu' menu=ID ('prompt' prompt=(ID | STRING))? ';';
+StageTextMenu:
+    'textmenu' ('prompt' prompt=(ID | STRING))? ';';
 StageBgAnim:
     'bganim' anim=ID ';';
 StageBgCue:
     'bgcue' cue=ID ';';
 
 StageOption:
-    StageEvent | StageMenu | StageBgAnim | StageBgCue;
+    StageEvent | StageMenu | StageTextMenu | StageBgAnim | StageBgCue;
 
 StageDefinition:
     'stage' name=ID (StageOption | '{' stage_opts=StageOption* '}');

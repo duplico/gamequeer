@@ -160,6 +160,14 @@ stage selfie {
 
     event timer {
         badge_id = 7;
+        gostage text;
+    }
+}
+
+stage text {
+    textmenu prompt "Type something";
+
+    event menu {
         gostage start;
     }
 }

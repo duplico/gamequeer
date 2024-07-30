@@ -159,11 +159,13 @@ uint8_t load_stage(t_gq_pointer stage_ptr) {
     }
 
     // Close the menu
-    menu_close(); // Sets GQ_EVENT_REFRESH
+    menu_close();
 
-    if (stage_current.menu_pointer) {
+    if (GQ_PTR_NS(stage_current.menu_pointer) == GQ_PTR_BUILTIN_MENU_FLAGS) {
+        // This special pointer type is used to indicate the menu is for textentry.
+    } else if (stage_current.menu_pointer) {
         // If this stage has a menu, load it.
-        menu_load(stage_current.menu_pointer, stage_current.menu_prompt_pointer);
+        menu_load(stage_current.menu_pointer, stage_current.prompt_pointer);
     }
 
     // Clean up labels.
@@ -180,6 +182,9 @@ uint8_t load_stage(t_gq_pointer stage_ptr) {
 
     // Set stage entry event flag
     GQ_EVENT_SET(GQ_EVENT_ENTER);
+
+    // Request a re-draw
+    GQ_EVENT_SET(GQ_EVENT_REFRESH);
 
     return 1;
 }

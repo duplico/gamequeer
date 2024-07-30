@@ -9,15 +9,16 @@
 #define GQ_STR_SIZE   22
 #define GQ_INT_SIZE   4
 
-#define GQ_PTR_NS_MASK     0xFF000000
-#define GQ_PTR_NS_NULL     0x00
-#define GQ_PTR_NS_CART     0x01
-#define GQ_PTR_NS_SAVE     0x02
-#define GQ_PTR_NS_FRAM     0x03
-#define GQ_PTR_NS_FBUF     0x04
-#define GQ_PTR_NS_HEAP     0x05
-#define GQ_PTR_BUILTIN_INT 0x80
-#define GQ_PTR_BUILTIN_STR 0x81
+#define GQ_PTR_NS_MASK            0xFF000000
+#define GQ_PTR_NS_NULL            0x00
+#define GQ_PTR_NS_CART            0x01
+#define GQ_PTR_NS_SAVE            0x02
+#define GQ_PTR_NS_FRAM            0x03
+#define GQ_PTR_NS_FBUF            0x04
+#define GQ_PTR_NS_HEAP            0x05
+#define GQ_PTR_BUILTIN_INT        0x80
+#define GQ_PTR_BUILTIN_STR        0x81
+#define GQ_PTR_BUILTIN_MENU_FLAGS 0x82
 
 #define GQ_PTR_NS(POINTER)     ((POINTER & GQ_PTR_NS_MASK) >> 24)
 #define GQ_PTR_ADDR(POINTER)   (POINTER & ~GQ_PTR_NS_MASK)
@@ -199,7 +200,7 @@ typedef struct gq_stage {
     t_gq_pointer anim_bg_pointer;                // Pointer to the background animation (NULL if none)
     t_gq_pointer cue_bg_pointer;                 // Pointer to the background lighting cue (NULL if none)
     t_gq_pointer menu_pointer;                   // Pointer to the menu definition for this stage
-    t_gq_pointer menu_prompt_pointer;            // Pointer to the prompt for the menu
+    t_gq_pointer prompt_pointer;                 // Pointer to the prompt for the menu
     t_gq_pointer event_commands[GQ_EVENT_COUNT]; // Event commands
 } __attribute__((packed)) gq_stage;
 

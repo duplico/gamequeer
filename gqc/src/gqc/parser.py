@@ -67,6 +67,12 @@ def parse_stage_definition(instring, loc, toks):
             if 'menu' in stage_kwargs:
                 raise GqcParseError(f"Duplicate menu definition for stage {name}", instring, loc)
             stage_kwargs['menu'] = stage_option
+        elif stage_option[0] == 'textmenu':
+            if 'textmenu' in stage_kwargs:
+                raise GqcParseError(f"Duplicate textmenu definition for stage {name}", instring, loc)
+            stage_kwargs['textentry'] = True
+            if len(stage_option) == 3:
+                stage_kwargs['textentry_prompt'] = stage_option[2]
         elif stage_option[0] in stage_kwargs:
             raise GqcParseError(f"Duplicate option {stage_option[0]} for stage {name}", instring, loc)
         else:
