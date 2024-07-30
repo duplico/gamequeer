@@ -81,7 +81,23 @@ const uint32_t palette_wb[] = {0xffffff, 0x000000};
 
 void run_code(t_gq_pointer code_ptr);
 
-void menu_load(t_gq_pointer menu_ptr, t_gq_pointer menu_prompt) {
+void menu_text_load(t_gq_pointer menu_prompt) {
+    // Load the menu prompt into RAM.
+    if (menu_prompt) {
+        gq_memcpy_to_ram((uint8_t *) menu_current_prompt, menu_prompt, GQ_STR_SIZE);
+        menu_offset_y = 18; // TODO: constant or something
+    } else {
+        menu_current_prompt[0] = '\0';
+        menu_offset_y          = 0;
+    }
+
+    // Initialize the menu options and activate it.
+    textmenu_result[0]   = '\0';
+    menu_option_selected = 0;
+    *menu_active         = GQ_MENU_FLAG_TEXT_ENTRY;
+}
+
+void menu_choice_load(t_gq_pointer menu_ptr, t_gq_pointer menu_prompt) {
     t_gq_int menu_option_count;
     t_gq_pointer menu_size;
 
@@ -103,16 +119,15 @@ void menu_load(t_gq_pointer menu_ptr, t_gq_pointer menu_prompt) {
 
     // Initialize the menu options and activate it.
     menu_option_selected = 0;
-    *menu_active         = 1;
+    *menu_active         = GQ_MENU_FLAG_CHOICE;
 }
 
 void menu_close() {
-    if (!*menu_active) {
-        return;
-    }
-
     *menu_active = 0;
-    GQ_EVENT_SET(GQ_EVENT_REFRESH);
+
+    if (*menu_active) {
+        GQ_EVENT_SET(GQ_EVENT_REFRESH);
+    }
 }
 
 /**
@@ -159,14 +174,15 @@ uint8_t load_stage(t_gq_pointer stage_ptr) {
         GQ_EVENT_CLR(event_type);
     }
 
-    // Close the menu
+    // Close any menu (text or choice)
     menu_close();
 
     if (GQ_PTR_NS(stage_current.menu_pointer) == GQ_PTR_BUILTIN_MENU_FLAGS) {
         // This special pointer type is used to indicate the menu is for textentry.
+        menu_text_load(stage_current.prompt_pointer);
     } else if (stage_current.menu_pointer) {
         // If this stage has a menu, load it.
-        menu_load(stage_current.menu_pointer, stage_current.prompt_pointer);
+        menu_choice_load(stage_current.menu_pointer, stage_current.prompt_pointer);
     }
 
     // Clean up labels.
@@ -241,15 +257,8 @@ uint8_t load_animation(uint8_t index, t_gq_pointer anim_ptr) {
     return 1;
 }
 
-void draw_oled_stack() {
+void draw_animation_stack() {
     gq_anim_frame frame_current;
-
-    // First, start with a blank slate.
-    Graphics_setForegroundColor(&g_sContext, GRAPHICS_COLOR_WHITE);
-    Graphics_setBackgroundColor(&g_sContext, GRAPHICS_COLOR_BLACK);
-    Graphics_clearDisplay(&g_sContext);
-
-    // Then draw the animation stack.
     for (uint8_t i = 0; i < MAX_CONCURRENT_ANIMATIONS; i++) {
         if (!current_animations[i].in_use) {
             continue;
@@ -290,8 +299,9 @@ void draw_oled_stack() {
             current_animations[i].x,
             current_animations[i].y);
     }
+}
 
-    // Draw the labels
+void draw_label_stack() {
     for (uint8_t i = 0; i < 4; i++) {
         if (labels[i][0]) {
             // Check the color flag (least significant bit)
@@ -307,26 +317,66 @@ void draw_oled_stack() {
                 &g_sContext, labels[i], -1, *label_x[i], *label_y[i], (*label_flags & (0b0010 << i * 8)) ? 1 : 0);
         }
     }
+}
+
+void draw_menu_choice() {
+    if (*menu_active != GQ_MENU_FLAG_CHOICE)
+        return;
+
+    Graphics_Rectangle menu_background = {0, 0, 128, menu_offset_y + menu_current->option_count * 10};
+    Graphics_setBackgroundColor(&g_sContext, GRAPHICS_COLOR_WHITE);
+    Graphics_setForegroundColor(&g_sContext, GRAPHICS_COLOR_BLACK);
+    Graphics_fillRectangle(&g_sContext, &menu_background);
+    Graphics_setForegroundColor(&g_sContext, GRAPHICS_COLOR_WHITE);
+    Graphics_setBackgroundColor(&g_sContext, GRAPHICS_COLOR_BLACK);
+
+    if (menu_current_prompt[0]) {
+        Graphics_drawString(&g_sContext, menu_current_prompt, -1, 6, 3, 0);
+    }
+
+    for (uint8_t i = 0; i < menu_current->option_count; i++) {
+        Graphics_drawString(&g_sContext, menu_current->options[i].label, -1, 15, menu_offset_y + i * 10, 0);
+        if (i == menu_option_selected) {
+            Graphics_drawString(&g_sContext, ">", -1, 6, menu_offset_y + i * 10, 0);
+        }
+    }
+}
+
+void draw_menu_text() {
+    if (*menu_active != GQ_MENU_FLAG_TEXT_ENTRY)
+        return;
+
+    Graphics_Rectangle menu_background = {0, 0, 128, menu_offset_y + 20};
+    Graphics_setBackgroundColor(&g_sContext, GRAPHICS_COLOR_WHITE);
+    Graphics_setForegroundColor(&g_sContext, GRAPHICS_COLOR_BLACK);
+    Graphics_fillRectangle(&g_sContext, &menu_background);
+    Graphics_setForegroundColor(&g_sContext, GRAPHICS_COLOR_WHITE);
+    Graphics_setBackgroundColor(&g_sContext, GRAPHICS_COLOR_BLACK);
+
+    if (menu_current_prompt[0]) {
+        Graphics_drawString(&g_sContext, menu_current_prompt, -1, 6, 3, 0);
+    }
+
+    Graphics_drawString(&g_sContext, textmenu_result, -1, 6, menu_offset_y + 3, 0);
+}
+
+void draw_oled_stack() {
+    // First, start with a blank slate.
+    Graphics_setForegroundColor(&g_sContext, GRAPHICS_COLOR_WHITE);
+    Graphics_setBackgroundColor(&g_sContext, GRAPHICS_COLOR_BLACK);
+    Graphics_clearDisplay(&g_sContext);
+
+    // Draw the animations
+    draw_animation_stack();
+
+    // Draw the labels
+    draw_label_stack();
 
     // Then, draw the menu, if there is one.
-    if (*menu_active == GQ_MENU_FLAG_MULTIPLE_CHOICE) {
-        Graphics_Rectangle menu_background = {0, 0, 128, menu_offset_y + menu_current->option_count * 10};
-        Graphics_setBackgroundColor(&g_sContext, GRAPHICS_COLOR_WHITE);
-        Graphics_setForegroundColor(&g_sContext, GRAPHICS_COLOR_BLACK);
-        Graphics_fillRectangle(&g_sContext, &menu_background);
-        Graphics_setForegroundColor(&g_sContext, GRAPHICS_COLOR_WHITE);
-        Graphics_setBackgroundColor(&g_sContext, GRAPHICS_COLOR_BLACK);
-
-        if (menu_current_prompt[0]) {
-            Graphics_drawString(&g_sContext, menu_current_prompt, -1, 6, 3, 0);
-        }
-
-        for (uint8_t i = 0; i < menu_current->option_count; i++) {
-            Graphics_drawString(&g_sContext, menu_current->options[i].label, -1, 15, menu_offset_y + i * 10, 0);
-            if (i == menu_option_selected) {
-                Graphics_drawString(&g_sContext, ">", -1, 6, menu_offset_y + i * 10, 0);
-            }
-        }
+    if (*menu_active == 1) {
+        draw_menu_choice();
+    } else if (*menu_active == GQ_MENU_FLAG_TEXT_ENTRY) {
+        draw_menu_text();
     }
 
     Graphics_flushBuffer(&g_sContext);

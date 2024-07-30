@@ -34,9 +34,9 @@
 #define MAX_CONCURRENT_ANIMATIONS 5
 #define GQ_HEAP_SIZE              0x200
 
-#define GQ_MENU_MAX_OPTIONS          6
-#define GQ_MENU_FLAG_MULTIPLE_CHOICE 1
-#define GQ_MENU_FLAG_TEXT            2
+#define GQ_MENU_MAX_OPTIONS     6
+#define GQ_MENU_FLAG_CHOICE     1
+#define GQ_MENU_FLAG_TEXT_ENTRY 2
 
 #define BADGES_ALLOWED 320
 
