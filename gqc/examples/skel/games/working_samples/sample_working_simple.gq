@@ -171,6 +171,10 @@ stage selfie {
 stage text {
     textmenu prompt "Type something";
 
+    event enter {
+        GQS_TEXTMENU_RESULT := "LOL";
+    }
+
     event menu {
         gostage start;
     }

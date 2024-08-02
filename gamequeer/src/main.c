@@ -25,7 +25,7 @@ int main(int argc, char *argv[]) {
     HAL_init(argc, argv);
     init();
 
-    load_game();
+    load_game(GQ_PTR_NS_CART);
 
     while (1) {
         // Perform the current animation step
