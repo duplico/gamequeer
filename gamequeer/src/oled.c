@@ -152,3 +152,38 @@ void gq_draw_image(
         }
     }
 }
+
+void gq_draw_image_with_mask(
+    const Graphics_Context *context,
+    t_gq_pointer image_bytes,
+    uint16_t image_bPP,
+    t_gq_pointer mask_bytes,
+    uint16_t mask_bPP,
+    int16_t width,
+    int16_t height,
+    int16_t x,
+    int16_t y) {
+    // Structs for the image and mask.
+    gq_image_frame_on_screen image_frame = {0};
+    gq_image_frame_on_screen mask_frame  = {0};
+
+    // TODO: Add real palette support
+    const uint32_t palette[2] = {0, 1};
+
+    gq_load_image(image_bytes, image_bPP, width, height, x, y, &image_frame);
+    gq_load_image(mask_bytes, mask_bPP, width, height, x, y, &mask_frame);
+
+    while (!gq_image_done(&image_frame) && !gq_image_done(&mask_frame)) {
+        // Draw the pixel.
+        int16_t draw_x = x + image_frame.x_pixel_offset;
+        int16_t draw_y = y + image_frame.y_curr;
+
+        uint8_t image_pixel = gq_image_get_pixel(&image_frame);
+        uint8_t mask_pixel  = gq_image_get_pixel(&mask_frame);
+
+        if (mask_pixel && draw_x >= context->clipRegion.xMin && draw_x <= context->clipRegion.xMax &&
+            draw_y >= context->clipRegion.yMin) {
+            Graphics_drawPixelOnDisplay(context->display, draw_x, draw_y, palette[image_pixel]);
+        }
+    }
+}
