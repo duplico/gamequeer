@@ -43,6 +43,19 @@
 
 #define BADGES_ALLOWED 320
 
+#define CURSOR_BOX_TOP               (textentry_ypos - 2)
+#define CURSOR_BOX_LEFT              (textentry_curser_left)
+#define CURSOR_BOX_BOTTOM            (textentry_ypos + 8 + 2)
+#define CURSOR_BOX_RIGHT             (textentry_curser_left + 6)
+#define CURSOR_BOX_LINE_ARROW_WIDTH  3
+#define CURSOR_BOX_LINE_ARROW_HEIGHT 4
+#define CURSOR_BOX_HLINE_LENGTH      6
+#define CURSOR_BOX_VLINE_TOP         (CURSOR_BOX_TOP - 10)
+#define CURSOR_BOX_VLINE_BOTTOM      (CURSOR_BOX_BOTTOM + 10)
+#define CURSOR_BOX_VLINE_LEFT        (textentry_curser_left + 3)
+#define CURSOR_BOX_HLINE_LEFT        (CURSOR_BOX_VLINE_LEFT - CURSOR_BOX_HLINE_LENGTH)
+#define CURSOR_BOX_HLINE_RIGHT       (CURSOR_BOX_VLINE_LEFT + CURSOR_BOX_HLINE_LENGTH)
+
 typedef uint32_t t_gq_pointer;
 typedef int32_t t_gq_int;
 
@@ -237,7 +250,29 @@ extern uint8_t leds_animating;
 extern uint8_t gq_builtin_ints[];
 extern uint8_t gq_builtin_strs[];
 
-uint8_t load_game();
+extern uint8_t timer_active;
+extern t_gq_int timer_interval;
+extern t_gq_int timer_counter;
+
+extern t_gq_int *menu_active;
+extern char *menu_text_result;
+
+void run_code(t_gq_pointer code_ptr);
+
+void menu_close();
+
+void draw_menu_choice();
+void draw_menu_text();
+uint8_t handle_event_menu_choice(uint16_t event_type);
+uint8_t handle_event_menu_text(uint16_t event_type);
+void menu_text_load(t_gq_pointer menu_prompt);
+void menu_choice_load(t_gq_pointer menu_ptr, t_gq_pointer menu_prompt);
+
+t_gq_int get_badge_word(t_gq_int badge_id);
+void set_badge_bit(t_gq_int badge_id, t_gq_int value);
+t_gq_int get_badge_bit(t_gq_int badge_id);
+
+uint8_t load_game(uint8_t namespace);
 uint8_t load_stage(t_gq_pointer stage_ptr);
 uint8_t load_animation(uint8_t index, t_gq_pointer anim_ptr);
 void system_tick();

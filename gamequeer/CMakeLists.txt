@@ -30,6 +30,8 @@ add_executable(
     src/HAL.c
     src/leds.c
     src/oled.c
+    src/bytecode.c
+    src/menu.c
     # Graphics driver:
     src/grlib_gfx_driver/grlib_gfx_driver.c
     # gfx (Linux graphics library) sources:
