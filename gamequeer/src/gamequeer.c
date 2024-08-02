@@ -148,6 +148,7 @@ void menu_text_load(t_gq_pointer menu_prompt) {
     menu_option_selected = 0;
     menu_text_mode       = GQ_MENU_TEXT_MODE_CHAR;
     *menu_active         = GQ_MENU_FLAG_TEXT_ENTRY;
+    GQ_EVENT_SET(GQ_EVENT_REFRESH);
 }
 
 void menu_choice_load(t_gq_pointer menu_ptr, t_gq_pointer menu_prompt) {
@@ -173,6 +174,7 @@ void menu_choice_load(t_gq_pointer menu_ptr, t_gq_pointer menu_prompt) {
     // Initialize the menu options and activate it.
     menu_option_selected = 0;
     *menu_active         = GQ_MENU_FLAG_CHOICE;
+    GQ_EVENT_SET(GQ_EVENT_REFRESH);
 }
 
 void menu_close() {
@@ -230,13 +232,7 @@ uint8_t load_stage(t_gq_pointer stage_ptr) {
     // Close any menu (text or choice)
     menu_close();
 
-    if (GQ_PTR_NS(stage_current.menu_pointer) == GQ_PTR_BUILTIN_MENU_FLAGS) {
-        // This special pointer type is used to indicate the menu is for textentry.
-        menu_text_load(stage_current.prompt_pointer);
-    } else if (stage_current.menu_pointer) {
-        // If this stage has a menu, load it.
-        menu_choice_load(stage_current.menu_pointer, stage_current.prompt_pointer);
-    }
+    // Stage loading will happen at the end of GQ_EVENT_ENTER.
 
     // Clean up labels.
     for (uint8_t i = 0; i < 4; i++) {
@@ -920,7 +916,9 @@ uint8_t handle_event_menu_text(uint16_t event_type) {
                 } else if (menu_text_result[menu_option_selected] == ':') {
                     // special case for the special characters that are divided by numerals in ASCII
                     menu_text_result[menu_option_selected] = '/';
-                } else { // null isn't an option here since we're going left
+                } else if (!menu_text_result[menu_option_selected]) {
+                    menu_text_select_first_in_class();
+                } else {
                     menu_text_result[menu_option_selected]--;
                 }
             } else {
@@ -1008,6 +1006,16 @@ void handle_events() {
             } else if (!GQ_PTR_ISNULL(stage_current.event_commands[event_type])) {
                 // Otherwise, look for an event command to run in the current stage.
                 run_code(stage_current.event_commands[event_type]);
+            }
+
+            if (event_type == GQ_EVENT_ENTER) {
+                if (GQ_PTR_NS(stage_current.menu_pointer) == GQ_PTR_BUILTIN_MENU_FLAGS) {
+                    // This special pointer type is used to indicate the menu is for textentry.
+                    menu_text_load(stage_current.prompt_pointer);
+                } else if (stage_current.menu_pointer) {
+                    // If this stage has a menu, load it.
+                    menu_choice_load(stage_current.menu_pointer, stage_current.prompt_pointer);
+                }
             }
         }
     }
