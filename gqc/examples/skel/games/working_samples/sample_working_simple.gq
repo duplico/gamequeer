@@ -47,6 +47,12 @@ animations {
     }
 
     george3 <- "pbj.gif";
+
+    circle <- "circle.bmp" {
+        duration = 1000;
+        w = 96;
+        h = 96;
+    }
 }
 
 lightcues {
@@ -104,6 +110,7 @@ stage start {
         GQI_FGANIM1_X = -96;
         GQI_FGANIM1_Y = -96;
         play fganim(1) george;
+        play fgmask(1) circle;
         timer timer_speed;
     }
 
@@ -124,6 +131,7 @@ stage start {
 
     event bgdone {
         play bganim george3;
+        play fgmask(1) circle;
     }
 
     event fgdone(1) {

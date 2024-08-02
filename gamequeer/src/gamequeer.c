@@ -195,46 +195,80 @@ uint8_t load_animation(uint8_t index, t_gq_pointer anim_ptr) {
 
 void draw_animation_stack() {
     gq_anim_frame frame_current;
-    for (uint8_t i = 0; i < MAX_CONCURRENT_ANIMATIONS; i++) {
-        if (!current_animations[i].in_use) {
-            continue;
-        }
+    gq_anim_frame frame_current_mask;
+    uint8_t anim_index = 0;
+    do {
+        if (current_animations[anim_index].in_use) {
+            switch (anim_index) { // TODO: Handle masks
+                case 0:
+                    current_animations[anim_index].x = *anim0_x;
+                    current_animations[anim_index].y = *anim0_y;
+                    break;
+                case 1:
+                    current_animations[anim_index].x = *anim1_x;
+                    current_animations[anim_index].y = *anim1_y;
+                    break;
+                case 3:
+                    current_animations[anim_index].x = *anim2_x;
+                    current_animations[anim_index].y = *anim2_y;
+                    break;
+            }
 
-        switch (i) { // TODO: Handle masks
-            case 0:
-                current_animations[i].x = *anim0_x;
-                current_animations[i].y = *anim0_y;
-                break;
-            case 1:
-            case 2:
-                current_animations[i].x = *anim1_x;
-                current_animations[i].y = *anim1_y;
-                break;
-            case 3:
-            case 4:
-                current_animations[i].x = *anim2_x;
-                current_animations[i].y = *anim2_y;
-                break;
-        }
+            // Load the current frame metadata
+            if (!gq_memcpy_to_ram(
+                    (uint8_t *) &frame_current,
+                    current_animations[anim_index].anim.frame_pointer +
+                        current_animations[anim_index].frame * sizeof(gq_anim_frame),
+                    sizeof(gq_anim_frame))) {
+                continue; // TODO: not this
+            }
 
-        // Load the current frame metadata
-        if (!gq_memcpy_to_ram(
-                (uint8_t *) &frame_current,
-                current_animations[i].anim.frame_pointer + current_animations[i].frame * sizeof(gq_anim_frame),
-                sizeof(gq_anim_frame))) {
-            continue;
-        }
+            // Check whether this animation has a mask
+            if (anim_index != 0 && current_animations[anim_index + 1].in_use &&
+                current_animations[anim_index + 1].anim.width == current_animations[anim_index].anim.width &&
+                current_animations[anim_index + 1].anim.height == current_animations[anim_index].anim.height) {
+                // The animation has a mask. Note that we enforce that the mask has the same dimensions as the frame.
+                if (!gq_memcpy_to_ram(
+                        (uint8_t *) &frame_current_mask,
+                        current_animations[anim_index + 1].anim.frame_pointer +
+                            current_animations[anim_index + 1].frame * sizeof(gq_anim_frame),
+                        sizeof(gq_anim_frame))) {
+                    continue; // TODO: not this
+                }
 
-        // Draw the frame on the screen
-        gq_draw_image(
-            &g_sContext,
-            frame_current.data_pointer,
-            frame_current.bPP,
-            current_animations[i].anim.width,
-            current_animations[i].anim.height,
-            current_animations[i].x,
-            current_animations[i].y);
-    }
+                gq_draw_image_with_mask(
+                    &g_sContext,
+                    frame_current.data_pointer,
+                    frame_current.bPP,
+                    frame_current_mask.data_pointer,
+                    frame_current_mask.bPP,
+                    current_animations[anim_index].anim.width,
+                    current_animations[anim_index].anim.height,
+                    current_animations[anim_index].x,
+                    current_animations[anim_index].y);
+
+            } else {
+                // No mask.
+                // Draw the frame on the screen
+                gq_draw_image(
+                    &g_sContext,
+                    frame_current.data_pointer,
+                    frame_current.bPP,
+                    current_animations[anim_index].anim.width,
+                    current_animations[anim_index].anim.height,
+                    current_animations[anim_index].x,
+                    current_animations[anim_index].y);
+            }
+        }
+        // Go to the next index.
+        if (anim_index == 0) {
+            anim_index = 1;
+        } else if (anim_index == 1) {
+            anim_index = 3;
+        } else {
+            break;
+        }
+    } while (1);
 }
 
 void draw_label_stack() {

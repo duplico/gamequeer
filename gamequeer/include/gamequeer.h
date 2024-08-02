@@ -275,5 +275,15 @@ void gq_draw_image(
     int16_t height,
     t_gq_int x,
     t_gq_int y);
+void gq_draw_image_with_mask(
+    const Graphics_Context *context,
+    t_gq_pointer image_bytes,
+    uint16_t image_bPP,
+    t_gq_pointer mask_bytes,
+    uint16_t mask_bPP,
+    int16_t width,
+    int16_t height,
+    int16_t x,
+    int16_t y);
 
 #endif
