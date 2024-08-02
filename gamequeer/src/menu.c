@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "HAL.h"
 #include "gamequeer.h"
 
 char *menu_text_result = (char *) &gq_builtin_strs[GQS_TEXTMENU_RESULT * GQ_STR_SIZE];
@@ -15,6 +16,30 @@ char menu_current_prompt[GQ_STR_SIZE];
 uint8_t menu_offset_y        = 0;
 uint8_t menu_option_selected = 0;
 uint8_t menu_text_mode       = 0;
+
+void menu_text_select_last_in_class() {
+    if (menu_text_symbol_type == GQ_MENU_TEXT_SYMBOL_CAPS) {
+        menu_text_result[menu_option_selected] = 'Z';
+    } else if (menu_text_symbol_type == GQ_MENU_TEXT_SYMBOL_LOWER) {
+        menu_text_result[menu_option_selected] = 'z';
+    } else if (menu_text_symbol_type == GQ_MENU_TEXT_SYMBOL_NUM) {
+        menu_text_result[menu_option_selected] = '9';
+    } else {
+        menu_text_result[menu_option_selected] = '@';
+    }
+}
+
+void menu_text_select_first_in_class() {
+    if (menu_text_symbol_type == GQ_MENU_TEXT_SYMBOL_CAPS) {
+        menu_text_result[menu_option_selected] = 'A';
+    } else if (menu_text_symbol_type == GQ_MENU_TEXT_SYMBOL_LOWER) {
+        menu_text_result[menu_option_selected] = 'a';
+    } else if (menu_text_symbol_type == GQ_MENU_TEXT_SYMBOL_NUM) {
+        menu_text_result[menu_option_selected] = '0';
+    } else {
+        menu_text_result[menu_option_selected] = ' ';
+    }
+}
 
 void trim_menu_text_result() {
     // Clear any contents after the null terminator.
@@ -334,28 +359,4 @@ uint8_t handle_event_menu_text(uint16_t event_type) {
             return 0;
     }
     return 1;
-}
-
-void menu_text_select_last_in_class() {
-    if (menu_text_symbol_type == GQ_MENU_TEXT_SYMBOL_CAPS) {
-        menu_text_result[menu_option_selected] = 'Z';
-    } else if (menu_text_symbol_type == GQ_MENU_TEXT_SYMBOL_LOWER) {
-        menu_text_result[menu_option_selected] = 'z';
-    } else if (menu_text_symbol_type == GQ_MENU_TEXT_SYMBOL_NUM) {
-        menu_text_result[menu_option_selected] = '9';
-    } else {
-        menu_text_result[menu_option_selected] = '@';
-    }
-}
-
-void menu_text_select_first_in_class() {
-    if (menu_text_symbol_type == GQ_MENU_TEXT_SYMBOL_CAPS) {
-        menu_text_result[menu_option_selected] = 'A';
-    } else if (menu_text_symbol_type == GQ_MENU_TEXT_SYMBOL_LOWER) {
-        menu_text_result[menu_option_selected] = 'a';
-    } else if (menu_text_symbol_type == GQ_MENU_TEXT_SYMBOL_NUM) {
-        menu_text_result[menu_option_selected] = '0';
-    } else {
-        menu_text_result[menu_option_selected] = ' ';
-    }
 }

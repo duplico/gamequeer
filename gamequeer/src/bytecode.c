@@ -1,3 +1,6 @@
+#include <stdio.h>
+
+#include "HAL.h"
 #include "gamequeer.h"
 #include "gamequeer_bytecode.h"
 

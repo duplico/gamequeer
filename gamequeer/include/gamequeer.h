@@ -257,6 +257,21 @@ extern t_gq_int timer_counter;
 extern t_gq_int *menu_active;
 extern char *menu_text_result;
 
+void run_code(t_gq_pointer code_ptr);
+
+void menu_close();
+
+void draw_menu_choice();
+void draw_menu_text();
+uint8_t handle_event_menu_choice(uint16_t event_type);
+uint8_t handle_event_menu_text(uint16_t event_type);
+void menu_text_load(t_gq_pointer menu_prompt);
+void menu_choice_load(t_gq_pointer menu_ptr, t_gq_pointer menu_prompt);
+
+t_gq_int get_badge_word(t_gq_int badge_id);
+void set_badge_bit(t_gq_int badge_id, t_gq_int value);
+t_gq_int get_badge_bit(t_gq_int badge_id);
+
 uint8_t load_game(uint8_t namespace);
 uint8_t load_stage(t_gq_pointer stage_ptr);
 uint8_t load_animation(uint8_t index, t_gq_pointer anim_ptr);
