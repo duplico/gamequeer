@@ -38,10 +38,21 @@
 #define GQ_MENU_FLAG_CHOICE     1
 #define GQ_MENU_FLAG_TEXT_ENTRY 2
 
+#define GQ_MENU_TEXT_MODE_CHAR 0
+#define GQ_MENU_TEXT_MODE_POS  1
+
 #define BADGES_ALLOWED 320
 
 typedef uint32_t t_gq_pointer;
 typedef int32_t t_gq_int;
+
+typedef enum gq_menu_text_symbol_type {
+    GQ_MENU_TEXT_SYMBOL_CAPS = 0x00,
+    GQ_MENU_TEXT_SYMBOL_LOWER,
+    GQ_MENU_TEXT_SYMBOL_NUM,
+    GQ_MENU_TEXT_SYMBOL_SPECIAL,
+    GQ_MENU_TEXT_SYMBOL_COUNT
+} gq_menu_text_symbol_type;
 
 typedef enum gq_game_color {
     GQ_COLOR_UNASSIGNED = 0x00,
