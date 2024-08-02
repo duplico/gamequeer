@@ -843,10 +843,6 @@ uint8_t handle_event_menu_choice(uint16_t event_type) {
             menu_close();
             GQ_EVENT_SET(GQ_EVENT_MENU);
             break;
-        case GQ_EVENT_BUTTON_B:
-            // Cancel the menu - TODO: Allowed:
-            menu_close();
-            break;
         case GQ_EVENT_BUTTON_L:
             // Move the selection up
             if (menu_option_selected > 0) {
