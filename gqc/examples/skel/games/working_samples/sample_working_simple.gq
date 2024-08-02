@@ -62,6 +62,8 @@ stage start {
         play bganim george3;
         cue flash;
 
+        game_name := "It worked!";
+
         // A = B + D + -5 - 7;
 
         // game_name := "foobar";
