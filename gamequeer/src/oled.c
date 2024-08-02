@@ -13,7 +13,7 @@ typedef struct gq_image_frame_on_screen {
     uint8_t x_start; // The x coordinate (within the image) of the first pixel to be drawn (0 unless clipping)
     uint8_t x_end;   // The x coordinate (within the image) of the last pixel to be drawn (width - 1 unless clipping)
     uint16_t x_bit_offset;   // The bit index (within its byte) that the current pixel is in
-    uint16_t x_byte_offset;  // The byte index that the current pixel is in
+    uint16_t byte_index;     // The byte index that the current pixel is in
     uint16_t x_pixel_offset; // x coordinate (within the image) of the current pixel
     uint8_t y_curr;          // The y coordinate (within the image) of the current row
     uint8_t y_end;       // The y coordinate (within the image) of the last row to be drawn (height - 1 unless clipping)
@@ -27,27 +27,47 @@ uint8_t gq_image_done(gq_image_frame_on_screen *frame) {
     return frame->y_curr >= frame->y_end;
 }
 
+void gq_image_load_byte(gq_image_frame_on_screen *frame) {
+    frame->render_byte = read_byte(frame->image_bytes + frame->byte_index);
+
+    if (frame->rle_type == 4) {
+        // RLE 4 bit encoding
+        frame->pixel_repeat = (frame->render_byte >> 4) + 1;
+        frame->pixel_value  = frame->render_byte & 0x0F;
+    } else if (frame->rle_type == 7) {
+        // RLE 7 bit encoding
+        frame->pixel_repeat = (frame->render_byte >> 1) + 1;
+        frame->pixel_value  = frame->render_byte & 0x01;
+    } // TODO: Otherwise is an error.
+}
+
 uint8_t gq_image_get_pixel(gq_image_frame_on_screen *frame) {
     // NB: gate this function call on gq_image_done() to avoid undefined behavior
     // Also, you need to bootstrap it by calling a read_byte
     uint8_t need_to_read_byte = 0;
 
     // Get the current pixel.
-    frame->pixel_value = (frame->render_byte >> (7 - frame->x_bit_offset)) & 0x01;
+    if (frame->rle_type == 1) {
+        frame->pixel_value = (frame->render_byte >> (7 - frame->x_bit_offset)) & 0x01;
+        frame->x_bit_offset++;
+        if (frame->x_bit_offset == 8) {
+            frame->byte_index++;
+            frame->x_bit_offset = 0;
+            need_to_read_byte   = 1;
+        }
+    } else {
+        frame->pixel_repeat--;
+        if (frame->pixel_repeat == 0) {
+            need_to_read_byte = 1;
+            frame->byte_index++;
+        }
+    }
 
     // Next pixel.
     frame->x_pixel_offset++;
-    frame->x_bit_offset++;
 
-    // Check to see if we need to go to the next byte.
-    if (frame->x_bit_offset == 8) {
-        frame->x_byte_offset++;
-        frame->x_bit_offset = 0;
-        need_to_read_byte   = 1;
-    }
-
-    // Check to see if the next byte sends us to the next row.
-    if (frame->x_pixel_offset > frame->x_end) {
+    // Check to see if the next pixel sends us to the next row.
+    if (frame->x_pixel_offset >= frame->width) {
         // We need to start a new row.
         frame->y_curr++;
         frame->x_pixel_offset = 0;
@@ -55,11 +75,52 @@ uint8_t gq_image_get_pixel(gq_image_frame_on_screen *frame) {
 
     // If we need to read a new byte, do so.
     if (need_to_read_byte && !gq_image_done(frame)) {
-        frame->render_byte = read_byte(frame->image_bytes + frame->x_byte_offset);
+        gq_image_load_byte(frame);
     }
 
     // Return the current pixel value.
     return frame->pixel_value;
+}
+
+void gq_load_image(
+    t_gq_pointer image_bytes,
+    int16_t bPP,
+    int16_t width,
+    int16_t height,
+    t_gq_int x,
+    t_gq_int y,
+    gq_image_frame_on_screen *frame) {
+    frame->height      = height;
+    frame->width       = width;
+    frame->image_bytes = image_bytes;
+    frame->rle_type    = bPP;
+
+    if (frame->rle_type != 1) {
+        frame->rle_type = (frame->rle_type >> 4) & 0x0F;
+    }
+
+    // Set x_start
+    if (x < g_sContext.clipRegion.xMin) {
+        frame->x_start = g_sContext.clipRegion.xMin - x;
+    } else {
+        frame->x_start = 0;
+    }
+
+    // Set x_end
+    if ((x + width - 1) > g_sContext.clipRegion.xMax) {
+        frame->x_end = g_sContext.clipRegion.xMax - x;
+    } else {
+        frame->x_end = width - 1;
+    }
+
+    // Set y_end
+    if ((y + height - 1) > g_sContext.clipRegion.yMax) {
+        frame->y_end = g_sContext.clipRegion.yMax - y + 1;
+    } else {
+        frame->y_end = height;
+    }
+
+    gq_image_load_byte(frame);
 }
 
 void gq_draw_image(
@@ -77,127 +138,17 @@ void gq_draw_image(
     };
 
     const uint32_t palette[2] = {0, 1};
-    frame.rle_type            = bPP;
-    frame.height              = height;
-    frame.width               = width;
-    frame.image_bytes         = image_bytes;
 
-    // Return without doing anything if the entire image lies outside the
-    // current clipping region.
-    if ((x > context->clipRegion.xMax) || ((x + width - 1) < context->clipRegion.xMin) ||
-        (y > context->clipRegion.yMax) || ((y + height - 1) < context->clipRegion.yMin)) {
-        return;
-    }
+    gq_load_image(image_bytes, bPP, width, height, x, y, &frame);
 
-    // Get the starting X offset within the image based on the current clipping region.
-    if (x < context->clipRegion.xMin) {
-        frame.x_start = context->clipRegion.xMin - x;
-    } else {
-        frame.x_start = 0;
-    }
-
-    // Get the ending X offset within the image based on the current clipping region.
-    if ((x + width - 1) > context->clipRegion.xMax) {
-        frame.x_end = context->clipRegion.xMax - x;
-    } else {
-        frame.x_end = width - 1;
-    }
-
-    // Reduce the height of the image, if required, based on the current clipping region.
-    if ((y + height - 1) > context->clipRegion.yMax) {
-        frame.y_end = context->clipRegion.yMax - y + 1;
-    } else {
-        frame.y_end = height;
-    }
-
-    if (frame.rle_type == 1) {
-        // Image is uncompressed; 1 bit per pixel.
-
-        // First, check to see if the top of the image needs to be cut off (and we need to skip ahead)
-        if (y < context->clipRegion.yMin) {
-            // Determine the number of rows that lie above the clipping region.
-            frame.y_curr = context->clipRegion.yMin - y;
+    while (!(gq_image_done(&frame))) {
+        // Draw the pixel.
+        int16_t draw_x     = x + frame.x_pixel_offset;
+        int16_t draw_y     = y + frame.y_curr;
+        uint8_t draw_pixel = gq_image_get_pixel(&frame);
+        if (draw_x >= context->clipRegion.xMin && draw_x <= context->clipRegion.xMax &&
+            draw_y >= context->clipRegion.yMin) {
+            Graphics_drawPixelOnDisplay(context->display, draw_x, draw_y, palette[draw_pixel]);
         }
-
-        // Draw this row of image pixels, starting at x_start and ending at x_end.
-        // Draw the pixels.
-        frame.x_pixel_offset = 0;
-        frame.x_bit_offset   = 0;
-        frame.x_byte_offset  = 0;
-        frame.render_byte    = read_byte(frame.image_bytes + frame.x_byte_offset);
-
-        while (!(gq_image_done(&frame))) {
-            // Draw the pixel.
-            int16_t draw_x     = x + frame.x_pixel_offset;
-            int16_t draw_y     = y + frame.y_curr;
-            uint8_t draw_pixel = gq_image_get_pixel(&frame);
-            if (draw_x >= context->clipRegion.xMin && draw_x <= context->clipRegion.xMax &&
-                draw_y >= context->clipRegion.yMin) {
-                Graphics_drawPixelOnDisplay(context->display, draw_x, draw_y, palette[draw_pixel]);
-            } else if (draw_x > context->clipRegion.yMax) {
-                // We're done here.
-                return;
-            }
-        }
-    } else {
-        // Image is compressed; RLE4 or RLE7
-        frame.rle_type       = (frame.rle_type >> 4) & 0x0F;
-        frame.x_pixel_offset = 0;
-        frame.y_curr         = 0;
-
-        do {
-            frame.render_byte = read_byte(image_bytes);
-            image_bytes++;
-
-            if (frame.rle_type == 7) {
-                // RLE 7 bit encoding
-                frame.pixel_repeat = (frame.render_byte >> 1) + 1;
-                frame.pixel_value  = frame.render_byte & 0x01;
-            } else if (frame.rle_type == 4) {
-                // TODO: We probably won't ever need this.
-                // RLE 4 bit encoding
-                frame.pixel_repeat = (frame.render_byte >> 4) + 1;
-                frame.pixel_value  = frame.render_byte & 0x0F;
-            } else {
-                // Invalid RLE type.
-                return;
-            }
-
-            while (frame.pixel_repeat--) {
-                if (frame.x_pixel_offset == width) {
-                    frame.x_pixel_offset = 0;
-                    frame.y_curr++;
-
-                    if (y + frame.y_curr > context->clipRegion.yMax) {
-                        return;
-                    }
-                }
-
-                if (x < frame.x_start) {
-                    frame.x_pixel_offset++;
-                    continue;
-                }
-
-                if (x > frame.x_end) {
-                    frame.x_pixel_offset++;
-                    continue;
-                }
-
-                if (y + frame.y_curr < context->clipRegion.yMin) {
-                    frame.x_pixel_offset++;
-                    continue;
-                }
-
-                if (y + frame.y_curr > context->clipRegion.yMax || frame.y_curr >= frame.y_end) {
-                    // We're done here.
-                    return;
-                }
-
-                // If we're here, then (x,y) is inside the clipping region.
-                Graphics_drawPixelOnDisplay(
-                    context->display, x + frame.x_pixel_offset, y + frame.y_curr, palette[frame.pixel_value]);
-                frame.x_pixel_offset++;
-            }
-        } while (1);
     }
 }
