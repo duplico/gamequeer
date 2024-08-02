@@ -170,6 +170,7 @@ stage selfie {
 
 stage text {
     textmenu prompt "Type something";
+    bganim george3;
 
     event enter {
         GQS_TEXTMENU_RESULT := "LOL";
@@ -177,5 +178,9 @@ stage text {
 
     event menu {
         gostage start;
+    }
+
+    event bgdone {
+        play bganim george3;
     }
 }
