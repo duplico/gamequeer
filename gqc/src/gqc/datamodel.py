@@ -117,7 +117,7 @@ class Stage:
     link_table = dict() # OrderedDict not needed to remember order since Python 3.7
     BoundMenu = namedtuple('BoundMenu', ['menu_name', 'menu_prompt'])
 
-    def __init__(self, name : str, bganim : str = None, bgcue : str = None, menu : 'Stage.BoundMenu' = None, events : Iterable = []):
+    def __init__(self, name : str, bganim : str = None, bgcue : str = None, menu : 'Stage.BoundMenu' = None, events : Iterable = [], textentry : bool = False, textentry_prompt : str = None):
         self.addr = 0x00000000 # Set at link time
         self.id = len(Stage.stage_table)
         self.resolved = False
@@ -125,8 +125,13 @@ class Stage:
         self.bganim_name = bganim
         self.bgcue_name = bgcue
         self.menu_def = menu
-        self.menu_prompt_addr = 0x00000000
+        self.textentry = textentry
+        self.textentry_prompt = textentry_prompt
+        self.prompt_addr = 0x00000000
         self.unresolved_symbols = []
+
+        if menu and textentry:
+            raise ValueError("Stage cannot have both a menu and text entry prompt")
 
         if name in Stage.stage_table:
             raise ValueError(f"Stage {name} already defined")
@@ -179,16 +184,27 @@ class Stage:
             else:
                 self.unresolved_symbols.append(self.menu_def.menu_name)
                 resolved = False
-            
-            if self.menu_def.menu_prompt:
-                if self.menu_def.menu_prompt in Variable.var_table:
-                    if Variable.var_table[self.menu_def.menu_prompt].datatype != 'str':
-                        raise ValueError(f"Menu prompt {self.menu_def.menu_prompt} is not a string")
-                    if Variable.var_table[self.menu_def.menu_prompt].addr:
-                        self.menu_prompt_addr = Variable.var_table[self.menu_def.menu_prompt].addr
-                    else:
-                        self.unresolved_symbols.append(self.menu_def.menu_prompt)
-                        resolved = False
+        
+        # Attempt to resolve menu/text prompt
+        if self.menu_def and self.menu_def.menu_prompt:
+            prompt_name = self.menu_def.menu_prompt
+        elif self.textentry_prompt:
+            prompt_name = self.textentry_prompt
+        else:
+            prompt_name = None
+        
+        if prompt_name:
+            if prompt_name in Variable.var_table:
+                if Variable.var_table[prompt_name].datatype != 'str':
+                    raise ValueError(f"Prompt {prompt_name} is not a string")
+                if Variable.var_table[prompt_name].addr:
+                    self.prompt_addr = Variable.var_table[prompt_name].addr
+                else:
+                    self.unresolved_symbols.append(prompt_name)
+                    resolved = False
+            else:
+                self.unresolved_symbols.append(prompt_name)
+                resolved = False
 
         # Event statements resolve themselves at code generation time
 
@@ -217,16 +233,23 @@ class Stage:
             else:
                 event_pointers.append(0x00)
 
+        if self.menu:
+            menu_pointer = self.menu.addr
+        elif self.textentry:
+            menu_pointer = structs.gq_ptr_apply_ns(structs.GQ_PTR_BUILTIN_MENU_FLAGS, 0)
+        else:
+            menu_pointer = 0x00000000
+
         stage = structs.GqStage(
             id=self.id,
             anim_bg_pointer=self.bganim.addr if self.bganim else 0,
             cue_bg_pointer=self.bgcue.addr if self.bgcue else 0,
-            menu_pointer=self.menu.addr if self.menu else 0,
-            menu_prompt_pointer = self.menu_prompt_addr,
+            menu_pointer=menu_pointer,
+            prompt_pointer = self.prompt_addr,
             event_commands=event_pointers
         )
 
-        return struct.pack(structs.GQ_STAGE_FORMAT, stage.id, stage.anim_bg_pointer, stage.cue_bg_pointer, stage.menu_pointer, stage.menu_prompt_pointer, *stage.event_commands)
+        return struct.pack(structs.GQ_STAGE_FORMAT, stage.id, stage.anim_bg_pointer, stage.cue_bg_pointer, stage.menu_pointer, stage.prompt_pointer, *stage.event_commands)
 
 class Variable:
     var_table = {}

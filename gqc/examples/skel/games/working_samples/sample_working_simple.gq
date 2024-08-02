@@ -131,6 +131,8 @@ stage start {
     event menu {
         if (GQI_MENU_VALUE == 1) {
             gostage selfie;
+        } else {
+            gostage text;
         }
     }
 
@@ -160,6 +162,14 @@ stage selfie {
 
     event timer {
         badge_id = 7;
+        gostage start;
+    }
+}
+
+stage text {
+    textmenu prompt "Type something";
+
+    event menu {
         gostage start;
     }
 }

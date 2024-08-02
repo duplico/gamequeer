@@ -9,15 +9,16 @@
 #define GQ_STR_SIZE   22
 #define GQ_INT_SIZE   4
 
-#define GQ_PTR_NS_MASK     0xFF000000
-#define GQ_PTR_NS_NULL     0x00
-#define GQ_PTR_NS_CART     0x01
-#define GQ_PTR_NS_SAVE     0x02
-#define GQ_PTR_NS_FRAM     0x03
-#define GQ_PTR_NS_FBUF     0x04
-#define GQ_PTR_NS_HEAP     0x05
-#define GQ_PTR_BUILTIN_INT 0x80
-#define GQ_PTR_BUILTIN_STR 0x81
+#define GQ_PTR_NS_MASK            0xFF000000
+#define GQ_PTR_NS_NULL            0x00
+#define GQ_PTR_NS_CART            0x01
+#define GQ_PTR_NS_SAVE            0x02
+#define GQ_PTR_NS_FRAM            0x03
+#define GQ_PTR_NS_FBUF            0x04
+#define GQ_PTR_NS_HEAP            0x05
+#define GQ_PTR_BUILTIN_INT        0x80
+#define GQ_PTR_BUILTIN_STR        0x81
+#define GQ_PTR_BUILTIN_MENU_FLAGS 0x82
 
 #define GQ_PTR_NS(POINTER)     ((POINTER & GQ_PTR_NS_MASK) >> 24)
 #define GQ_PTR_ADDR(POINTER)   (POINTER & ~GQ_PTR_NS_MASK)
@@ -33,12 +34,25 @@
 #define MAX_CONCURRENT_ANIMATIONS 5
 #define GQ_HEAP_SIZE              0x200
 
-#define GQ_MENU_MAX_OPTIONS 6
+#define GQ_MENU_MAX_OPTIONS     6
+#define GQ_MENU_FLAG_CHOICE     1
+#define GQ_MENU_FLAG_TEXT_ENTRY 2
+
+#define GQ_MENU_TEXT_MODE_CHAR 0
+#define GQ_MENU_TEXT_MODE_POS  1
 
 #define BADGES_ALLOWED 320
 
 typedef uint32_t t_gq_pointer;
 typedef int32_t t_gq_int;
+
+typedef enum gq_menu_text_symbol_type {
+    GQ_MENU_TEXT_SYMBOL_CAPS = 0x00,
+    GQ_MENU_TEXT_SYMBOL_LOWER,
+    GQ_MENU_TEXT_SYMBOL_NUM,
+    GQ_MENU_TEXT_SYMBOL_SPECIAL,
+    GQ_MENU_TEXT_SYMBOL_COUNT
+} gq_menu_text_symbol_type;
 
 typedef enum gq_game_color {
     GQ_COLOR_UNASSIGNED = 0x00,
@@ -166,6 +180,7 @@ typedef enum gq_special_var_str {
     GQS_LABEL2,
     GQS_LABEL3,
     GQS_LABEL4,
+    GQS_TEXTMENU_RESULT,
     GQS_COUNT
 } gq_special_var_str;
 
@@ -199,7 +214,7 @@ typedef struct gq_stage {
     t_gq_pointer anim_bg_pointer;                // Pointer to the background animation (NULL if none)
     t_gq_pointer cue_bg_pointer;                 // Pointer to the background lighting cue (NULL if none)
     t_gq_pointer menu_pointer;                   // Pointer to the menu definition for this stage
-    t_gq_pointer menu_prompt_pointer;            // Pointer to the prompt for the menu
+    t_gq_pointer prompt_pointer;                 // Pointer to the prompt for the menu
     t_gq_pointer event_commands[GQ_EVENT_COUNT]; // Event commands
 } __attribute__((packed)) gq_stage;
 

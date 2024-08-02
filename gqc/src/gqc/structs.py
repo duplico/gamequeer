@@ -24,6 +24,7 @@ GQ_PTR_NS_FBUF = 0x04
 GQ_PTR_NS_HEAP = 0x05
 GQ_PTR_BUILTIN_INT = 0x80
 GQ_PTR_BUILTIN_STR = 0x81
+GQ_PTR_BUILTIN_MENU_FLAGS = 0x82
 
 GQ_MAGIC_SIZE = 4
 GQ_MAGIC = b'GQ01'
@@ -226,10 +227,10 @@ assert struct.calcsize(GQ_OP_FORMAT_LITERAL_ARG1) == GQ_OP_SIZE and struct.calcs
 #     t_gq_pointer anim_bg_pointer;                // Pointer to the background animation (NULL if none)
 #     t_gq_pointer cue_bg_pointer;                 // Pointer to the background lighting cue (NULL if none)
 #     t_gq_pointer menu_pointer;                   // Pointer to the menu definition for this stage
-#     t_gq_pointer menu_prompt_pointer;            // Pointer to the prompt for the menu
+#     t_gq_pointer prompt_pointer;            // Pointer to the prompt for the menu
 #     t_gq_pointer event_commands[GQ_EVENT_COUNT]; // Event commands
 # } __attribute__((packed)) gq_stage;
-GqStage = namedtuple('GqStage', 'id anim_bg_pointer cue_bg_pointer menu_pointer menu_prompt_pointer event_commands')
+GqStage = namedtuple('GqStage', 'id anim_bg_pointer cue_bg_pointer menu_pointer prompt_pointer event_commands')
 GQ_STAGE_FORMAT = f'<H{T_GQ_POINTER_FORMAT}{T_GQ_POINTER_FORMAT}{T_GQ_POINTER_FORMAT}{T_GQ_POINTER_FORMAT}{len(EventType)}{T_GQ_POINTER_FORMAT}'
 GQ_STAGE_SIZE = struct.calcsize(GQ_STAGE_FORMAT)
 
@@ -269,6 +270,7 @@ GQ_RESERVED_STRS = [
     GqReservedVariable('GQS_LABEL2', 'str', 'Label 2', 3 * GQ_STR_SIZE),
     GqReservedVariable('GQS_LABEL3', 'str', 'Label 3', 4 * GQ_STR_SIZE),
     GqReservedVariable('GQS_LABEL4', 'str', 'Label 4', 5 * GQ_STR_SIZE),
+    GqReservedVariable('GQS_TEXTMENU_RESULT', 'str', 'Text menu result', 6 * GQ_STR_SIZE),
 ]
 
 GQ_RESERVED_PERSISTENT = []
