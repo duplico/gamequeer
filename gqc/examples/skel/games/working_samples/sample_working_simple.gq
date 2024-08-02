@@ -14,6 +14,7 @@ volatile {
     str game_name := "Test";
     str display_text := "";
     str temp_str := "";
+    str my_name := "Name";
 }
 
 persistent {
@@ -23,9 +24,9 @@ persistent {
 }
 
 menus {
-    restart {
+    textconfirm {
         1: "Yes";
-        0: "Also yes";
+        0: "Try again";
     }
 
     OkCancel {
@@ -177,18 +178,39 @@ stage selfie {
 }
 
 stage text {
-    textmenu prompt "Type something";
+    textmenu prompt "Type a name:";
     bganim george3;
 
     event enter {
-        GQS_TEXTMENU_RESULT := "LOL";
+        GQS_TEXTMENU_RESULT := my_name;
     }
 
     event menu {
-        gostage start;
+        my_name := GQS_TEXTMENU_RESULT;
+        gostage text_confirm;
     }
 
     event bgdone {
         play bganim george3;
+    }
+}
+
+stage text_confirm {
+    menu textconfirm prompt "Name OK?";
+
+    event enter {
+        GQS_LABEL1 := "You entered:";
+        GQS_LABEL2 := my_name;
+
+        GQI_LABEL1_Y = 54;
+        GQI_LABEL2_Y = 66;
+    }
+
+    event menu {
+        if (GQI_MENU_VALUE == 1) {
+            gostage start;
+        } else {
+            gostage text;
+        }
     }
 }
