@@ -143,6 +143,135 @@ void menu_close() {
     }
 }
 
+// TODO: move:
+
+#define MENU_HINT_BAR_Y 96
+#define MENU_HINT_A_X   116
+#define MENU_HINT_A_Y   116
+#define MENU_HINT_R     9
+
+#define MENU_HINT_B_X (116 - MENU_HINT_R - 16)
+#define MENU_HINT_B_Y MENU_HINT_A_Y
+
+#define MENU_HINT_DDIAL_X      17
+#define MENU_HINT_DDIAL_Y      MENU_HINT_A_X
+#define MENU_HINT_DDIAL_R      11
+#define MENU_HINT_DDIAL_ICON_R 5
+
+#define MENU_HINT_CLICK_X  (MENU_HINT_DDIAL_X + MENU_HINT_DDIAL_R + MENU_HINT_DDIAL_ICON_R * 3)
+#define MENU_HINT_CLICK_Y  MENU_HINT_DDIAL_Y
+#define MENU_HINT_CLICK_RI 3
+
+void draw_hint_bar() {
+    Graphics_setBackgroundColor(&g_sContext, GRAPHICS_COLOR_WHITE);
+    Graphics_setForegroundColor(&g_sContext, GRAPHICS_COLOR_BLACK);
+    Graphics_Rectangle hint_bar = {0, MENU_HINT_BAR_Y, 127, 127};
+    Graphics_fillRectangle(&g_sContext, &hint_bar);
+    Graphics_setForegroundColor(&g_sContext, GRAPHICS_COLOR_WHITE);
+    Graphics_setBackgroundColor(&g_sContext, GRAPHICS_COLOR_BLACK);
+    Graphics_drawLineH(&g_sContext, 0, 127, MENU_HINT_BAR_Y);
+    Graphics_drawLineH(&g_sContext, 0, 127, MENU_HINT_BAR_Y + 3);
+}
+
+void draw_hint_a() {
+    Graphics_drawCircle(&g_sContext, MENU_HINT_A_X, MENU_HINT_A_Y, MENU_HINT_R);
+    Graphics_drawString(&g_sContext, "A", -1, MENU_HINT_A_X - MENU_HINT_R - 4, MENU_HINT_A_Y - MENU_HINT_R - 5, 0);
+}
+
+void draw_hint_ok() {
+    // Draw a hint in the far bottom right of the screen showing that the A button is
+    //  used to confirm a selection.
+    draw_hint_a();
+    Graphics_drawStringCentered(&g_sContext, "OK", -1, MENU_HINT_A_X + 1, MENU_HINT_A_Y, 0);
+}
+
+void draw_hint_b() {
+    Graphics_drawCircle(&g_sContext, MENU_HINT_B_X, MENU_HINT_B_Y, MENU_HINT_R);
+    Graphics_drawString(&g_sContext, "B", -1, MENU_HINT_B_X - MENU_HINT_R - 4, MENU_HINT_B_Y - MENU_HINT_R - 5, 0);
+}
+
+void draw_hint_b_text(char *text) {
+    draw_hint_b();
+    Graphics_drawStringCentered(&g_sContext, text, -1, MENU_HINT_B_X + 1, MENU_HINT_B_Y, 0);
+}
+
+void draw_hint_dial() {
+    Graphics_drawCircle(&g_sContext, MENU_HINT_DDIAL_X, MENU_HINT_DDIAL_Y, MENU_HINT_R);
+
+    // For the dial hint draw a circle with a plus in the middle
+    Graphics_drawCircle(
+        &g_sContext,
+        MENU_HINT_DDIAL_X - MENU_HINT_DDIAL_R,
+        MENU_HINT_DDIAL_Y - MENU_HINT_DDIAL_R,
+        MENU_HINT_DDIAL_ICON_R);
+    Graphics_drawLine(
+        &g_sContext,
+        MENU_HINT_DDIAL_X - MENU_HINT_DDIAL_R - MENU_HINT_DDIAL_ICON_R,
+        MENU_HINT_DDIAL_Y - MENU_HINT_DDIAL_R,
+        MENU_HINT_DDIAL_X - MENU_HINT_DDIAL_R + MENU_HINT_DDIAL_ICON_R,
+        MENU_HINT_DDIAL_Y - MENU_HINT_DDIAL_R);
+    Graphics_drawLine(
+        &g_sContext,
+        MENU_HINT_DDIAL_X - MENU_HINT_DDIAL_R,
+        MENU_HINT_DDIAL_Y - MENU_HINT_DDIAL_R - MENU_HINT_DDIAL_ICON_R,
+        MENU_HINT_DDIAL_X - MENU_HINT_DDIAL_R,
+        MENU_HINT_DDIAL_Y - MENU_HINT_DDIAL_R + MENU_HINT_DDIAL_ICON_R);
+}
+
+void draw_updown(uint8_t x, uint8_t y) {
+    // Draw an up arrow
+    Graphics_drawLine(&g_sContext, x - 3, y - 3, x, y - 6);
+    Graphics_drawLine(&g_sContext, x, y - 6, x + 3, y - 3);
+
+    // And a down arrow below
+    Graphics_drawLine(&g_sContext, x - 3, y + 3, x, y + 6);
+    Graphics_drawLine(&g_sContext, x, y + 6, x + 3, y + 3);
+}
+
+void draw_leftright(uint8_t x, uint8_t y) {
+    // Draw a left arrow
+    Graphics_drawLine(&g_sContext, x - 3, y - 3, x - 6, y);
+    Graphics_drawLine(&g_sContext, x - 6, y, x - 3, y + 3);
+
+    // And a right arrow to the right
+    Graphics_drawLine(&g_sContext, x + 3, y - 3, x + 6, y);
+    Graphics_drawLine(&g_sContext, x + 6, y, x + 3, y + 3);
+}
+
+void draw_hint_dial_updown() {
+    draw_hint_dial();
+    draw_updown(MENU_HINT_DDIAL_X, MENU_HINT_DDIAL_Y);
+}
+
+void draw_hint_dial_leftright() {
+    draw_hint_dial();
+    draw_leftright(MENU_HINT_DDIAL_X, MENU_HINT_DDIAL_Y);
+}
+
+void draw_hint_click() {
+    // Draw a hint in the next slot in the bottom of the screen, showing that the D-dial click
+    //  is used for something.
+
+    Graphics_drawCircle(&g_sContext, MENU_HINT_CLICK_X, MENU_HINT_CLICK_Y, MENU_HINT_R);
+    Graphics_drawCircle(
+        &g_sContext,
+        MENU_HINT_CLICK_X - MENU_HINT_DDIAL_R,
+        MENU_HINT_CLICK_Y - MENU_HINT_DDIAL_R,
+        MENU_HINT_DDIAL_ICON_R);
+    Graphics_fillCircle(
+        &g_sContext, MENU_HINT_CLICK_X - MENU_HINT_DDIAL_R, MENU_HINT_CLICK_Y - MENU_HINT_DDIAL_R, MENU_HINT_CLICK_RI);
+}
+
+void draw_hint_click_updown() {
+    draw_hint_click();
+    draw_updown(MENU_HINT_CLICK_X, MENU_HINT_CLICK_Y);
+}
+
+void draw_hint_click_leftright() {
+    draw_hint_click();
+    draw_leftright(MENU_HINT_CLICK_X, MENU_HINT_CLICK_Y);
+}
+
 void draw_menu_choice() {
     if (*menu_active != GQ_MENU_FLAG_CHOICE)
         return;
@@ -164,6 +293,10 @@ void draw_menu_choice() {
             Graphics_drawString(&g_sContext, ">", -1, 6, menu_offset_y + i * 10, 0);
         }
     }
+
+    draw_hint_bar();
+    draw_hint_ok();
+    draw_hint_dial_updown();
 }
 
 void draw_menu_text() {
@@ -229,8 +362,33 @@ void draw_menu_text() {
             CURSOR_BOX_VLINE_LEFT + CURSOR_BOX_LINE_ARROW_WIDTH,
             CURSOR_BOX_VLINE_BOTTOM - CURSOR_BOX_LINE_ARROW_HEIGHT);
     } else {
-        // Draw an arrow left and an arrow right at the ends of the vertical bars.
-        // Left (at the top)
+        // TODO: Do we need left/right indicators?
+    }
+
+    // Now draw the hints.
+    draw_hint_bar();
+    draw_hint_ok();
+    // TODO:
+    // hint for the B button
+
+    draw_hint_click();
+
+    if (menu_text_mode == GQ_MENU_TEXT_MODE_CHAR) {
+        draw_hint_dial_updown();
+        draw_hint_click_leftright();
+    } else {
+        draw_hint_dial_leftright();
+        draw_hint_click_updown();
+    }
+
+    if (menu_text_symbol_type == GQ_MENU_TEXT_SYMBOL_CAPS) {
+        draw_hint_b_text("az");
+    } else if (menu_text_symbol_type == GQ_MENU_TEXT_SYMBOL_LOWER) {
+        draw_hint_b_text("09");
+    } else if (menu_text_symbol_type == GQ_MENU_TEXT_SYMBOL_NUM) {
+        draw_hint_b_text("$!");
+    } else {
+        draw_hint_b_text("AZ");
     }
 }
 
