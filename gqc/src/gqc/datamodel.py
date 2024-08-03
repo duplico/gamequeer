@@ -70,8 +70,6 @@ class Game:
             magic=structs.GQ_MAGIC,
             id=self.id,
             title=self.title.encode('ascii')[:structs.GQ_STR_SIZE-1],
-            anim_count=len(Animation.anim_table),
-            stage_count=len(Stage.stage_table),
             starting_stage_ptr=self.starting_stage.addr,
             startup_code_ptr=self.startup_code_ptr,
             persistent_var_ptr=self.persistent_var_ptr,
