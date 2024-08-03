@@ -32,6 +32,21 @@ GQ_MAGIC = b'GQ01'
 namespace_overflow_warned = False
 addr_wrong_namespace_warned = False
 
+GQ_CRC_SEED = 0x9F2A
+
+def crc16_update(crc : int, buf : bytes) -> int:
+    for b in buf:
+        crc = (0xFF & (crc >> 8)) | ((crc & 0xFF) << 8)
+        crc ^= b
+        crc ^= (crc & 0xFF) >> 4
+        crc ^= 0xFFFF & ((crc << 8) << 4)
+        crc ^= ((crc & 0xff) << 4) << 1
+    return crc
+
+def crc16_buf(sbuf : bytes) -> int:
+    crc = GQ_CRC_SEED
+    return crc16_update(crc, sbuf)
+
 def gq_ptr_apply_ns(ns, ptr):
     if ns < 0 or ns > 0xFF:
         raise ValueError(f'Invalid namespace {ns}')
@@ -71,12 +86,13 @@ GQ_INT_SIZE = struct.calcsize(GQ_INT_FORMAT)
 #     t_gq_pointer starting_stage;  // Pointer to the starting stage
 #     t_gq_pointer startup_code;    // Pointer to the startup code.
 #     t_gq_pointer persistent_vars; // Pointer to the persistent variables
+#     t_gq_pointer persistent_crc16; // Pointer to the persistent variable section's CRC16
 #     uint8_t color;                // Color of the game cartridge
 #     uint8_t flags;                // TBD
 #     uint16_t crc16;               // CRC16 checksum of the header
 # } gq_header;
-GqHeader = namedtuple('GqHeader', 'magic id title anim_count stage_count starting_stage_ptr startup_code_ptr persistent_var_ptr color flags crc16')
-GQ_HEADER_FORMAT = f'<{GQ_MAGIC_SIZE}sH{GQ_STR_SIZE}sHH{T_GQ_POINTER_FORMAT}{T_GQ_POINTER_FORMAT}{T_GQ_POINTER_FORMAT}BBH'
+GqHeader = namedtuple('GqHeader', 'magic id title anim_count stage_count starting_stage_ptr startup_code_ptr persistent_var_ptr persistent_crc16_ptr color flags crc16')
+GQ_HEADER_FORMAT = f'<{GQ_MAGIC_SIZE}sH{GQ_STR_SIZE}sHH{T_GQ_POINTER_FORMAT}{T_GQ_POINTER_FORMAT}{T_GQ_POINTER_FORMAT}{T_GQ_POINTER_FORMAT}BBH'
 GQ_HEADER_SIZE = struct.calcsize(GQ_HEADER_FORMAT)
 
 # typedef struct gq_anim {
