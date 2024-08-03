@@ -76,8 +76,6 @@ typedef struct gq_header {
     uint8_t magic[GQ_MAGIC_SIZE];  // Magic number
     uint16_t id;                   // Numerical ID of the game
     char title[GQ_STR_SIZE];       // Game title, null-terminated
-    uint16_t anim_count;           // Number of animations
-    uint16_t stage_count;          // Number of stages
     t_gq_pointer starting_stage;   // Pointer to the starting stage
     t_gq_pointer startup_code;     // Pointer to the startup code.
     t_gq_pointer persistent_vars;  // Pointer to the persistent variables
@@ -101,8 +99,8 @@ typedef struct gq_anim_onscreen {
     uint16_t ticks;  // Number of ticks until the next frame
     uint16_t frame;  // Current frame
     uint16_t in_use; // Whether the animation is in use
-    int16_t x;       // X position of the animation
-    int16_t y;       // Y position of the animation
+    t_gq_int x;      // X position of the animation
+    t_gq_int y;      // Y position of the animation
     gq_anim anim;    // Animation playing
 } __attribute__((packed)) gq_anim_onscreen;
 
@@ -284,7 +282,7 @@ void gq_draw_image_with_mask(
     uint16_t mask_bPP,
     int16_t width,
     int16_t height,
-    int16_t x,
-    int16_t y);
+    t_gq_int x,
+    t_gq_int y);
 
 #endif
