@@ -256,6 +256,11 @@ def create_symbol_table(table_dest = sys.stdout, cmd_dest = sys.stdout):
     
     print(tabulate(section_table, headers=section_table_headers), file=table_dest)
 
+    # Check whether the heap size exceeds the maximum (512 bytes)
+    if heap_ptr_offset > 0x200:
+        print(f"CRITICAL: Volatile variable table size exceeds maximum size of 512 bytes; actual size is {heap_ptr_offset} bytes.", file=sys.stderr)
+        exit(2)
+
     cmds_table = []
     cmds_table_headers = ['Address', 'Command', 'Op', 'Flags', 'arg1', 'arg2']
     next_expected_addr = list(Event.link_table.values())[0].event_statements[0].addr
