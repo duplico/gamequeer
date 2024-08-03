@@ -97,11 +97,11 @@ void trim_menu_text_result() {
 }
 
 void menu_select_symbol_type_from_index() {
-    if (menu_text_result[0] >= 'a' && menu_text_result[0] <= 'z') {
+    if (menu_text_result[menu_option_selected] >= 'a' && menu_text_result[menu_option_selected] <= 'z') {
         menu_text_symbol_type = GQ_MENU_TEXT_SYMBOL_LOWER;
-    } else if (menu_text_result[0] >= 'A' && menu_text_result[0] <= 'Z') {
+    } else if (menu_text_result[menu_option_selected] >= 'A' && menu_text_result[menu_option_selected] <= 'Z') {
         menu_text_symbol_type = GQ_MENU_TEXT_SYMBOL_CAPS;
-    } else if (menu_text_result[0] >= '0' && menu_text_result[0] <= '9') {
+    } else if (menu_text_result[menu_option_selected] >= '0' && menu_text_result[menu_option_selected] <= '9') {
         menu_text_symbol_type = GQ_MENU_TEXT_SYMBOL_NUM;
     } else {
         menu_text_symbol_type = GQ_MENU_TEXT_SYMBOL_SPECIAL;
@@ -118,6 +118,11 @@ void menu_text_load(t_gq_pointer menu_prompt) {
         menu_offset_y          = 0;
     }
 
+    // Initialize the menu options and activate it.
+    menu_option_selected = 0;
+    menu_text_mode       = GQ_MENU_TEXT_MODE_CHAR;
+    *menu_active         = GQ_MENU_FLAG_TEXT_ENTRY;
+
     // Clear out any text after the null terminator, and trim any trailing spaces.
     trim_menu_text_result();
 
@@ -133,10 +138,6 @@ void menu_text_load(t_gq_pointer menu_prompt) {
         menu_text_result[0]   = 'A';
     }
 
-    // Initialize the menu options and activate it.
-    menu_option_selected = 0;
-    menu_text_mode       = GQ_MENU_TEXT_MODE_CHAR;
-    *menu_active         = GQ_MENU_FLAG_TEXT_ENTRY;
     GQ_EVENT_SET(GQ_EVENT_REFRESH);
 }
 
@@ -407,13 +408,13 @@ void draw_menu_text() {
     }
 
     if (menu_text_symbol_type == GQ_MENU_TEXT_SYMBOL_CAPS) {
-        draw_hint_b_text("az");
-    } else if (menu_text_symbol_type == GQ_MENU_TEXT_SYMBOL_LOWER) {
-        draw_hint_b_text("09");
-    } else if (menu_text_symbol_type == GQ_MENU_TEXT_SYMBOL_NUM) {
-        draw_hint_b_text("$!");
-    } else {
         draw_hint_b_text("AZ");
+    } else if (menu_text_symbol_type == GQ_MENU_TEXT_SYMBOL_LOWER) {
+        draw_hint_b_text("az");
+    } else if (menu_text_symbol_type == GQ_MENU_TEXT_SYMBOL_NUM) {
+        draw_hint_b_text("09");
+    } else {
+        draw_hint_b_text("$!");
     }
 }
 
@@ -472,14 +473,13 @@ uint8_t handle_event_menu_text(uint16_t event_type) {
             if (menu_text_mode == GQ_MENU_TEXT_MODE_CHAR) {
                 // Change the character at the current position to the previous one alphabetically
                 if (menu_text_result[menu_option_selected] == 'A' || menu_text_result[menu_option_selected] == 'a' ||
-                    menu_text_result[menu_option_selected] == '0' || menu_text_result[menu_option_selected] == '@') {
+                    menu_text_result[menu_option_selected] == '0' || menu_text_result[menu_option_selected] == ' ' ||
+                    !menu_text_result[menu_option_selected]) {
                     // time to wrap
                     menu_text_select_last_in_class();
                 } else if (menu_text_result[menu_option_selected] == ':') {
                     // special case for the special characters that are divided by numerals in ASCII
                     menu_text_result[menu_option_selected] = '/';
-                } else if (!menu_text_result[menu_option_selected]) {
-                    menu_text_select_first_in_class();
                 } else {
                     menu_text_result[menu_option_selected]--;
                 }
@@ -522,7 +522,7 @@ uint8_t handle_event_menu_text(uint16_t event_type) {
 
                 if (menu_option_selected < GQ_STR_SIZE - 2) { // preserve null term
                     menu_option_selected++;
-                    if (!menu_text_result[menu_option_selected] == '\0') {
+                    if (menu_text_result[menu_option_selected]) {
                         menu_select_symbol_type_from_index();
                     }
                 }
