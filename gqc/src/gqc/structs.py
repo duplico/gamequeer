@@ -81,8 +81,6 @@ GQ_INT_SIZE = struct.calcsize(GQ_INT_FORMAT)
 #     uint8_t magic[GQ_MAGIC_SIZE]; // Magic number
 #     uint16_t id;                  // Numerical ID of the game
 #     char title[GQ_STR_SIZE];      // Game title, null-terminated
-#     uint16_t anim_count;          // Number of animations
-#     uint16_t stage_count;         // Number of stages
 #     t_gq_pointer starting_stage;  // Pointer to the starting stage
 #     t_gq_pointer startup_code;    // Pointer to the startup code.
 #     t_gq_pointer persistent_vars; // Pointer to the persistent variables
@@ -91,8 +89,8 @@ GQ_INT_SIZE = struct.calcsize(GQ_INT_FORMAT)
 #     uint8_t flags;                // TBD
 #     uint16_t crc16;               // CRC16 checksum of the header
 # } gq_header;
-GqHeader = namedtuple('GqHeader', 'magic id title anim_count stage_count starting_stage_ptr startup_code_ptr persistent_var_ptr persistent_crc16_ptr color flags crc16')
-GQ_HEADER_FORMAT = f'<{GQ_MAGIC_SIZE}sH{GQ_STR_SIZE}sHH{T_GQ_POINTER_FORMAT}{T_GQ_POINTER_FORMAT}{T_GQ_POINTER_FORMAT}{T_GQ_POINTER_FORMAT}BBH'
+GqHeader = namedtuple('GqHeader', 'magic id title starting_stage_ptr startup_code_ptr persistent_var_ptr persistent_crc16_ptr color flags crc16')
+GQ_HEADER_FORMAT = f'<{GQ_MAGIC_SIZE}sH{GQ_STR_SIZE}s{T_GQ_POINTER_FORMAT}{T_GQ_POINTER_FORMAT}{T_GQ_POINTER_FORMAT}{T_GQ_POINTER_FORMAT}BBH'
 GQ_HEADER_SIZE = struct.calcsize(GQ_HEADER_FORMAT)
 
 # typedef struct gq_anim {
