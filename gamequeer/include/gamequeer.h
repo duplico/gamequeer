@@ -73,17 +73,18 @@ typedef enum gq_game_color {
 } gq_game_color;
 
 typedef struct gq_header {
-    uint8_t magic[GQ_MAGIC_SIZE]; // Magic number
-    uint16_t id;                  // Numerical ID of the game
-    char title[GQ_STR_SIZE];      // Game title, null-terminated
-    uint16_t anim_count;          // Number of animations
-    uint16_t stage_count;         // Number of stages
-    t_gq_pointer starting_stage;  // Pointer to the starting stage
-    t_gq_pointer startup_code;    // Pointer to the startup code.
-    t_gq_pointer persistent_vars; // Pointer to the persistent variables
-    uint8_t color;                // Color of the cartridge, as per gq_game_color - may be assigned at write-time.
-    uint8_t flags;                // Reserved for future use
-    uint16_t crc16;               // CRC16 checksum of the header
+    uint8_t magic[GQ_MAGIC_SIZE];  // Magic number
+    uint16_t id;                   // Numerical ID of the game
+    char title[GQ_STR_SIZE];       // Game title, null-terminated
+    uint16_t anim_count;           // Number of animations
+    uint16_t stage_count;          // Number of stages
+    t_gq_pointer starting_stage;   // Pointer to the starting stage
+    t_gq_pointer startup_code;     // Pointer to the startup code.
+    t_gq_pointer persistent_vars;  // Pointer to the persistent variables
+    t_gq_pointer persistent_crc16; // Pointer to the persistent variable section's CRC16
+    uint8_t color;                 // Color of the cartridge, as per gq_game_color - may be assigned at write-time.
+    uint8_t flags;                 // Reserved for future use
+    uint16_t crc16;                // CRC16 checksum of the header
 } __attribute__((packed)) gq_header;
 
 typedef struct gq_anim {
