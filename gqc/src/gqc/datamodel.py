@@ -1,3 +1,4 @@
+import sys
 import struct
 from enum import IntEnum
 from typing import Iterable
@@ -397,6 +398,12 @@ class Animation:
         self.width = w
         self.height = h
 
+        # Animation widths and heights must fit in a uint8_t
+        if self.width > 0xff:
+            raise ValueError(f"Animation {name} width {self.width} exceeds maximum of 255")
+        if self.height > 0xff:
+            raise ValueError(f"Animation {name} height {self.height} exceeds maximum of 255")
+
         self.id = Animation.next_id
         Animation.next_id += 1
 
@@ -458,6 +465,10 @@ class Animation:
 
             if len(frame_paths) == 1:
                 self.ticks_per_frame = duration
+            
+            # Animation durations must fit in a uint16_t
+            if self.ticks_per_frame > 0xffff:
+                raise ValueError(f"Animation {name} duration {self.ticks_per_frame} exceeds maximum of 65535")
 
             for frame_path in frame_paths:
                 serialized_path = frame_path.with_suffix('.gqframe')
@@ -477,6 +488,10 @@ class Animation:
                 with open(self.dst_path / '.digest', 'w') as digest_file:
                     digest_file.write(self.digest())
                 animation_progress.update(hash_task, advance=1)
+        
+        # Frame counts must fit in a uint16_t
+        if len(self.frames) > 0xffff:
+            raise ValueError(f"Animation {name} has too many frames ({len(self.frames)}); maximum is 65535")
             
     def digest(self) -> int:
         # An Animation object is uniquely identified by a hash of the source file,
@@ -765,6 +780,11 @@ class LightCue:
         LightCue.link_table[self.addr] = self
     
     def to_bytes(self):
+        # Frame count must fit in a uint16_t
+        if len(self.frames) > 0xffff:
+            print(f"LightCue {self.name} has too many frames ({len(self.frames)}); maximum is 65535", file=sys.stderr)
+            exit(1)
+
         cue_struct = structs.GqLedCue(
             frame_count=len(self.frames),
             flags=0,
@@ -791,6 +811,11 @@ class LightCueFrame:
 
         if self.transition not in LightCueFrame.ALLOWED_TRANSITIONS:
             raise ValueError(f"Invalid transition {self.transition}; options are {LightCueFrame.ALLOWED_TRANSITIONS}")
+        
+        # Cue frame durations must fit in a uint16_t
+        if self.duration > 0xffff:
+            print(f"LightCueFrame has duration {self.duration} which exceeds maximum of 65535", file=sys.stderr)
+            exit(1)
     
     def add_to_cue(self, cue : LightCue):
         self.lightcue = cue

@@ -131,9 +131,6 @@ def parse_animation_definition(instring, loc, toks):
     name = toks[0]
     source = toks[1]
 
-    frame_rate = None
-    dithering = None
-
     kwargs = dict()
 
     if toks[2]:
