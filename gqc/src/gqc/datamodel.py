@@ -35,6 +35,8 @@ class Game:
         self.startup_code_ptr = None
         self.persistent_var_ptr = None
 
+        self.persistent_crc16_ptr = None
+
         if Game.game is not None:
             raise ValueError("Game already defined")
         Game.game = self
@@ -60,7 +62,9 @@ class Game:
 
     def to_bytes(self):
         if self.starting_stage is None:
-            raise ValueError("Starting stage not defined")
+            raise ValueError("COMPILER ERROR: Starting stage not defined")
+        if self.persistent_crc16_ptr is None:
+            raise ValueError("COMPILER ERROR: No pointer to the persistent section CRC16 is defined.")
         
         header = structs.GqHeader(
             magic=structs.GQ_MAGIC,
@@ -71,6 +75,7 @@ class Game:
             starting_stage_ptr=self.starting_stage.addr,
             startup_code_ptr=self.startup_code_ptr,
             persistent_var_ptr=self.persistent_var_ptr,
+            persistent_crc16_ptr=self.persistent_crc16_ptr,
             color=0x00, # Unassigned.
             flags=0,
             crc16=0

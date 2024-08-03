@@ -97,17 +97,7 @@ def create_symbol_table(table_dest = sys.stdout, cmd_dest = sys.stdout):
             frame.set_addr(cuedata_ptr_start + cuedata_ptr_offset)
             cuedata_ptr_offset += frame.size()
 
-    # Now that the frame data table is complete, we can calculate the starting
-    #  locations of the variable tables.
-    # First, allocate memory on-cart for the persistent variables
-    vars_ptr_start = cuedata_ptr_start + cuedata_ptr_offset
-    vars_ptr_offset = 0
-    Game.game.persistent_var_ptr = vars_ptr_start
-    for var in list(Variable.storageclass_table['persistent'].values()):
-        var.set_addr(vars_ptr_start + vars_ptr_offset)
-        vars_ptr_offset += var.size()
-
-    menus_ptr_start = vars_ptr_start + vars_ptr_offset
+    menus_ptr_start = cuedata_ptr_start + cuedata_ptr_offset
     menus_ptr_offset = 0
 
     for menu in Menu.menu_table.values():
@@ -143,7 +133,6 @@ def create_symbol_table(table_dest = sys.stdout, cmd_dest = sys.stdout):
                 event.set_addr(events_ptr_start + events_ptr_offset, namespace=structs.GQ_PTR_NS_CART)
                 events_ptr_offset += event.size()
 
-
     init_ptr_start = events_ptr_start + events_ptr_offset
     init_ptr_offset = 0
     init_table = dict()
@@ -162,6 +151,56 @@ def create_symbol_table(table_dest = sys.stdout, cmd_dest = sys.stdout):
     done_cmd.set_addr(init_ptr_start + init_ptr_offset, namespace=structs.GQ_PTR_NS_CART)
     init_table[done_cmd.addr] = done_cmd
     init_ptr_offset += done_cmd.size()
+
+    # Now, because of hardware limitations of the flash chips we're using, we can only erase 4 KB sectors at
+    #  a time. So we need to pad the initialization code with DONE commands until we reach a 4 KB boundary.
+    while init_ptr_offset % 0x1000 != 0:
+        done_cmd = CommandDone()
+        done_cmd.set_addr(init_ptr_start + init_ptr_offset, namespace=structs.GQ_PTR_NS_CART)
+        init_table[done_cmd.addr] = done_cmd
+        init_ptr_offset += done_cmd.size()
+
+    # Now that everything else has been addressed, we can calculate the starting
+    #  locations of the variable tables.
+    # First, allocate memory on-cart for the persistent variables
+    vars_ptr_start = init_ptr_start + init_ptr_offset
+    vars_ptr_offset = 0
+    Game.game.persistent_var_ptr = vars_ptr_start
+    
+    # First, we do a pass to calculate the CRC16 checksum of the persistent variables.
+    crc16_val = structs.GQ_CRC_SEED
+    for var in Variable.storageclass_table['persistent'].values():
+        crc16_val = structs.crc16_update(crc16_val, var.to_bytes())
+    
+    crc16_var = Variable('int', '__crc16.builtin', crc16_val, 'persistent')
+    Game.game.persistent_crc16_ptr = crc16_var.addr
+
+    # Now we do a pass to place the persistent variables into the persistent section.    
+    for var in Variable.storageclass_table['persistent'].values():
+        var.set_addr(vars_ptr_start + vars_ptr_offset)
+        vars_ptr_offset += var.size()
+    
+    # Bounds checking.
+    if vars_ptr_offset >= 0x1000:
+        print("COMPILER ERROR: Persistent variable section exceeds 4 KB sector boundary.", file=sys.stderr)
+        print("                This is a hardware limitation. Please reduce the use of persistent variables.", file=sys.stderr)
+        exit(2)
+    
+    # Now we need to pad the persistent section to the end of the 4 KB sector.
+    while vars_ptr_offset < 0x1000:
+        dummy_int = Variable('int', f'__pad.{vars_ptr_offset}', 0xFFFFFFFF, 'persistent')
+        dummy_int.set_addr(vars_ptr_start + vars_ptr_offset)
+        vars_ptr_offset += dummy_int.size()
+
+    # Finally, we need to add our write-through cache for the persistent variables.
+    #  This needs to be the exact same size as the persistent section, and have the
+    #  same values.
+    cache_ptr_start = vars_ptr_start + vars_ptr_offset
+    cache_ptr_offset = 0
+    for var in list(Variable.storageclass_table['persistent'].values()):
+        cache_var = Variable(var.datatype, f'__cache.{var.name}', var.value, 'persistent')
+        cache_var.set_addr(cache_ptr_start + cache_ptr_offset)
+        cache_ptr_offset += var.size()
 
     # Now, do one more pass to try to resolve any unresolved symbols in commands.
     for cmd in Command.command_list:
@@ -183,10 +222,10 @@ def create_symbol_table(table_dest = sys.stdout, cmd_dest = sys.stdout):
         '.framedata' : FrameData.link_table,
         '.cues' : LightCue.link_table,
         '.cuedata' : LightCueFrame.link_table,
-        '.var' : Variable.link_table,
         '.menu' : Menu.link_table,
         '.event' : Event.link_table,
         '.init' : init_table,
+        '.var' : Variable.link_table,
         '.heap' : Variable.heap_table
     }
 
