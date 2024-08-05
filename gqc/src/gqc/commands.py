@@ -376,6 +376,7 @@ class CommandIf(CommandWithIntExpressionArgument):
         
         if self.false_section_size != 0:
             self.true_section_size += structs.GQ_OP_SIZE
+            self.goto_cmd = CommandGoto(None, None)
 
         self.resolve()
     
@@ -402,7 +403,7 @@ class CommandIf(CommandWithIntExpressionArgument):
                     resolved = False
         
         if resolved and self.false_cmds:
-            self.goto_cmd = CommandGoto(None, None, self.addr + self.size())
+            resolved = self.goto_cmd.resolve()
 
         self.resolved = resolved
         return self.resolved
@@ -438,8 +439,7 @@ class CommandIf(CommandWithIntExpressionArgument):
         return cmd_bytes
     
     def set_addr(self, addr: int, namespace: int = structs.GQ_PTR_NS_CART):
-        if not self.resolve():
-            raise GqcParseError(f"Cannot set IF block address with unresolved symbols: {self.unresolved_symbols}", self.instring, self.loc)
+        self.resolve() # Attempt a resolution, but don't fail if it doesn't work.
         
         super().set_addr(addr, namespace)
         false_address = self.addr + super().size() + self.true_section_size
