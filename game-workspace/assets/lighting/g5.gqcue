@@ -1,0 +1,10 @@
+frame {
+    duration = 1000;
+    colors {
+        green,
+        green,
+        green,
+        green,
+        green 
+    }
+}

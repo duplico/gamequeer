@@ -1,0 +1,29 @@
+colors {
+    red := "red";
+    orange := "#ff2010";
+}
+
+frame {
+    duration = 100;
+    transition := "smooth";
+    colors {
+        red,
+        orange,
+        yellow,
+        green,
+        blue
+    }
+}
+
+
+frame {
+    duration = 152;
+    transition := "smooth";
+    colors {
+        orange,
+        yellow,
+        green,
+        blue,
+        red
+    }
+}

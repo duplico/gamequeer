@@ -1,0 +1,389 @@
+/* SAFECRACKING - Queer Safe
+ * See if you can find the code that will open the safe
+ * via the feedback the LEDs provide. 
+ * 
+ * Uses  Dial pad (Left, Right) and the 'A' and 'B' buttons. 
+ */
+
+game {
+    id = 48697;
+    title := "Queer Safe";
+    author := "Subterfuge";
+    starting_stage = start;
+}
+
+persistent {
+
+    int seen = 0;
+    int b_solved = 0;  // badges that have solved 
+}
+
+volatile {
+    int score = 0;
+    int index = 0;
+    int fcode = 0;	// full code
+    int code1 = 0;	// code slots 
+    int code2 = 0;
+    int code3 = 0;
+    int code4 = 0;
+    int code5 = 0;
+    int dstate = 0; // direction state 
+    int on_num = 0; // set to 1 if we are on the number
+    int solve = 0;  // Solved index:  index of solved numbers
+}
+
+animations {
+   //zero <- "zero.png" { duration = 500; } // need to immplement duration?
+   zero <- "zero.png";
+   one <- "one.png";
+   two <- "two.png";
+   three <- "three.png";
+   four <- "four.png";
+   five <- "five.png";
+   six <- "six.png";
+   seven <- "seven.png";
+   eight <- "eight.png";
+   nine <- "nine.png";
+   setec <- "sneakers.gif";
+   solved <- "scfld.gif" { frame_rate = 25; dithering := "sierra2_4a"; }
+   begin_anim <- "begin_anim.gif" { frame_rate = 25; dithering := "sierra2_4a"; }
+}
+
+lightcues {
+    r3 <- "r3.gqcue";
+    r4 <- "r4.gqcue";
+    r5 <- "r5.gqcue";
+    g1_r2 <- "r2g1.gqcue";
+    g1_r3 <- "r3g1.gqcue";
+    g2_r1 <- "r1g2.gqcue";
+    g2_r2 <- "r2g2.gqcue";
+    g3_r1 <- "r1g3.gqcue";
+    g3 <- "g3.gqcue";
+    g4 <- "g4.gqcue";
+    g5 <- "g5.gqcue";
+    g1_r4 <- "r4g1.gqcue";
+    g2_r3 <- "r3g2.gqcue";
+    g3_r2 <- "r2g3.gqcue";
+    g4_r1 <- "r1g4.gqcue";
+    test <- "test.gqcue";
+    flash <- "flash.gqcue";
+}
+
+// ever going to use a menu???
+menus {
+    restart {
+        1: "Yes";
+        0: "No";
+    }
+}
+
+/* Rules
+ *  There is a secret 'code' with start at 5 digits. 
+    . Animation to start (Dial spinning) 
+    . Light show...
+
+ Game Play 
+
+ *  Move the dial left or right 
+	. No LED feedback here. 
+    Press the 'A' button
+	. If NOT on a correct digit
+		. flash red (all remaning LEDs)
+	. If ON a correct digit, but not in the correct order
+		. flash yellow  (all remaining LEDs)
+	. if ON a correct digit AND in the right slote(order)
+		. flash green in the slot 
+	. LEDs stay green if 
+		. code is done in correct order
+		. once a number that isn't correct, reset
+	. If code is entered correctly 
+		. play animation of the dials, dialing the code. 
+		. play a cool animation 
+
+	. Next code requires some help from some other badeges 
+
+
+ */
+
+stage start {   	// Start with 5 level lock
+    bgcue r5;	//  CHANGE ME
+
+    event enter {
+
+        play bganim begin_anim;  // Dial being spun
+
+	// DELETE ME, this is only for TESTING
+	GQI_PLAYER_ID = 200;
+
+        index = 0;		// Dial index
+        on_num = 0;
+        solve = 0;		// solve index
+
+        // Seed code based on badge/user id
+        // Highly classified where I got these numbers from 
+
+	if ((GQI_PLAYER_ID < 25) && (GQI_PLAYER_ID >= 0)) { fcode = GQI_PLAYER_ID + 19304; }
+	else if ((GQI_PLAYER_ID < 50) && (GQI_PLAYER_ID >= 25)) { fcode = GQI_PLAYER_ID + 23184;}
+	else if ((GQI_PLAYER_ID < 75) && (GQI_PLAYER_ID >= 50) ){ fcode = GQI_PLAYER_ID + 29281;}
+	else if ((GQI_PLAYER_ID < 100) && (GQI_PLAYER_ID >= 75) ){ fcode = GQI_PLAYER_ID + 46403;}
+	else if ((GQI_PLAYER_ID < 125) && (GQI_PLAYER_ID >= 100)){ fcode = GQI_PLAYER_ID + 42304;}
+	else if ((GQI_PLAYER_ID < 150) && (GQI_PLAYER_ID >= 125)){ fcode = GQI_PLAYER_ID + 64505;}
+	else if ((GQI_PLAYER_ID < 175) && (GQI_PLAYER_ID >= 150)){ fcode = GQI_PLAYER_ID + 19004;}
+	else if ((GQI_PLAYER_ID < 200) && (GQI_PLAYER_ID >= 175)){ fcode = GQI_PLAYER_ID + 45607;}
+	else if ((GQI_PLAYER_ID < 225) && (GQI_PLAYER_ID >= 200)){ fcode = GQI_PLAYER_ID + 81304;}
+	else if ((GQI_PLAYER_ID < 250) && (GQI_PLAYER_ID >= 225)){ fcode = GQI_PLAYER_ID + 18109;}
+	else if ((GQI_PLAYER_ID < 275) && (GQI_PLAYER_ID >= 250)){ fcode = GQI_PLAYER_ID + 25304;}
+	else if ((GQI_PLAYER_ID < 300) && (GQI_PLAYER_ID >= 275)){ fcode = GQI_PLAYER_ID + 63813;}
+	else if ((GQI_PLAYER_ID < 325) && (GQI_PLAYER_ID >= 300)){ fcode = GQI_PLAYER_ID + 42304;}
+        
+	// Setup the code slots for the game
+	code1 = fcode / 10000;
+	fcode = fcode - code1 * 10000;
+	code2 = fcode / 1000;
+	fcode = fcode - code2 * 1000;
+	code3 = fcode / 100;
+	fcode = fcode - code3 * 100;
+	code4 = fcode / 10;
+	fcode = fcode - code4 * 10;
+	code5 = fcode;
+    }
+
+    event input(<-) { // LEFT
+        // Set cur direction, though do we care ? 
+        dstate = 1;  // Left
+
+        if (index == 9) {
+            index = 0;
+        } else {
+            index = index + 1;
+        }
+
+        if (index == 0) {
+            play bganim zero;
+        } else if (index == 1) {
+            play bganim one;
+        } else if (index == 2) {
+            play bganim two;
+        } else if (index == 3) {
+            play bganim three;
+        } else if (index == 4) {
+            play bganim four;
+        } else if (index == 5) {
+            play bganim five;
+        } else if (index == 6) {
+            play bganim six;
+        } else if (index == 7) {
+            play bganim seven;
+        } else if (index == 8) {
+            play bganim eight;
+        } else if (index == 9) {
+            play bganim nine;
+        }
+
+        // Set a flag if we land on the right combo number
+        if (solve == 0) {  // 
+            if (index == code1) {
+                on_num = 1;
+            } 
+	    else { on_num = 0; }
+        } else if (solve == 1) {
+            if (index == code2) {
+                on_num = 1;
+            }
+	    else { on_num = 0; }
+        } else if (solve == 2) {
+            if (index == code3) {
+                on_num = 1;
+            }
+	    else { on_num = 0; }
+        } else if (solve == 3) {
+            if (index == code4) {
+                on_num = 1;
+            }
+	    else { on_num = 0; }
+        } else if (solve == 4) {
+            if (index == code5) {
+                on_num = 1;
+            }
+	    else { on_num = 0; }
+        }   
+    }
+
+    event input(->) { //RIGHT
+            // Set cur direction  
+            dstate = 2;  // Right
+
+
+        if (index == 0) {
+            index = 9;
+        } else {
+            index = index - 1;
+        }
+
+        if (index == 0) {
+            play bganim zero;
+        } else if (index == 1) {
+            play bganim one;
+        } else if (index == 2) {
+            play bganim two;
+        } else if (index == 3) {
+            play bganim three;
+        } else if (index == 4) {
+            play bganim four;
+        } else if (index == 5) {
+            play bganim five;
+        } else if (index == 6) {
+            play bganim six;
+        } else if (index == 7) {
+            play bganim seven;
+        } else if (index == 8) {
+            play bganim eight;
+        } else if (index == 9) {
+            play bganim nine;
+        }
+
+        // Set a flag if we land on a combo number
+        if (solve == 0) { 
+            if (index == code1) {
+                on_num = 1;
+            }
+	    else { on_num = 0; }
+        } else if (solve == 1) {
+            if (index == code2) {
+                on_num = 1;
+            }
+	    else { on_num = 0; }
+        } else if (solve == 2) {
+            if (index == code3) {
+                on_num = 1;
+            }
+	    else { on_num = 0; }
+        } else if (solve == 3) {
+            if (index == code4) {
+                on_num = 1;
+            }
+	    else { on_num = 0; }
+        } else if (solve == 4) {
+            if (index == code5) {
+                on_num = 1;
+            }
+	    else { on_num = 0; }
+        }  
+    }
+
+    event input(A) {
+        // check number we are on
+
+	if (on_num == 1) {  			 // If we are on a valid code
+		if (solve == 0) { // Check to see if we are in the right order
+		    if (index == code1) {
+			solve = 1;
+			cue g1_r4;
+		    } 
+		    else { 
+			cue r5;			// FIXME 
+		    }
+		} else if (solve == 1) {
+		    if (index == code2) {
+			solve = 2;
+			cue g2_r3;
+		    }
+		    else { 
+			cue r5;			// FIXME
+		    }
+		} else if (solve == 2) {
+		    if (index == code3) {
+			solve = 3;
+			cue g3_r2;
+		    }
+		    else { 
+			cue r5;			// FIXME
+		    }
+		} else if (solve == 3) {
+		    if (index == code4) {
+			solve = 4;
+			cue g4_r1;
+		    }
+		    else { 
+			cue r5;			// FIXME
+		    }
+		} else if (solve == 4) {
+		    if (index == code5) {
+			solve = 5;
+			cue g5;
+		    }
+		    else { 
+			cue r5;			// FIXME
+		    }
+		} 
+	} else {
+		cue test;
+		solve = 0;
+	}
+    }
+
+    event input(B) {
+	// Check if we are code complete and should open!
+	if (solve == 5) {
+		cue flash;
+		play bganim setec;
+
+		// We should record solved to this cart for this badge
+		//gostage stage_two;
+	} else {
+		cue test;
+	}
+		
+    }
+
+    event bgdone {
+
+        if (index == 0) {
+            play bganim zero;
+        } else if (index == 1) {
+            play bganim one;
+        } else if (index == 2) {
+            play bganim two;
+        } else if (index == 3) {
+            play bganim three;
+        } else if (index == 4) {
+            play bganim four;
+        } else if (index == 5) {
+            play bganim five;
+        } else if (index == 6) {
+            play bganim six;
+        } else if (index == 7) {
+            play bganim seven;
+        } else if (index == 8) {
+            play bganim eight;
+        } else if (index == 9) {
+            play bganim nine;
+        }
+
+        // Show the LEDs
+        /*
+        if (solve == 0) {
+            cue r3;
+        } 
+        else if (solve == 1) {
+            cue g1_r2;
+        } 
+        else if (solve == 2) {
+            cue g2_r1;
+        } 
+        else if (solve == 3) {
+            cue g3;
+        }
+        */
+    }
+}
+
+stage gofour {
+    //menu restart prompt "Level up!";
+    event enter {
+        play bganim solved;
+    }
+    event bgdone {
+        //gostage four;
+    }
+}

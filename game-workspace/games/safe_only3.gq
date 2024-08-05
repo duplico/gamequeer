@@ -1,0 +1,309 @@
+game {
+    id = 7;
+    title := "Safe Cracker";
+    author := "Subterfuge";
+    starting_stage = start;
+}
+
+persistent {
+    int high_score = 0;
+    str high_score_name := "ME";
+    int badges_seen = 0;
+    int badges_solved = 0;
+}
+
+volatile {
+    int score = 0;
+    int index = 0;
+    int code1 = 0;
+    int code2 = 0;
+    int code3 = 0;
+    int code4 = 0;
+    int code5 = 0;
+    int dstate = 0; // direction state 
+    int prev_ds = 0; // Previous direction state
+    int on_num = 0; // set to 1 if we are on the number
+    int solve = 0;  // Solved index:  index of solved numbers
+}
+
+animations {
+   //zero <- "zero.png" { duration = 500; } // need to immplement duration?
+   zero <- "zero.png";
+   one <- "one.png";
+   two <- "two.png";
+   three <- "three.png";
+   four <- "four.png";
+   five <- "five.png";
+   six <- "six.png";
+   seven <- "seven.png";
+   eight <- "eight.png";
+   nine <- "nine.png";
+   setec <- "sneakers.gif";
+   solved <- "scfld.gif" { frame_rate = 25; dithering := "sierra2_4a"; }
+   begin_anim <- "begin_anim.gif" { frame_rate = 25; dithering := "sierra2_4a"; }
+}
+
+lightcues {
+    r3 <- "r3.gqcue";
+    r4 <- "r4.gqcue";
+    r5 <- "r5.gqcue";
+    g1_r2 <- "r2g1.gqcue";
+    g1_r3 <- "r3g1.gqcue";
+    g2_r1 <- "r1g2.gqcue";
+    g2_r2 <- "r2g2.gqcue";
+    g3_r1 <- "r1g3.gqcue";
+    g3 <- "g3.gqcue";
+    g4 <- "g4.gqcue";
+    test <- "test.gqcue";
+}
+
+menus {
+    restart {
+        1: "Yes";
+        0: "No";
+    }
+}
+
+/* TODO 
+ * find a way to set enter state based on badge 
+ * Test to see if you went PAST the correct number ?
+ */
+
+stage start {   // Start with 3 level lock
+    bgcue r3;
+    event enter {
+        play bganim begin_anim;
+        index = 0;
+        dstate = 0;
+        on_num = 0;
+        solve = 0;
+        code1 = 6;
+        code2 = 5;
+        code3 = 9;
+        prev_ds = 0;
+        //timer 100;
+    }
+    event input(<-) { // LEFT
+        // Save prev direction state
+        prev_ds = dstate;
+        // Set cur direction  
+        dstate = 1;  // Left
+
+        // check prevous 
+        if(on_num == 1)  {  // We were previously on a valid number
+            if( prev_ds != dstate) { // we are changing direction, this is what we want
+                // flag to update leds
+                if (solve == 1) {
+                   if (dstate == 1) {
+                    cue g1_r2;
+                    }
+                } 
+                else if (solve == 2) {
+                    cue g2_r1;
+                } 
+                else if (solve == 3) {
+                    cue g3;
+                }
+            } 
+            else {  // Reset this wheel as we went past
+                if(solve == 0){
+                    solve = solve - 1;
+                }
+            }
+        }
+
+        if (index == 9) {
+            index = 0;
+        } else {
+            index = index + 1;
+        }
+
+        if (index == 0) {
+            play bganim zero;
+        } else if (index == 1) {
+            play bganim one;
+        } else if (index == 2) {
+            play bganim two;
+        } else if (index == 3) {
+            play bganim three;
+        } else if (index == 4) {
+            play bganim four;
+        } else if (index == 5) {
+            play bganim five;
+        } else if (index == 6) {
+            play bganim six;
+        } else if (index == 7) {
+            play bganim seven;
+        } else if (index == 8) {
+            play bganim eight;
+        } else if (index == 9) {
+            play bganim nine;
+        }
+
+        // Set a flag if we land on a combo number
+        // but don't indicate via led yet
+        if (solve == 0) { 
+            if (index == code1) {
+                on_num = 1;
+                solve = 1; 
+            }
+        } else if (solve == 1) {
+            if (index == code2) {
+                on_num = 1;
+                solve = 2;
+            }
+        } else if (solve == 2) {
+            if (index == code3) {
+                on_num = 1;
+                solve = 3;
+            }
+        } else { // We are on a non coded number
+            on_num = 0;
+        }
+    }
+
+    event input(->) { //RIGHT
+        // Save prev direction state
+            prev_ds = dstate;
+            // Set cur direction  
+            dstate = 2;  // Left
+
+            // check prevous 
+            if(on_num == 1)  {  // We were previously on a valid number
+                if( prev_ds != dstate) { // we are changing direction 
+                    // Update the LEDs 
+                    if (solve == 1) {
+                        if (dstate == 1){
+                            cue g1_r2;
+                        }
+                    } 
+                    else if (solve == 2) {
+                        cue g2_r1;
+                    } 
+                    else if (solve == 3) {
+                        cue g3;
+                    }
+                } 
+                else {  // Reset this wheel as we went past
+                    if(solve ==0) {
+                        solve = solve - 1;
+                    }
+                }
+            }
+
+
+        if (index == 0) {
+            index = 9;
+        } else {
+            index = index - 1;
+        }
+
+        if (index == 0) {
+            play bganim zero;
+        } else if (index == 1) {
+            play bganim one;
+        } else if (index == 2) {
+            play bganim two;
+        } else if (index == 3) {
+            play bganim three;
+        } else if (index == 4) {
+            play bganim four;
+        } else if (index == 5) {
+            play bganim five;
+        } else if (index == 6) {
+            play bganim six;
+        } else if (index == 7) {
+            play bganim seven;
+        } else if (index == 8) {
+            play bganim eight;
+        } else if (index == 9) {
+            play bganim nine;
+        }
+
+        // Set a flag if we land on a combo number
+        // but don't indicate via led yet
+        if (solve == 0) { 
+            if (index == code1) {
+                on_num = 1;
+                solve = 1; 
+            }
+        } else if (solve == 1) {
+            if (index == code2) {
+                on_num = 1;
+                solve = 2;
+            }
+        } else if (solve == 2) {
+            if (index == code3) {
+                on_num = 1;
+                solve = 3;
+            }
+        } else { // We are on a non coded number
+            on_num = 0;
+        }
+
+    }
+    event input(A) {
+        // open safe
+        // Are all lights green?
+        if(solve == 3) {
+            // play cool animation!
+            gostage gofour;
+        }else if(solve == 2) {
+            cue g2_r1;
+
+        }else if (solve == 1){
+            cue g1_r2;
+        } 
+    }
+
+    event bgdone {
+
+        if (index == 0) {
+            play bganim zero;
+        } else if (index == 1) {
+            play bganim one;
+        } else if (index == 2) {
+            play bganim two;
+        } else if (index == 3) {
+            play bganim three;
+        } else if (index == 4) {
+            play bganim four;
+        } else if (index == 5) {
+            play bganim five;
+        } else if (index == 6) {
+            play bganim six;
+        } else if (index == 7) {
+            play bganim seven;
+        } else if (index == 8) {
+            play bganim eight;
+        } else if (index == 9) {
+            play bganim nine;
+        }
+
+        // Show the LEDs
+        /*
+        if (solve == 0) {
+            cue r3;
+        } 
+        else if (solve == 1) {
+            cue g1_r2;
+        } 
+        else if (solve == 2) {
+            cue g2_r1;
+        } 
+        else if (solve == 3) {
+            cue g3;
+        }
+        */
+    }
+}
+
+stage gofour {
+    //menu restart prompt "Level up!";
+    event enter {
+        play bganim solved;
+    }
+    event bgdone {
+        //gostage four;
+    }
+}

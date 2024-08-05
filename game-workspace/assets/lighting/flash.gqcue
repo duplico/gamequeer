@@ -1,0 +1,811 @@
+frame {
+    duration = 24;
+    colors {
+        orange,
+        black,
+        yellow,
+        orange,
+        gray
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        gray,
+        orange,
+        black,
+        yellow,
+        orange
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        yellow,
+        orange,
+        gray,
+        orange,
+        black
+    }
+}
+frame {
+    duration = 24;
+    colors {
+        orange,
+        black,
+        yellow,
+        orange,
+        gray
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        gray,
+        orange,
+        black,
+        yellow,
+        orange
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        yellow,
+        orange,
+        gray,
+        orange,
+        black
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        orange,
+        gray,
+        orange,
+        black,
+        yellow
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        black,
+        yellow,
+        orange,
+        gray,
+        orange
+    }
+}
+frame {
+    duration = 24;
+    colors {
+        orange,
+        black,
+        yellow,
+        orange,
+        gray
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        gray,
+        orange,
+        black,
+        yellow,
+        orange
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        yellow,
+        orange,
+        gray,
+        orange,
+        black
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        orange,
+        gray,
+        orange,
+        black,
+        yellow
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        black,
+        yellow,
+        orange,
+        gray,
+        orange
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        orange,
+        gray,
+        orange,
+        black,
+        yellow
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        black,
+        yellow,
+        orange,
+        gray,
+        orange
+    }
+}
+frame {
+    duration = 24;
+    colors {
+        orange,
+        black,
+        yellow,
+        orange,
+        gray
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        gray,
+        orange,
+        black,
+        yellow,
+        orange
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        yellow,
+        orange,
+        gray,
+        orange,
+        black
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        orange,
+        gray,
+        orange,
+        black,
+        yellow
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        black,
+        yellow,
+        orange,
+        gray,
+        orange
+    }
+}
+frame {
+    duration = 24;
+    colors {
+        orange,
+        black,
+        yellow,
+        orange,
+        gray
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        gray,
+        orange,
+        black,
+        yellow,
+        orange
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        yellow,
+        orange,
+        gray,
+        orange,
+        black
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        orange,
+        gray,
+        orange,
+        black,
+        yellow
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        black,
+        yellow,
+        orange,
+        gray,
+        orange
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        orange,
+        black,
+        yellow,
+        orange,
+        gray
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        gray,
+        orange,
+        black,
+        yellow,
+        orange
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        yellow,
+        orange,
+        gray,
+        orange,
+        black
+    }
+}
+frame {
+    duration = 24;
+    colors {
+        orange,
+        black,
+        yellow,
+        orange,
+        gray
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        gray,
+        orange,
+        black,
+        yellow,
+        orange
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        yellow,
+        orange,
+        gray,
+        orange,
+        black
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        orange,
+        gray,
+        orange,
+        black,
+        yellow
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        black,
+        yellow,
+        orange,
+        gray,
+        orange
+    }
+}
+frame {
+    duration = 24;
+    colors {
+        orange,
+        black,
+        yellow,
+        orange,
+        gray
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        gray,
+        orange,
+        black,
+        yellow,
+        orange
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        yellow,
+        orange,
+        gray,
+        orange,
+        black
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        orange,
+        gray,
+        orange,
+        black,
+        yellow
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        black,
+        yellow,
+        orange,
+        gray,
+        orange
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        orange,
+        gray,
+        orange,
+        black,
+        yellow
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        black,
+        yellow,
+        orange,
+        gray,
+        orange
+    }
+}
+frame {
+    duration = 24;
+    colors {
+        orange,
+        black,
+        yellow,
+        orange,
+        gray
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        gray,
+        orange,
+        black,
+        yellow,
+        orange
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        yellow,
+        orange,
+        gray,
+        orange,
+        black
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        orange,
+        gray,
+        orange,
+        black,
+        yellow
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        black,
+        yellow,
+        orange,
+        gray,
+        orange
+    }
+}
+frame {
+    duration = 24;
+    colors {
+        orange,
+        black,
+        yellow,
+        orange,
+        gray
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        gray,
+        orange,
+        black,
+        yellow,
+        orange
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        yellow,
+        orange,
+        gray,
+        orange,
+        black
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        orange,
+        gray,
+        orange,
+        black,
+        yellow
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        black,
+        yellow,
+        orange,
+        gray,
+        orange
+    }
+}
+frame {
+    duration = 24;
+    colors {
+        orange,
+        black,
+        yellow,
+        orange,
+        gray
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        gray,
+        orange,
+        black,
+        yellow,
+        orange
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        yellow,
+        orange,
+        gray,
+        orange,
+        black
+    }
+}
+frame {
+    duration = 24;
+    colors {
+        orange,
+        black,
+        yellow,
+        orange,
+        gray
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        gray,
+        orange,
+        black,
+        yellow,
+        orange
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        yellow,
+        orange,
+        gray,
+        orange,
+        black
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        orange,
+        gray,
+        orange,
+        black,
+        yellow
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        black,
+        yellow,
+        orange,
+        gray,
+        orange
+    }
+}
+frame {
+    duration = 24;
+    colors {
+        orange,
+        black,
+        yellow,
+        orange,
+        gray
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        gray,
+        orange,
+        black,
+        yellow,
+        orange
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        yellow,
+        orange,
+        gray,
+        orange,
+        black
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        orange,
+        gray,
+        orange,
+        black,
+        yellow
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        black,
+        yellow,
+        orange,
+        gray,
+        orange
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        orange,
+        gray,
+        orange,
+        black,
+        yellow
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        black,
+        yellow,
+        orange,
+        gray,
+        orange
+    }
+}
+frame {
+    duration = 24;
+    colors {
+        orange,
+        black,
+        yellow,
+        orange,
+        gray
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        gray,
+        orange,
+        black,
+        yellow,
+        orange
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        yellow,
+        orange,
+        gray,
+        orange,
+        black
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        orange,
+        gray,
+        orange,
+        black,
+        yellow
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        black,
+        yellow,
+        orange,
+        gray,
+        orange
+    }
+}
+frame {
+    duration = 24;
+    colors {
+        orange,
+        black,
+        yellow,
+        orange,
+        gray
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        gray,
+        orange,
+        black,
+        yellow,
+        orange
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        yellow,
+        orange,
+        gray,
+        orange,
+        black
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        orange,
+        gray,
+        orange,
+        black,
+        yellow
+    }
+}
+
+frame {
+    duration = 24;
+    colors {
+        black,
+        yellow,
+        orange,
+        gray,
+        orange
+    }
+}

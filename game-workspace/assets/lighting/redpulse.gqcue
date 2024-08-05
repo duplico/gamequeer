@@ -1,0 +1,60 @@
+//Generated at 2024-07-30 01:29:23.095827 with name redpulse
+frame {
+    duration = 10;
+    transition := "smooth";
+    colors {
+        black,
+        black,
+        red,
+        black,
+        black
+    }
+}
+
+frame {
+    duration = 10;
+    transition := "smooth";
+    colors {
+        black,
+        red,
+        red,
+        red,
+        black
+    }
+}
+
+frame {
+    duration = 10;
+    transition := "smooth";
+    colors {
+        red,
+        red,
+        black,
+        red,
+        red
+    }
+}
+
+frame {
+    duration = 10;
+    transition := "smooth";
+    colors {
+        red,
+        black,
+        black,
+        black,
+        red
+    }
+}
+
+frame {
+    duration = 10;
+    transition := "smooth";
+    colors {
+        black,
+        black,
+        black,
+        black,
+        black
+    }
+}
