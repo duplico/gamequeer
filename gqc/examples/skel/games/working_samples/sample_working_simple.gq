@@ -94,6 +94,10 @@ stage start {
         // } else if (D)
         //     badge_id = 18;
         
+        if (badges_seen != 5) {
+            badges_seen = 5;
+        }
+
         badge_id = 0;
         loop {
             badge_id = badge_id + 1;
