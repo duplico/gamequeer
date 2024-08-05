@@ -293,9 +293,9 @@ for i in range(math.ceil(BADGES_ALLOWED / (8 * GQ_INT_SIZE))):
     GQ_RESERVED_PERSISTENT.append(GqReservedVariable(f'GQ_PERSISTENT_BADGES_{i}.builtin', 'int', 0, 0x000000 + 8 * i * GQ_INT_SIZE))
 
 GQ_REGISTERS_INT = [
-    'GQ_RI0.reg', 'GQ_RI1.reg',
+    'GQ_RI0.reg', 'GQ_RI1.reg', 'GQ_RI2.reg', 'GQ_RI3.reg',
 ]
 
 GQ_REGISTERS_STR = [
-    'GQ_RS0.reg', 'GQ_RS1.reg',
+    'GQ_RS0.reg', 'GQ_RS1.reg', 'GQ_RS2.reg', 'GQ_RS3.reg',
 ]
