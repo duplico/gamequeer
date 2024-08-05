@@ -6,7 +6,7 @@ terminal INT returns number: /\-?[0-9]+/;
 
 terminal STRING: /"(\\.|[^"\\])*"/;
 
-terminal INPUTBUTTON: '(A)' | '(B)' | '(<-)' | '(->)';
+terminal INPUTBUTTON: '(A)' | '(B)' | '(<-)' | '(->)' | '(-)';
 
 hidden terminal ML_COMMENT: /\/\*[\s\S]*?\*\//;
 hidden terminal SL_COMMENT: /\/\/[^\n\r]*/;
@@ -82,11 +82,9 @@ IntOperator:
 IntExprParen:
     '(' expr=IntExpr ')';
 IntUnaryExpr:
-    operator=('!' | '-' | '~') operand=IntExpr;
-IntBadgeExpr:
-    operator='badge_get' '(' badge=IntExpr ')';
+    operator=('!' | '-' | '~' | 'badge_get') operand=IntExpr;
 IntExpr:
-    IntBadgeExpr | IntExprParen | IntOperand | IntOperand IntOperator IntExpr | IntUnaryExpr;
+    IntExprParen | IntUnaryExpr | IntOperand | IntOperand IntOperator IntExpr;
 
 StrCast:
     operator='str' '(' expr=IntExpr ')';
