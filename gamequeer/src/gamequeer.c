@@ -144,7 +144,7 @@ uint8_t load_stage(t_gq_pointer stage_ptr) {
 
 uint8_t load_game(uint8_t namespace) {
     // Load the game header
-    if (!gq_memcpy_to_ram((uint8_t *) &game, GQ_PTR(namespace, 0), sizeof(gq_header))) {
+    if (!gq_memcpy_to_ram((uint8_t *) &game, GQ_PTR((uint32_t) namespace, 0), sizeof(gq_header))) {
         return 0;
     }
 
