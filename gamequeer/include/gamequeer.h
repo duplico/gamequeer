@@ -272,6 +272,7 @@ void gq_draw_image(
     int16_t bPP,
     int16_t width,
     int16_t height,
+    uint32_t img_frame_data_size,
     t_gq_int x,
     t_gq_int y);
 void gq_draw_image_with_mask(
@@ -282,6 +283,8 @@ void gq_draw_image_with_mask(
     uint16_t mask_bPP,
     int16_t width,
     int16_t height,
+    uint32_t img_frame_data_size,
+    uint32_t mask_frame_data_size,
     t_gq_int x,
     t_gq_int y);
 
