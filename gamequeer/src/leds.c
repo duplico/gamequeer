@@ -142,13 +142,13 @@ void led_tick() {
                 } else {
                     led_anim_done();
                 }
-
-                // Either way, we need to display the destination color of the current transition.
-                for (uint8_t i = 0; i < 5; i++) {
-                    gq_leds[i] = leds_cue_color_next[i];
-                }
-                need_to_redraw = 1;
             }
+
+            // Either way, we need to display the destination color of the current transition.
+            for (uint8_t i = 0; i < 5; i++) {
+                gq_leds[i] = leds_cue_color_next[i];
+            }
+            need_to_redraw = 1;
             led_setup_frame(); // leds_cue_frame_ticks_elapsed is reset inside the function.
         } else {
             // The current frame is _not_ done, so we need to display the current colors.
@@ -165,13 +165,13 @@ void led_tick() {
                 for (uint8_t i = 0; i < 5; i++) {
                     // Interpolate the colors.
                     gq_leds[i].r = leds_cue_color_curr[i].r +
-                        ((leds_cue_color_next[i].r - leds_cue_color_curr[i].r) * leds_cue_frame_ticks_elapsed /
+                        ((((int32_t) leds_cue_color_next[i].r - leds_cue_color_curr[i].r) * leds_cue_frame_ticks_elapsed) /
                          leds_cue_frame_curr.duration);
                     gq_leds[i].g = leds_cue_color_curr[i].g +
-                        ((leds_cue_color_next[i].g - leds_cue_color_curr[i].g) * leds_cue_frame_ticks_elapsed /
+                        ((((int32_t) leds_cue_color_next[i].g - leds_cue_color_curr[i].g) * leds_cue_frame_ticks_elapsed) /
                          leds_cue_frame_curr.duration);
                     gq_leds[i].b = leds_cue_color_curr[i].b +
-                        ((leds_cue_color_next[i].b - leds_cue_color_curr[i].b) * leds_cue_frame_ticks_elapsed /
+                        ((((int32_t)leds_cue_color_next[i].b - leds_cue_color_curr[i].b) * leds_cue_frame_ticks_elapsed) /
                          leds_cue_frame_curr.duration);
                 }
 
