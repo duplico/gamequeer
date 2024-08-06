@@ -20,10 +20,10 @@ typedef struct gq_image_frame_on_screen {
     uint8_t y_end;       // The y coordinate (within the image) of the last row to be drawn (height - 1 unless clipping)
     uint8_t render_byte; // The raw image byte currently being read
     uint8_t pixel_value; // The value of the current pixel (used for RLE)
-    uint8_t pixel_repeat;            // How many repeats are left for the current pixel (used for RLE)
-    uint8_t rle_type;                // The type of RLE encoding used (4 or 7) or 0 for uncompressed
-    uint8_t *image_buffer;           // The buffer to store the image or its intermediate bytes in
-    uint8_t bytes_remaining_to_load; // The number of bytes remaining to load from flash to the buffer
+    uint8_t pixel_repeat;             // How many repeats are left for the current pixel (used for RLE)
+    uint8_t rle_type;                 // The type of RLE encoding used (4 or 7) or 0 for uncompressed
+    uint8_t *image_buffer;            // The buffer to store the image or its intermediate bytes in
+    uint16_t bytes_remaining_to_load; // The number of bytes remaining to load from flash to the buffer
 } gq_image_frame_on_screen;
 
 uint8_t image_buffer_main[IMAGE_BUFFER_SIZE];
@@ -147,7 +147,6 @@ void gq_load_image(
     }
 
     frame->bytes_remaining_to_load = frame_data_size;
-    gq_image_load_buffer(frame);
     gq_image_load_byte(frame);
 }
 
