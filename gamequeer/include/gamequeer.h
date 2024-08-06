@@ -10,15 +10,15 @@
 #define GQ_INT_SIZE   4
 
 #define GQ_PTR_NS_MASK            0xFF000000
-#define GQ_PTR_NS_NULL            0x00
-#define GQ_PTR_NS_CART            0x01
-#define GQ_PTR_NS_SAVE            0x02
-#define GQ_PTR_NS_FRAM            0x03
-#define GQ_PTR_NS_FBUF            0x04
-#define GQ_PTR_NS_HEAP            0x05
-#define GQ_PTR_BUILTIN_INT        0x80
-#define GQ_PTR_BUILTIN_STR        0x81
-#define GQ_PTR_BUILTIN_MENU_FLAGS 0x82
+#define GQ_PTR_NS_NULL            0x00l
+#define GQ_PTR_NS_CART            0x01l
+#define GQ_PTR_NS_SAVE            0x02l
+#define GQ_PTR_NS_FRAM            0x03l
+#define GQ_PTR_NS_FBUF            0x04l
+#define GQ_PTR_NS_HEAP            0x05l
+#define GQ_PTR_BUILTIN_INT        0x80l
+#define GQ_PTR_BUILTIN_STR        0x81l
+#define GQ_PTR_BUILTIN_MENU_FLAGS 0x82l
 
 #define GQ_PTR_NS(POINTER)     ((POINTER & GQ_PTR_NS_MASK) >> 24)
 #define GQ_PTR_ADDR(POINTER)   (POINTER & ~GQ_PTR_NS_MASK)
