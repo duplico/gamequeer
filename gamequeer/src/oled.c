@@ -1,6 +1,7 @@
 #include <stdint.h>
 
 #include "HAL.h"
+#include "HAL_emulator.h"
 #include "gamequeer.h"
 #include "grlib.h"
 
@@ -19,16 +20,40 @@ typedef struct gq_image_frame_on_screen {
     uint8_t y_end;       // The y coordinate (within the image) of the last row to be drawn (height - 1 unless clipping)
     uint8_t render_byte; // The raw image byte currently being read
     uint8_t pixel_value; // The value of the current pixel (used for RLE)
-    uint8_t pixel_repeat; // How many repeats are left for the current pixel (used for RLE)
-    uint8_t rle_type;     // The type of RLE encoding used (4 or 7) or 0 for uncompressed
+    uint8_t pixel_repeat;             // How many repeats are left for the current pixel (used for RLE)
+    uint8_t rle_type;                 // The type of RLE encoding used (4 or 7) or 0 for uncompressed
+    uint8_t *image_buffer;            // The buffer to store the image or its intermediate bytes in
+    uint16_t bytes_remaining_to_load; // The number of bytes remaining to load from flash to the buffer
 } gq_image_frame_on_screen;
+
+uint8_t image_buffer_main[IMAGE_BUFFER_SIZE];
+uint8_t image_buffer_mask[IMAGE_BUFFER_SIZE];
 
 uint8_t gq_image_done(gq_image_frame_on_screen *frame) {
     return frame->y_curr >= frame->y_end;
 }
 
+void gq_image_load_buffer(gq_image_frame_on_screen *frame) {
+    // Load the image buffer with the next chunk of image data.
+    uint32_t bytes_to_load = frame->bytes_remaining_to_load;
+    if (bytes_to_load > IMAGE_BUFFER_SIZE) {
+        bytes_to_load = IMAGE_BUFFER_SIZE;
+    }
+
+    gq_memcpy_to_ram(frame->image_buffer, frame->image_bytes, bytes_to_load);
+    frame->bytes_remaining_to_load -= bytes_to_load;
+    frame->image_bytes += bytes_to_load;
+}
+
 void gq_image_load_byte(gq_image_frame_on_screen *frame) {
-    frame->render_byte = read_byte(frame->image_bytes + frame->byte_index);
+    // Load the next byte from the image buffer.
+    //  If the buffer is empty, load the next chunk of image data.
+    if (frame->byte_index % IMAGE_BUFFER_SIZE == 0) {
+        gq_image_load_buffer(frame);
+        frame->byte_index = 0;
+    }
+
+    frame->render_byte = frame->image_buffer[frame->byte_index];
 
     if (frame->rle_type == 4) {
         // RLE 4 bit encoding
@@ -87,6 +112,7 @@ void gq_load_image(
     int16_t bPP,
     int16_t width,
     int16_t height,
+    uint32_t frame_data_size,
     t_gq_int x,
     t_gq_int y,
     gq_image_frame_on_screen *frame) {
@@ -120,6 +146,7 @@ void gq_load_image(
         frame->y_end = height;
     }
 
+    frame->bytes_remaining_to_load = frame_data_size;
     gq_image_load_byte(frame);
 }
 
@@ -129,6 +156,7 @@ void gq_draw_image(
     int16_t bPP,
     int16_t width,
     int16_t height,
+    uint32_t img_frame_data_size,
     t_gq_int x,
     t_gq_int y) {
     // TODO: Add palette support.
@@ -136,10 +164,11 @@ void gq_draw_image(
     gq_image_frame_on_screen frame = {
         0,
     };
+    frame.image_buffer = image_buffer_main;
 
     const uint32_t palette[2] = {0, 1};
 
-    gq_load_image(image_bytes, bPP, width, height, x, y, &frame);
+    gq_load_image(image_bytes, bPP, width, height, img_frame_data_size, x, y, &frame);
 
     while (!(gq_image_done(&frame))) {
         // Draw the pixel.
@@ -161,17 +190,22 @@ void gq_draw_image_with_mask(
     uint16_t mask_bPP,
     int16_t width,
     int16_t height,
+    uint32_t img_frame_data_size,
+    uint32_t mask_frame_data_size,
     t_gq_int x,
     t_gq_int y) {
     // Structs for the image and mask.
     gq_image_frame_on_screen image_frame = {0};
     gq_image_frame_on_screen mask_frame  = {0};
 
+    image_frame.image_buffer = image_buffer_main;
+    mask_frame.image_buffer  = image_buffer_mask;
+
     // TODO: Add real palette support
     const uint32_t palette[2] = {0, 1};
 
-    gq_load_image(image_bytes, image_bPP, width, height, x, y, &image_frame);
-    gq_load_image(mask_bytes, mask_bPP, width, height, x, y, &mask_frame);
+    gq_load_image(image_bytes, image_bPP, width, height, img_frame_data_size, x, y, &image_frame);
+    gq_load_image(mask_bytes, mask_bPP, width, height, mask_frame_data_size, x, y, &mask_frame);
 
     while (!gq_image_done(&image_frame) && !gq_image_done(&mask_frame)) {
         // Draw the pixel.

@@ -7,7 +7,6 @@
 
 #include "gamequeer.h"
 #include "grlib_gfx.h"
-#include "flash.h"
 
 uint8_t flash_cart[CART_FLASH_SIZE_MBYTES * 1024 * 1024];
 uint8_t flash_save[SAVE_FLASH_SIZE_MBYTES * 1024 * 1024];

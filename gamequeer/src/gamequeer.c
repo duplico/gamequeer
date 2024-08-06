@@ -244,6 +244,8 @@ void draw_animation_stack() {
                     frame_current_mask.bPP,
                     current_animations[anim_index].anim.width,
                     current_animations[anim_index].anim.height,
+                    frame_current.data_size,
+                    frame_current_mask.data_size,
                     current_animations[anim_index].x,
                     current_animations[anim_index].y);
 
@@ -256,6 +258,7 @@ void draw_animation_stack() {
                     frame_current.bPP,
                     current_animations[anim_index].anim.width,
                     current_animations[anim_index].anim.height,
+                    frame_current.data_size,
                     current_animations[anim_index].x,
                     current_animations[anim_index].y);
             }
