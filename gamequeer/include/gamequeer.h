@@ -250,7 +250,7 @@ extern t_gq_int timer_counter;
 extern t_gq_int *menu_active;
 extern char *menu_text_result;
 
-extern uint8_t gq_game_unload_flag;
+extern volatile uint8_t gq_game_unload_flag;
 
 void run_code(t_gq_pointer code_ptr);
 
