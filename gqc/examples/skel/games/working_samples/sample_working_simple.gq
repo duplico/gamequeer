@@ -38,16 +38,18 @@ menus {
 animations {
     george <- "eat.gif" {
         dithering := "sierra2_4a";
-        frame_rate = 25;
+        frame_rate = 5;
         w = 96;
         h = 96;
     }
 
     george2 <- "dance.gif" {
-        frame_rate = 28;
+        frame_rate = 5;
     }
 
-    george3 <- "pbj.gif";
+    george3 <- "pbj.gif" {
+        frame_rate = 5;
+    }
 
     circle <- "circle.bmp" {
         duration = 1000;
@@ -136,11 +138,11 @@ stage start {
 
     event bgdone {
         play bganim george3;
-        play fgmask(1) circle;
     }
 
     event fgdone(1) {
         play fganim(1) george;
+        play fgmask(1) circle;
     }
 
     event menu {
@@ -154,6 +156,7 @@ stage start {
 }
 
 stage selfie {
+    bgcue test;
 
     event enter {
         GQI_BGANIM_X = 16;
