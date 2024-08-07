@@ -7,8 +7,6 @@
 
 #include <gamequeer.h>
 
-#include "sh1107.h"
-
 typedef struct gq_image_frame_on_screen {
     t_gq_pointer image_bytes;
     int16_t width;   // The width of the image
@@ -26,9 +24,6 @@ typedef struct gq_image_frame_on_screen {
     uint8_t rle_type;                 // The type of RLE encoding used (4 or 7) or 0 for uncompressed
     uint8_t *image_buffer;            // The buffer to store the image or its intermediate bytes in
     uint16_t bytes_remaining_to_load; // The number of bytes remaining to load from flash to the buffer
-    int16_t frame_buffer_index;
-    int16_t frame_buffer_page_index;
-    uint16_t frame_buffer_bit;
 } gq_image_frame_on_screen;
 
 uint8_t image_buffer_main[IMAGE_BUFFER_SIZE];
@@ -56,6 +51,10 @@ void gq_image_load_byte(gq_image_frame_on_screen *frame) {
     if (frame->byte_index % IMAGE_BUFFER_SIZE == 0) {
         gq_image_load_buffer(frame);
         frame->byte_index = 0;
+    }
+
+    if (gq_game_unload_flag) {
+        return;
     }
 
     frame->render_byte = frame->image_buffer[frame->byte_index];
@@ -93,11 +92,6 @@ uint8_t gq_image_get_pixel(gq_image_frame_on_screen *frame) {
         }
     }
 
-    // This also moves us to the next column in our page, if the pixel would actually get drawn.
-    if (frame->x_pixel_offset >= frame->x_start) {
-        frame->frame_buffer_index++;
-    }
-
     // Next pixel.
     frame->x_pixel_offset++;
 
@@ -106,22 +100,6 @@ uint8_t gq_image_get_pixel(gq_image_frame_on_screen *frame) {
         // We need to start a new row.
         frame->y_curr++;
         frame->x_pixel_offset = 0;
-
-        if (frame->x_pixel_offset >= frame->x_start) {
-            if (frame->frame_buffer_bit == 0x01) {
-                // If we're on the last row of the current page,
-                // Go to the top row of the next page
-                frame->frame_buffer_bit = 0x80;
-                frame->frame_buffer_page_index += 128;
-            } else {
-                frame->frame_buffer_bit >>= 1;
-            }
-            // Regardless, we go to the first column of our page.
-            frame->frame_buffer_index = frame->frame_buffer_page_index;
-        }
-
-        // Wrap back to the initial page.
-        frame->frame_buffer_index = frame->frame_buffer_page_index;
     }
 
     // If we need to read a new byte, do so.
@@ -151,22 +129,11 @@ void gq_load_image(
         frame->rle_type = (frame->rle_type >> 4) & 0x0F;
     }
 
-    // Set the starting page of the frame buffer
-    frame->frame_buffer_page_index = (y/8) * 128;
-    // TODO: needed?:
-//    if (y <= 0) {
-//        frame->frame_buffer_page_index = 0;
-//    } else {
-//        frame->frame_buffer_page_index = (y/8) * 128;
-//    }
-
     // Set x_start
     if (x < g_sContext.clipRegion.xMin) {
         frame->x_start = g_sContext.clipRegion.xMin - x;
     } else {
         frame->x_start = 0;
-        // And align it to the proper column for the x coordinate.
-        frame->frame_buffer_page_index += x;
     }
 
     // Set x_end
@@ -183,16 +150,10 @@ void gq_load_image(
         frame->y_end = height;
     }
 
-    // Set the current byte of the frame buffer to the first byte of the current page
-    frame->frame_buffer_index = frame->frame_buffer_page_index;
-    // Set the starting row of the frame buffer page
-    frame->frame_buffer_bit = 0x80 >> (y % 8);
-
     frame->bytes_remaining_to_load = frame_data_size;
     gq_image_load_byte(frame);
 }
 
-#define GRAM_BUFFER(page, column) frame_buffer[(page * LCD_X_SIZE) + column]
 void gq_draw_image(
     const Graphics_Context *context,
     t_gq_pointer image_bytes,
@@ -221,12 +182,7 @@ void gq_draw_image(
 
         if (draw_x >= context->clipRegion.xMin && draw_x <= context->clipRegion.xMax &&
             draw_y >= context->clipRegion.yMin) {
-            // write pixel
-            if (draw_pixel) { // && !(GRAM_BUFFER(lY/8, lX) & val)) {
-                frame_buffer[frame.frame_buffer_index]  |= frame.frame_buffer_bit;
-            } else {
-                frame_buffer[frame.frame_buffer_index] &= ~frame.frame_buffer_bit;
-            }
+            Graphics_drawPixelOnDisplay(context->display, draw_x, draw_y, palette[draw_pixel]);
         }
     }
 }
@@ -243,32 +199,31 @@ void gq_draw_image_with_mask(
     uint32_t mask_frame_data_size,
     t_gq_int x,
     t_gq_int y) {
-
     gq_draw_image(context, image_bytes, image_bPP, width, height, img_frame_data_size, x, y);
-//    // Structs for the image and mask.
-//    gq_image_frame_on_screen image_frame = {0};
-//    gq_image_frame_on_screen mask_frame  = {0};
-//
-//    image_frame.image_buffer = image_buffer_main;
-//    mask_frame.image_buffer  = image_buffer_mask;
-//
-//    // TODO: Add real palette support
-//    const uint32_t palette[2] = {0, 1};
-//
-//    gq_load_image(image_bytes, image_bPP, width, height, img_frame_data_size, x, y, &image_frame);
-//    gq_load_image(mask_bytes, mask_bPP, width, height, mask_frame_data_size, x, y, &mask_frame);
-//
-//    while (!gq_image_done(&image_frame) && !gq_image_done(&mask_frame)) {
-//        // Draw the pixel.
-//        int16_t draw_x = x + image_frame.x_pixel_offset;
-//        int16_t draw_y = y + image_frame.y_curr;
-//
-//        uint8_t image_pixel = gq_image_get_pixel(&image_frame);
-//        uint8_t mask_pixel  = gq_image_get_pixel(&mask_frame);
-//
-//        if (mask_pixel && draw_x >= context->clipRegion.xMin && draw_x <= context->clipRegion.xMax &&
-//            draw_y >= context->clipRegion.yMin) {
-//            Graphics_drawPixelOnDisplay(context->display, draw_x, draw_y, palette[image_pixel]);
-//        }
-//    }
+    // Structs for the image and mask.
+    gq_image_frame_on_screen image_frame = {0};
+    gq_image_frame_on_screen mask_frame  = {0};
+
+    image_frame.image_buffer = image_buffer_main;
+    mask_frame.image_buffer  = image_buffer_mask;
+
+    // TODO: Add real palette support
+    const uint32_t palette[2] = {0, 1};
+
+    gq_load_image(image_bytes, image_bPP, width, height, img_frame_data_size, x, y, &image_frame);
+    gq_load_image(mask_bytes, mask_bPP, width, height, mask_frame_data_size, x, y, &mask_frame);
+
+    while (!gq_image_done(&image_frame) && !gq_image_done(&mask_frame)) {
+        // Draw the pixel.
+        int16_t draw_x = x + image_frame.x_pixel_offset;
+        int16_t draw_y = y + image_frame.y_curr;
+
+        uint8_t image_pixel = gq_image_get_pixel(&image_frame);
+        uint8_t mask_pixel  = gq_image_get_pixel(&mask_frame);
+
+        if (mask_pixel && draw_x >= context->clipRegion.xMin && draw_x <= context->clipRegion.xMax &&
+            draw_y >= context->clipRegion.yMin) {
+            Graphics_drawPixelOnDisplay(context->display, draw_x, draw_y, palette[image_pixel]);
+        }
+    }
 }

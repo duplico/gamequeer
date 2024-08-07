@@ -29,6 +29,7 @@ uint8_t read_byte(t_gq_pointer ptr) {
         case GQ_PTR_BUILTIN_STR:
             return gq_builtin_strs[GQ_PTR_ADDR(ptr)];
         default:
+            gq_game_unload_flag = 1;
             return 0;
     }
 }
@@ -56,6 +57,7 @@ uint8_t write_byte(t_gq_pointer ptr, uint8_t value) {
             gq_builtin_strs[GQ_PTR_ADDR(ptr)] = value;
             return 1;
         default:
+            gq_game_unload_flag = 1;
             return 0;
     }
 }
@@ -63,6 +65,7 @@ uint8_t write_byte(t_gq_pointer ptr, uint8_t value) {
 uint8_t gq_memcpy(t_gq_pointer dest, t_gq_pointer src, uint32_t size) {
     for (t_gq_pointer i = 0; i < size; i++) {
         if (!write_byte(dest + i, read_byte(src + i))) {
+            gq_game_unload_flag = 1;
             return 0;
         }
     }
