@@ -171,6 +171,41 @@ uint8_t load_game(uint8_t namespace) {
     return 1;
 }
 
+void unload_game() {
+    // Stop all animations and reset their positions to (0, 0)
+    for (uint8_t i = 0; i < MAX_CONCURRENT_ANIMATIONS; i++) {
+        current_animations[i].in_use = 0;
+    }
+
+    // Stop the LED animations
+    led_stop();
+
+    // Clear all unhandled events
+    for (uint16_t event_type = 0x0000; event_type < GQ_EVENT_COUNT; event_type++) {
+        GQ_EVENT_CLR(event_type);
+    }
+    // Close any menu (text or choice)
+    menu_close();
+    // Clear the menu text
+    menu_text_result[0] = '\0';
+    // If a timer is active, stop it.
+    timer_active = 0;
+    // Clear the game ID
+    *game_id = 0;
+    // Clear the game color
+    *game_color = 0;
+    // Clear the game title
+    game_title[0] = '\0';
+    // Clear the labels
+    for (uint8_t i = 0; i < 4; i++) {
+        labels[i][0] = '\0';
+
+        *label_x[i] = 0;
+        *label_y[i] = 0;
+    }
+    *label_flags = 0;
+}
+
 uint8_t load_animation(uint8_t index, t_gq_pointer anim_ptr) {
     if (index >= MAX_CONCURRENT_ANIMATIONS) {
         return 0;
