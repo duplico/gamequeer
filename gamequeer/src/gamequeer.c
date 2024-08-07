@@ -18,7 +18,7 @@ uint32_t curr_frame;
 uint8_t *frame_data;
 uint8_t gq_heap[GQ_HEAP_SIZE];
 
-uint8_t gq_game_unload_flag = 0;
+volatile uint8_t gq_game_unload_flag = 0;
 
 uint8_t gq_builtin_ints[GQI_COUNT * GQ_INT_SIZE] = {
     0,
@@ -153,6 +153,12 @@ uint8_t load_game(uint8_t namespace) {
     *game_id    = game.id;
     *game_color = game.color;
     memcpy(game_title, game.title, GQ_STR_SIZE);
+
+
+    // Clear all unhandled events
+    for (uint16_t event_type = 0x0000; event_type < GQ_EVENT_COUNT; event_type++) {
+        GQ_EVENT_CLR(event_type);
+    }
 
     // Run the initialization commands
     run_code(game.startup_code);
