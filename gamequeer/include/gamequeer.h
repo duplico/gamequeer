@@ -237,6 +237,7 @@ extern uint8_t leds_animating;
 
 extern uint8_t gq_builtin_ints[];
 extern uint8_t gq_builtin_strs[];
+extern t_gq_int *player_id;
 
 extern uint8_t timer_active;
 extern t_gq_int timer_interval;
