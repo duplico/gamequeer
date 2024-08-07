@@ -18,6 +18,8 @@ uint32_t curr_frame;
 uint8_t *frame_data;
 uint8_t gq_heap[GQ_HEAP_SIZE];
 
+uint8_t gq_game_unload_flag = 0;
+
 uint8_t gq_builtin_ints[GQI_COUNT * GQ_INT_SIZE] = {
     0,
 };

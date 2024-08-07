@@ -109,6 +109,9 @@ void run_code(t_gq_pointer code_ptr) {
     }
 
     do {
+        if (gq_game_unload_flag) {
+            return;
+        }
         // TODO: bounds checking for the code_ptr
         gq_memcpy_to_ram((uint8_t *) &cmd, code_ptr, sizeof(gq_op));
         opcode = (gq_op_code) cmd.opcode;
@@ -232,6 +235,7 @@ void run_code(t_gq_pointer code_ptr) {
                 gq_memcpy_from_ram(cmd.arg1, (uint8_t *) result_str, GQ_STR_SIZE);
                 break;
             default:
+                gq_game_unload_flag = 1;
                 break;
         }
 
