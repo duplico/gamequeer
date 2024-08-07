@@ -148,8 +148,6 @@ uint8_t load_game(uint8_t namespace) {
         return 0;
     }
 
-    *player_id = 0; // TODO: Move
-
     *game_id    = game.id;
     *game_color = game.color;
     memcpy(game_title, game.title, GQ_STR_SIZE);
@@ -204,7 +202,7 @@ void draw_animation_stack() {
     uint8_t anim_index = 0;
     do {
         if (current_animations[anim_index].in_use) {
-            switch (anim_index) { // TODO: Handle masks
+            switch (anim_index) {
                 case 0:
                     current_animations[anim_index].x = *anim0_x;
                     current_animations[anim_index].y = *anim0_y;
@@ -225,7 +223,7 @@ void draw_animation_stack() {
                     current_animations[anim_index].anim.frame_pointer +
                         current_animations[anim_index].frame * sizeof(gq_anim_frame),
                     sizeof(gq_anim_frame))) {
-                continue; // TODO: not this
+                return; // failure
             }
 
             // Check whether this animation has a mask
@@ -238,7 +236,7 @@ void draw_animation_stack() {
                         current_animations[anim_index + 1].anim.frame_pointer +
                             current_animations[anim_index + 1].frame * sizeof(gq_anim_frame),
                         sizeof(gq_anim_frame))) {
-                    continue; // TODO: not this
+                    return; // failure
                 }
 
                 gq_draw_image_with_mask(
