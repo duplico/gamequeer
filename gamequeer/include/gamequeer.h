@@ -268,6 +268,7 @@ void set_badge_bit(t_gq_int badge_id, t_gq_int value);
 t_gq_int get_badge_bit(t_gq_int badge_id);
 
 uint8_t load_game(uint8_t namespace);
+void unload_game();
 uint8_t load_stage(t_gq_pointer stage_ptr);
 uint8_t load_animation(uint8_t index, t_gq_pointer anim_ptr);
 void system_tick();
