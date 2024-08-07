@@ -388,7 +388,7 @@ class Animation:
     link_table = dict() # OrderedDict not needed to remember order since Python 3.7
     next_id : str = 0
     
-    def __init__(self, name : str, source : str, dithering : str = 'none', frame_rate : int = 25, duration: int = 100, w : int = 128, h : int = 128):
+    def __init__(self, name : str, source : str, dithering : str = 'none', frame_rate : int = 5, duration: int = 100, w : int = 128, h : int = 128):
         self.frame_pointer = 0x00000000
         self.addr = 0x00000000
         self.name = name
@@ -399,10 +399,10 @@ class Animation:
         self.height = h
 
         # Animation widths and heights must fit in a uint8_t
-        if self.width > 0xff:
-            raise ValueError(f"Animation {name} width {self.width} exceeds maximum of 255")
-        if self.height > 0xff:
-            raise ValueError(f"Animation {name} height {self.height} exceeds maximum of 255")
+        if self.width > 128:
+            raise ValueError(f"Animation {name} width {self.width} exceeds maximum of 128")
+        if self.height > 128:
+            raise ValueError(f"Animation {name} height {self.height} exceeds maximum of 128")
 
         self.id = Animation.next_id
         Animation.next_id += 1
@@ -418,8 +418,11 @@ class Animation:
             self.frames = []
             
             if 100 % frame_rate != 0:
-                print(f"[red][bold]WARNING[/bold][/red]: [blue][italic]{self.name}[/italic][/blue] frame rate {frame_rate} not a factor of 100; setting to {100 / self.ticks_per_frame}")
+                print(f"[red][bold]WARNING[/bold][/red]: [blue][italic]{self.name}[/italic][/blue] frame rate {frame_rate} not a factor of 100; setting to {100 / self.tiks_per_frame}")
                 frame_rate = 100 / self.ticks_per_frame
+
+            if frame_rate > 5:
+                print(f"[red][bold]WARNING[/bold][/red]: [blue][italic]{self.name}[/italic][/blue] frame rate {frame_rate} exceeds 5 FPS; badge performance may suffer.")
 
             make_animation_kwargs = dict()
             if dithering:
