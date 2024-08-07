@@ -318,7 +318,9 @@ void system_tick() {
     // Should be called by the 100 Hz system tick
 
     // Handle the LEDs
-//    led_tick();
+#ifndef GQ_SUPPRESS_LED_TICK
+    led_tick();
+#endif
 
     // Handle timers
     if (timer_active) {
