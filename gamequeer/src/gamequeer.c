@@ -187,6 +187,11 @@ uint8_t load_animation(uint8_t index, t_gq_pointer anim_ptr) {
     anim->in_use = 1;
     anim->frame  = 0;
     anim->ticks  = anim->anim.ticks_per_frame;
+#ifdef GQ_MIN_FRAME_DURATION
+    if (anim->ticks < GQ_MIN_FRAME_DURATION) {
+        anim->ticks = GQ_MIN_FRAME_DURATION;
+    }
+#endif
 
     GQ_EVENT_SET(GQ_EVENT_REFRESH);
 

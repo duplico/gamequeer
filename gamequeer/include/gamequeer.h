@@ -4,6 +4,10 @@
 #include <grlib.h>
 #include <stdint.h>
 
+#ifndef GQ_MIN_FRAME_DURATION
+#define GQ_MIN_FRAME_DURATION 20
+#endif
+
 #define GQ_MAGIC_SIZE 4
 #define GQ_MAGIC      "GQ01"
 #define GQ_STR_SIZE   22
