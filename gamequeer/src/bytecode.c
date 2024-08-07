@@ -141,7 +141,7 @@ void run_code(t_gq_pointer code_ptr) {
                     //  is a string and arg2 is an int, then we'll probably print some garbage,
                     //  but it won't hurt anything.
                     if (cmd.flags & GQ_OPF_LITERAL_ARG2) {
-                        snprintf(result_str, GQ_STR_SIZE, "%d", cmd.arg2);
+                        snprintf(result_str, GQ_STR_SIZE, "%d", (t_gq_int) cmd.arg2);
                     } else {
                         t_gq_int arg2_int = gq_load_int(cmd.arg2);
                         snprintf(result_str, GQ_STR_SIZE, "%d", arg2_int);

@@ -442,7 +442,6 @@ uint8_t handle_event_menu_choice(uint16_t event_type) {
             break;
         default:
             return 0;
-            break;
     }
     return 1;
 }
