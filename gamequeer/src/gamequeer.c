@@ -187,6 +187,11 @@ uint8_t load_animation(uint8_t index, t_gq_pointer anim_ptr) {
     anim->in_use = 1;
     anim->frame  = 0;
     anim->ticks  = anim->anim.ticks_per_frame;
+#ifdef GQ_MIN_FRAME_DURATION
+    if (anim->ticks < GQ_MIN_FRAME_DURATION) {
+        anim->ticks = GQ_MIN_FRAME_DURATION;
+    }
+#endif
 
     GQ_EVENT_SET(GQ_EVENT_REFRESH);
 
@@ -318,7 +323,9 @@ void system_tick() {
     // Should be called by the 100 Hz system tick
 
     // Handle the LEDs
-//    led_tick();
+#ifndef GQ_SUPPRESS_LED_TICK
+    led_tick();
+#endif
 
     // Handle timers
     if (timer_active) {
