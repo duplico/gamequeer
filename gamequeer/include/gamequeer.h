@@ -43,6 +43,8 @@
 
 #define BADGES_ALLOWED 320
 
+#define GQ_CUE_MAX_FRAMES 50
+
 typedef uint32_t t_gq_pointer;
 typedef int32_t t_gq_int;
 
