@@ -10,6 +10,7 @@
             "request": "launch",
             "program": "${command:cmake.launchTargetPath}",
             "args": ["${workspaceFolder}/gqc/examples/skel/build/sample_working_simple/sample_working_simple.gqgame"],
+            // "args": ["${workspaceFolder}/game-workspace/build/queersafe/queersafe.gqgame"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [
