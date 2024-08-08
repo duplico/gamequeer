@@ -11,7 +11,7 @@ export CURRENT_GID
 .PHONY: clean-builder clean-code clean all builder-run builder-rebuild gqc gamequeer gq-game-language
 .DEFAULT_GOAL := all
 
-DOCKER_CMD := docker run -v /tmp/.X11-unix:/tmp/.X11-unix -e DISPLAY=$(DISPLAY) -h $(HOSTNAME) --rm -it --workdir /workspaces/gamequeer -v .:/workspaces/gamequeer --user $(CURRENT_UID):$(CURRENT_GID) $(project_name)-builder:latest
+DOCKER_CMD := docker run -v /tmp/.X11-unix:/tmp/.X11-unix -e DISPLAY=$(DISPLAY) -h $(HOSTNAME) --rm -it --workdir /workspaces/gamequeer -v $(PWD):/workspaces/gamequeer --user $(CURRENT_UID):$(CURRENT_GID) $(project_name)-builder:latest
 
 builder-build: builder.Dockerfile requirements.txt gq-game-language/install-langium-deps.sh 
 	docker build -f builder.Dockerfile -t $(project_name)-builder:latest .
