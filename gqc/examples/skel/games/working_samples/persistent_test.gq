@@ -1,0 +1,34 @@
+game {
+    id = 0;
+    title := "Persistent test";
+    author := "duplico";
+    starting_stage = start;
+}
+
+persistent {
+    int A = 1;
+    int B = 4000;
+    int C = 90;
+}
+
+stage start {
+
+    event enter {
+        GQI_LABEL1_Y = 16;
+        GQI_LABEL2_Y = 32;
+        GQI_LABEL3_Y = 48;
+
+        GQS_LABEL1 := str( A );
+        GQS_LABEL2 := str( B );
+        GQS_LABEL3 := str( C );
+    }
+    event input(A) {
+        A = A + 1;
+        B = B - 1;
+        C = C + 1;
+
+        GQS_LABEL1 := str( A );
+        GQS_LABEL2 := str( B );
+        GQS_LABEL3 := str( C );
+    }
+}
