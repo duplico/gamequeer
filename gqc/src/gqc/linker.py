@@ -154,7 +154,7 @@ def create_symbol_table(table_dest = sys.stdout, cmd_dest = sys.stdout):
 
     # Now, because of hardware limitations of the flash chips we're using, we can only erase 4 KB sectors at
     #  a time. So we need to pad the initialization code with DONE commands until we reach a 4 KB boundary.
-    while init_ptr_offset % 0x1000 != 0:
+    while (init_ptr_start + init_ptr_offset) % 0x1000 != 0:
         done_cmd = CommandDone()
         done_cmd.set_addr(init_ptr_start + init_ptr_offset, namespace=structs.GQ_PTR_NS_CART)
         init_table[done_cmd.addr] = done_cmd
