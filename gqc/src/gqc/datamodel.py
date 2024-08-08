@@ -52,7 +52,7 @@ class Game:
             self.starting_stage = stage
     
     def __repr__(self) -> str:
-        return f"Game({self.id}, {repr(self.title)}, {repr(self.author)})"
+        return f"Game({self.id}, {repr(self.title)}, {repr(self.author)}, crc_ptr={self.persistent_crc16_ptr:#0{10}x})"
     
     def set_addr(self, addr : int, namespace : int = structs.GQ_PTR_NS_CART):
         self.addr = structs.gq_ptr_apply_ns(namespace, addr)

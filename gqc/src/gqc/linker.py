@@ -173,12 +173,13 @@ def create_symbol_table(table_dest = sys.stdout, cmd_dest = sys.stdout):
         crc16_val = structs.crc16_update(crc16_val, var.to_bytes())
     
     crc16_var = Variable('int', '__crc16.builtin', crc16_val, 'persistent')
-    Game.game.persistent_crc16_ptr = crc16_var.addr
 
     # Now we do a pass to place the persistent variables into the persistent section.    
     for var in Variable.storageclass_table['persistent'].values():
         var.set_addr(vars_ptr_start + vars_ptr_offset)
         vars_ptr_offset += var.size()
+        
+    Game.game.persistent_crc16_ptr = crc16_var.addr
     
     # Bounds checking.
     if vars_ptr_offset >= 0x1000:
