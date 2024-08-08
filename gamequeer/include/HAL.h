@@ -20,5 +20,6 @@ void HAL_update_leds();
 void HAL_event_poll();
 void HAL_sleep();
 t_gq_int HAL_get_player_id();
+void HAL_new_game();
 
 #endif

@@ -149,6 +149,7 @@ uint8_t load_game(uint8_t namespace) {
     if (!gq_memcpy_to_ram((uint8_t *) &game, GQ_PTR((uint32_t) namespace, 0), sizeof(gq_header))) {
         return 0;
     }
+    HAL_new_game();
 
     *game_id    = game.id;
     *game_color = game.color;

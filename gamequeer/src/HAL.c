@@ -115,6 +115,10 @@ void HAL_update_leds() {
     gfx_flush();
 }
 
+void HAL_new_game() {
+    // Nothing to do, on the emulator.
+}
+
 void HAL_init(int argc, char *argv[]) {
     gfx_driver_init("Gamequeer");
     Graphics_initContext(&g_sContext, &g_gfx);
