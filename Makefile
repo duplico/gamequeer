@@ -26,7 +26,7 @@ builder-run:
 
 ### Build targets in subdirectories
 
-gamequeer/build/gamequeer: builder-build
+gamequeer/build/gamequeer: builder-build gamequeer/src/bytecode.c gamequeer/src/gamequeer.c gamequeer/src/HAL.c gamequeer/src/leds.c gamequeer/src/main.c gamequeer/src/menu.c gamequeer/src/oled.c
 	$(DOCKER_CMD) /bin/bash -c "cd gamequeer && cmake -B build && cmake --build build"
 
 gqc/dist/gqc-0.0.1.tar.gz gqc/dist/gqc-0.0.1-py3-none-any.whl: builder-build
