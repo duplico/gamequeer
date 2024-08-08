@@ -161,6 +161,15 @@ void run_code(t_gq_pointer code_ptr) {
                     // If only the STR flag is set, this is a str to str assignment.
                     gq_memcpy(cmd.arg1, cmd.arg2, GQ_STR_SIZE);
                 }
+                // If we're doing an assignment to a variable that should update the screen,
+                if ((cmd.arg1 >= GQ_PTR(GQ_PTR_BUILTIN_INT, GQI_BGANIM_X) &&
+                     cmd.arg1 <= GQ_PTR(GQ_PTR_BUILTIN_INT, GQI_LABEL_FLAGS)) ||
+                    (cmd.arg1 >= GQ_PTR(GQ_PTR_BUILTIN_STR, GQS_LABEL1) &&
+                     cmd.arg1 <= GQ_PTR(GQ_PTR_BUILTIN_STR, GQS_LABEL4))) {
+                    //  then generate a screen refresh event.
+                    GQ_EVENT_SET(GQ_EVENT_REFRESH);
+                }
+
                 break;
             case GQ_OP_GOTO:
                 code_ptr = cmd.arg1;
