@@ -162,10 +162,10 @@ void run_code(t_gq_pointer code_ptr) {
                     gq_memcpy(cmd.arg1, cmd.arg2, GQ_STR_SIZE);
                 }
                 // If we're doing an assignment to a variable that should update the screen,
-                if ((cmd.arg1 >= GQ_PTR(GQ_PTR_BUILTIN_INT, GQI_BGANIM_X) &&
-                     cmd.arg1 <= GQ_PTR(GQ_PTR_BUILTIN_INT, GQI_LABEL_FLAGS)) ||
-                    (cmd.arg1 >= GQ_PTR(GQ_PTR_BUILTIN_STR, GQS_LABEL1) &&
-                     cmd.arg1 <= GQ_PTR(GQ_PTR_BUILTIN_STR, GQS_LABEL4))) {
+                if ((cmd.arg1 >= GQ_PTR(GQ_PTR_BUILTIN_INT, GQI_BGANIM_X * GQ_INT_SIZE) &&
+                     cmd.arg1 <= GQ_PTR(GQ_PTR_BUILTIN_INT, GQI_LABEL_FLAGS * GQ_INT_SIZE)) ||
+                    (cmd.arg1 >= GQ_PTR(GQ_PTR_BUILTIN_STR, GQS_LABEL1 * GQ_STR_SIZE) &&
+                     cmd.arg1 <= GQ_PTR(GQ_PTR_BUILTIN_STR, GQS_LABEL4 * GQ_STR_SIZE))) {
                     //  then generate a screen refresh event.
                     GQ_EVENT_SET(GQ_EVENT_REFRESH);
                 }
