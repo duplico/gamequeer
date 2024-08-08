@@ -154,16 +154,14 @@ def create_symbol_table(table_dest = sys.stdout, cmd_dest = sys.stdout):
 
     # Now, because of hardware limitations of the flash chips we're using, we can only erase 4 KB sectors at
     #  a time. So we need to pad the initialization code with DONE commands until we reach a 4 KB boundary.
-    while (init_ptr_start + init_ptr_offset) % 0x1000 != 0:
-        done_cmd = CommandDone()
-        done_cmd.set_addr(init_ptr_start + init_ptr_offset, namespace=structs.GQ_PTR_NS_CART)
-        init_table[done_cmd.addr] = done_cmd
-        init_ptr_offset += done_cmd.size()
+
+    # The persistent variables should start at the next 4 KB boundary after the initialization code.
+    # this should be: init_ptr_start + init_ptr_offset + (0x1000 - (init_ptr_start + init_ptr_offset) % 0x1000)
 
     # Now that everything else has been addressed, we can calculate the starting
     #  locations of the variable tables.
     # First, allocate memory on-cart for the persistent variables
-    vars_ptr_start = init_ptr_start + init_ptr_offset
+    vars_ptr_start = init_ptr_start + init_ptr_offset + (0x1000 - (init_ptr_start + init_ptr_offset) % 0x1000)
     vars_ptr_offset = 0
     Game.game.persistent_var_ptr = vars_ptr_start
     
@@ -299,7 +297,14 @@ def generate_code(parsed, symbol_table : dict):
 
     with Progress(TextColumn("[progress.description]{task.description}"), BarColumn(), TaskProgressColumn(), TimeElapsedColumn()) as progress:
         task = progress.add_task(f"Generating code", total=symbol_count)
-        for table in symbol_table.values():
+        for section_name, table in symbol_table.items():
+            if section_name == '.var':
+                # For the variable table only, we expect the next address to be at the next 4 KB boundary.
+                next_4kb_boundary = next_expected_addr + (0x1000 - next_expected_addr % 0x1000)
+                # Output padding FF bytes until we reach the 4 KB boundary.
+                while next_expected_addr < next_4kb_boundary:
+                    output += bytes([0xFF])
+                    next_expected_addr += 1
             for addr, symbol in table.items():
                 if next_expected_addr >= structs.gq_ptr_apply_ns(structs.GQ_PTR_NS_CART, 0xFFFFFF):
                     print(f"OVERSIZE GAME ERROR: Address space exhausted at {next_expected_addr:#0{10}x}.", file=sys.stderr)
