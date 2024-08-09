@@ -149,6 +149,10 @@ uint8_t load_game(uint8_t namespace) {
     if (!gq_memcpy_to_ram((uint8_t *) &game, GQ_PTR((uint32_t) namespace, 0), sizeof(gq_header))) {
         return 0;
     }
+
+    game.persistent_crc16 = GQ_PTR(GQ_PTR_NS_CART, game.persistent_crc16);
+    game.persistent_vars = GQ_PTR(GQ_PTR_NS_CART, game.persistent_vars);
+
     HAL_new_game();
 
     *game_id    = game.id;
@@ -417,7 +421,7 @@ t_gq_int get_badge_word(t_gq_int badge_id) {
     }
 
     t_gq_pointer badge_word_offset = badge_id / (GQ_INT_SIZE * 8);
-    return gq_load_int(game.persistent_vars + GQP_OFFSET_BADGES + badge_word_offset);
+    return gq_load_int(game.persistent_vars + GQP_OFFSET_BADGES + badge_word_offset*GQ_INT_SIZE);
 }
 
 void set_badge_bit(t_gq_int badge_id, t_gq_int value) {
@@ -426,11 +430,11 @@ void set_badge_bit(t_gq_int badge_id, t_gq_int value) {
     }
 
     t_gq_pointer badge_word_offset = badge_id / (GQ_INT_SIZE * 8);
-    t_gq_pointer badge_word_ptr    = game.persistent_vars + GQP_OFFSET_BADGES + badge_word_offset;
+    t_gq_pointer badge_word_ptr    = game.persistent_vars + GQP_OFFSET_BADGES + badge_word_offset*GQ_INT_SIZE;
     t_gq_int badge_word            = gq_load_int(badge_word_ptr);
 
     t_gq_int bit_offset = badge_id % (GQ_INT_SIZE * 8);
-    t_gq_int bit_mask   = 1 << bit_offset;
+    t_gq_int bit_mask   = 1l << bit_offset;
 
     if (badge_word & bit_mask) {
         // Bit is already set
@@ -460,7 +464,7 @@ t_gq_int get_badge_bit(t_gq_int badge_id) {
 
     t_gq_int badge_word = get_badge_word(badge_id);
     t_gq_int bit_offset = badge_id % (GQ_INT_SIZE * 8);
-    t_gq_int bit_mask   = 1 << bit_offset;
+    t_gq_int bit_mask   = 1l << bit_offset;
 
     return (badge_word & bit_mask) != 0;
 }
