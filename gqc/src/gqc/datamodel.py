@@ -411,11 +411,11 @@ class Animation:
             raise ValueError("Animation {} already defined".format(name))
         Animation.anim_table[name] = self
 
+        self.frames = []
+
         with Progress(TextColumn("[progress.description]{task.description}"), BarColumn(), TaskProgressColumn(), TimeElapsedColumn()) as animation_progress:
             anim_task = animation_progress.add_task(f"[blue]Animation [italic]{name}[/italic]", total=None)
             hash_task = animation_progress.add_task(f" [dim]-- digest", total=1, start=False)
-            
-            self.frames = []
             
             if 100 % frame_rate != 0:
                 print(f"[red][bold]WARNING[/bold][/red]: [blue][italic]{self.name}[/italic][/blue] frame rate {frame_rate} not a factor of 100; setting to {100 / self.tiks_per_frame}")
@@ -495,6 +495,9 @@ class Animation:
         # Frame counts must fit in a uint16_t
         if len(self.frames) > 0xffff:
             raise ValueError(f"Animation {name} has too many frames ({len(self.frames)}); maximum is 65535")
+        
+        if len(self.frames) == 0:
+            raise ValueError(f"Animation {name} has no frames - possible image content or compiler error")
             
     def digest(self) -> int:
         # An Animation object is uniquely identified by a hash of the source file,
