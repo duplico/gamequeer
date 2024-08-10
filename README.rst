@@ -16,8 +16,7 @@ experience among badgeholders.
 
 The GameQueer console is comprised of a 128x128 pixel black and white OLED display, 5 linked 
 pairs of vertically-oriented RGB LEDs on either side of the display, two buttons, and a D-pad
-shaped rotary encoder called the "D-Dial" that can be both rotated and clicked, although 
-clicking the dial is a system function not available to games. Games are written in a custom
+shaped rotary encoder called the "D-Dial" that can be both rotated and clicked. Games are written in a custom
 language whose toolchain is provided in this repository.
 
 Physical games are written to a game cartridge with 16 MB of NOR flash storage and an LED.
