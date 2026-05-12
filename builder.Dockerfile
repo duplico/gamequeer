@@ -3,6 +3,9 @@ ARG base_img=mcr.microsoft.com/vscode/devcontainers/python:3.10-${base_tag}
 
 FROM ${base_img} AS builder-install
 
+# Base image ships a stale Yarn apt repo whose GPG key has rotated; we use npm, not yarn.
+RUN rm -f /etc/apt/sources.list.d/yarn.list
+
 # Dependencies for C
 RUN apt-get update --fix-missing && apt-get -y upgrade && apt-get install -y --no-install-recommends \
     apt-utils \
