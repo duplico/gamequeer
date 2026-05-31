@@ -8,7 +8,7 @@ CURRENT_GID := $(shell id -g)
 export CURRENT_UID
 export CURRENT_GID
 
-.PHONY: clean-builder clean-code clean all builder-run builder-rebuild gqc gamequeer gq-game-language
+.PHONY: clean-builder clean-code clean all builder-run builder-rebuild gqc gamequeer gq-game-language golden-fixture test-headless
 .DEFAULT_GOAL := all
 
 DOCKER_CMD := docker run -v /tmp/.X11-unix:/tmp/.X11-unix -e DISPLAY=$(DISPLAY) -h $(HOSTNAME) --rm -it --workdir /workspaces/gamequeer -v $(PWD):/workspaces/gamequeer --user $(CURRENT_UID):$(CURRENT_GID) $(project_name)-builder:latest
@@ -60,6 +60,19 @@ gqc: build/gqc-0.0.1.tar.gz build/gqc-0.0.1-py3-none-any.whl
 gamequeer: build/gamequeer
 
 gq-game-language: build/gq-game-language.vsix
+
+### Headless golden-test targets
+
+DOCKER_CMD_NIT := docker run --rm -it --workdir /workspaces/gamequeer -v $(PWD):/workspaces/gamequeer --user $(CURRENT_UID):$(CURRENT_GID) $(project_name)-builder:latest
+
+# Compile the hello.gq test fixture (no ffmpeg needed; no GIF assets).
+# The output gamequeer/tests/golden/hello.gqgame is committed to the repo.
+golden-fixture: builder-build gamequeer/tests/golden/hello.gq
+	$(DOCKER_CMD_NIT) /bin/bash -c "PYTHONPATH=gqc/src python -m gqc compile -o gamequeer/tests/golden gamequeer/tests/golden/hello.gq"
+
+# Build the headless emulator and run the golden framebuffer test.
+test-headless: builder-build
+	$(DOCKER_CMD_NIT) /bin/bash -c "cd gamequeer && cmake -B build-headless -DGQ_HEADLESS=ON && cmake --build build-headless && cd build-headless && ctest --verbose"
 
 ### Important meta targets
 
