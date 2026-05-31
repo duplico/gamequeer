@@ -22,4 +22,12 @@ void HAL_sleep();
 t_gq_int HAL_get_player_id();
 void HAL_new_game();
 
+/*
+ * Load a button-event script for deterministic (headless) runs.
+ * Each line of the file is one event name: A, B, L, R, CLICK.
+ * Events are injected in order, one per HAL_event_poll() call.
+ * Called by main() only when --input is given.
+ */
+void HAL_input_load(const char *path);
+
 #endif
