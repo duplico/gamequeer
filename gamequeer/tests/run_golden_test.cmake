@@ -46,7 +46,7 @@ endif()
 # ---- 4. Binary compare ---------------------------------------------------
 
 execute_process(
-    COMMAND "${CMAKE_COMMAND}" -E compare_files --ignore-eol "${ACTUAL}" "${GOLDEN}"
+    COMMAND "${CMAKE_COMMAND}" -E compare_files "${ACTUAL}" "${GOLDEN}"
     RESULT_VARIABLE cmp_result
 )
 

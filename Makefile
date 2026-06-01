@@ -63,7 +63,7 @@ gq-game-language: build/gq-game-language.vsix
 
 ### Headless golden-test targets
 
-DOCKER_CMD_NIT := docker run --rm -it --workdir /workspaces/gamequeer -v $(PWD):/workspaces/gamequeer --user $(CURRENT_UID):$(CURRENT_GID) $(project_name)-builder:latest
+DOCKER_CMD_NIT := docker run --rm --workdir /workspaces/gamequeer -v $(PWD):/workspaces/gamequeer --user $(CURRENT_UID):$(CURRENT_GID) $(project_name)-builder:latest
 
 # Compile the hello.gq test fixture (no ffmpeg needed; no GIF assets).
 # The output gamequeer/tests/golden/hello.gqgame is committed to the repo.
