@@ -82,6 +82,10 @@ target_include_directories(
 
 target_compile_options(${PROJECT_NAME} PUBLIC -Wall -Wextra -Wpedantic)
 
-# Testing (CTest):
-enable_testing()
-add_subdirectory(tests)
+# Testing (CTest): only register the test tree in the headless build.
+# A plain X11 build does not have the golden-test infrastructure,
+# so we avoid the confusing "No tests were found" ctest output.
+if(GQ_HEADLESS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()

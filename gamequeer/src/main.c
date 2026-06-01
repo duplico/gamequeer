@@ -25,6 +25,11 @@ void init() {
  * Write frame_buffer[OLED_HORIZONTAL_MAX][OLED_VERTICAL_MAX] as a binary PGM
  * (P5).  Each entry is 0 or 1; we map 0->0 and 1->255.
  *
+ * The framebuffer is 127x127 pixels: OLED_HORIZONTAL_MAX = OLED_VERTICAL_MAX = 127
+ * (not 128x128 — the OLED_*_MAX constants are the maximum coordinate index, which
+ * is also the pixel count since grlib uses 0-based indexing up to and including MAX).
+ * Golden fixture authors: the PGM header will read "P5\n127 127\n255\n".
+ *
  * frame_buffer is indexed [x][y] with x=column, y=row.  PGM rows are written
  * left-to-right (increasing x), top-to-bottom (increasing y), which matches
  * the grlib convention used by gfx_driver_flush().
@@ -80,7 +85,13 @@ int main(int argc, char *argv[]) {
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--ticks") == 0 && i + 1 < argc) {
-            ticks_limit = atol(argv[++i]);
+            char *endptr;
+            ticks_limit = strtol(argv[++i], &endptr, 10);
+            if (*endptr != '\0' || ticks_limit <= 0) {
+                fprintf(stderr, "main: --ticks requires a positive integer, got '%s'\n", argv[i]);
+                free(hal_argv);
+                return 1;
+            }
         } else if (strcmp(argv[i], "--dump") == 0 && i + 1 < argc) {
             dump = argv[++i];
         } else if (strcmp(argv[i], "--input") == 0 && i + 1 < argc) {
