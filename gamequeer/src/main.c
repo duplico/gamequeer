@@ -84,7 +84,12 @@ int main(int argc, char *argv[]) {
     hal_argv[hal_argc++] = argv[0];
 
     for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "--ticks") == 0 && i + 1 < argc) {
+        if (strcmp(argv[i], "--ticks") == 0) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') {
+                fprintf(stderr, "main: --ticks requires a value\n");
+                free(hal_argv);
+                return 1;
+            }
             char *endptr;
             ticks_limit = strtol(argv[++i], &endptr, 10);
             if (*endptr != '\0' || ticks_limit <= 0) {
@@ -92,9 +97,19 @@ int main(int argc, char *argv[]) {
                 free(hal_argv);
                 return 1;
             }
-        } else if (strcmp(argv[i], "--dump") == 0 && i + 1 < argc) {
+        } else if (strcmp(argv[i], "--dump") == 0) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') {
+                fprintf(stderr, "main: --dump requires a value\n");
+                free(hal_argv);
+                return 1;
+            }
             dump = argv[++i];
-        } else if (strcmp(argv[i], "--input") == 0 && i + 1 < argc) {
+        } else if (strcmp(argv[i], "--input") == 0) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') {
+                fprintf(stderr, "main: --input requires a value\n");
+                free(hal_argv);
+                return 1;
+            }
             input = argv[++i];
         } else {
             if (cart == NULL) {
@@ -104,6 +119,12 @@ int main(int argc, char *argv[]) {
         }
     }
     hal_argv[hal_argc] = NULL;
+
+    if (cart == NULL) {
+        fprintf(stderr, "main: no cart path provided\n");
+        free(hal_argv);
+        return 1;
+    }
 
     HAL_init(hal_argc, hal_argv);
     free(hal_argv);
