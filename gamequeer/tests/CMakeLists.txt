@@ -168,3 +168,19 @@ endfunction()
 
 add_draw_count_test(golden_framebuffer_redundant_write_draw_count_phase_a redundant_write 20 1)
 add_draw_count_test(golden_framebuffer_redundant_write_draw_count_phase_b redundant_write 30 2)
+
+# ---- led_fade_delta: fixed-point LED interpolation arithmetic regression -
+# gamequeer#241/PR#284 replaced a per-subtick divide with a precomputed
+# fixed-point delta + multiply/shift. Unlike the golden-framebuffer tests
+# above, this doesn't need the emulator (LED state isn't part of the OLED
+# framebuffer): it's a small standalone host executable, built independently
+# of the ${PROJECT_NAME} emulator target (which has X11/HAL link
+# dependencies not needed here), that sweeps legal (diff, duration,
+# ticks_elapsed) triples and checks the new arithmetic against the pre-#284
+# reference formula. See test_led_fade_delta.c's header for the full sweep
+# domain and what's asserted.
+
+add_executable(test_led_fade_delta test_led_fade_delta.c)
+target_compile_options(test_led_fade_delta PRIVATE -Wall -Wextra -Wpedantic)
+
+add_test(NAME led_fade_delta COMMAND test_led_fade_delta)

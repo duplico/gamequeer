@@ -53,11 +53,13 @@ void led_setup_frame();
 // subtick in led_tick() (in RTC ISR context); it now happens once per frame,
 // in led_setup_frame(), instead.
 //
-// duration == 0 is guarded against (returns 0): the cooker always emits
-// durations that are multiples of LEDS_SUBTICKS (see gqc's cues.py), so a
-// legitimately-compiled cart never produces duration == 0 for a frame with a
-// following frame, but nothing on this side of the cart format enforces that,
-// so we guard here rather than trust it.
+// duration == 0 is guarded against (returns 0): gqc's cue parser (cues.py)
+// rounds every frame duration down to a multiple of LEDS_SUBTICKS, which
+// means an authored duration of 1-3 ticks is rounded down to 0 (with a
+// compiler warning) rather than rejected outright. So duration == 0 is not
+// just a malformed-cart concern -- a legitimately-compiled cart can produce
+// it -- and nothing on this side of the cart format previously guarded
+// against the resulting divide-by-zero.
 //
 // The intermediate product is computed in 64-bit arithmetic (diff and
 // duration are both well within 32 bits, but diff << LED_DELTA_FRAC_BITS is
@@ -82,6 +84,20 @@ static int32_t led_calc_delta(int32_t diff, uint16_t duration) {
     }
 
     return (int32_t) delta;
+}
+
+// Right-shift a (possibly negative) delta*ticks_elapsed product by
+// LED_DELTA_FRAC_BITS to recover the interpolated offset, without relying on
+// right-shift-of-a-negative-value, which C leaves implementation-defined
+// (and which, on the common arithmetic-shift implementation, rounds toward
+// -infinity instead of toward zero like the `/` it replaces). Shifting the
+// magnitude and reapplying the sign keeps this a truncate-toward-zero
+// operation on every compiler, matching the old divide-based formula's
+// rounding exactly instead of merely approximately.
+static inline int32_t led_delta_shift(int64_t product) {
+    uint64_t magnitude = (product < 0) ? (uint64_t) (-product) : (uint64_t) product;
+    int32_t shifted    = (int32_t) (magnitude >> LED_DELTA_FRAC_BITS);
+    return (product < 0) ? -shifted : shifted;
 }
 
 void led_stop() {
@@ -254,14 +270,11 @@ void led_tick() {
                 // constant shift, instead of a 32-bit software divide per channel per subtick.
                 for (uint8_t i = 0; i < 5; i++) {
                     gq_leds[i].r = leds_cue_color_curr[i].r +
-                        (int32_t) (((int64_t) leds_cue_color_delta[i].r * leds_cue_frame_ticks_elapsed) >>
-                                   LED_DELTA_FRAC_BITS);
+                        led_delta_shift((int64_t) leds_cue_color_delta[i].r * leds_cue_frame_ticks_elapsed);
                     gq_leds[i].g = leds_cue_color_curr[i].g +
-                        (int32_t) (((int64_t) leds_cue_color_delta[i].g * leds_cue_frame_ticks_elapsed) >>
-                                   LED_DELTA_FRAC_BITS);
+                        led_delta_shift((int64_t) leds_cue_color_delta[i].g * leds_cue_frame_ticks_elapsed);
                     gq_leds[i].b = leds_cue_color_curr[i].b +
-                        (int32_t) (((int64_t) leds_cue_color_delta[i].b * leds_cue_frame_ticks_elapsed) >>
-                                   LED_DELTA_FRAC_BITS);
+                        led_delta_shift((int64_t) leds_cue_color_delta[i].b * leds_cue_frame_ticks_elapsed);
                 }
 
                 need_to_redraw = 1;
