@@ -73,8 +73,11 @@ DOCKER_CMD_NIT := docker run --rm --workdir /workspaces/gamequeer -v $(PWD):/wor
 #    gqc resolves animation sources relative to CWD, so these must be
 #    compiled from gamequeer/tests/golden itself (see #262/#272 golden-test
 #    follow-up).
-golden-fixture: builder-build gamequeer/tests/golden/hello.gq gamequeer/tests/golden/mask_encoding_a.gq gamequeer/tests/golden/mask_encoding_b.gq
+#  - redundant_write.gq: SETVAR redundant-refresh regression fixture (#265/
+#    PR#274); no ffmpeg/image assets needed either.
+golden-fixture: builder-build gamequeer/tests/golden/hello.gq gamequeer/tests/golden/mask_encoding_a.gq gamequeer/tests/golden/mask_encoding_b.gq gamequeer/tests/golden/redundant_write.gq
 	$(DOCKER_CMD_NIT) /bin/bash -c "PYTHONPATH=gqc/src python -m gqc compile --no-mem-map -o gamequeer/tests/golden gamequeer/tests/golden/hello.gq && \
+		PYTHONPATH=gqc/src python -m gqc compile --no-mem-map -o gamequeer/tests/golden gamequeer/tests/golden/redundant_write.gq && \
 		cd gamequeer/tests/golden && \
 		PYTHONPATH=/workspaces/gamequeer/gqc/src python -m gqc compile --no-mem-map -o . mask_encoding_a.gq && \
 		PYTHONPATH=/workspaces/gamequeer/gqc/src python -m gqc compile --no-mem-map -o . mask_encoding_b.gq && \
