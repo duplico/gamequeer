@@ -30,12 +30,29 @@ uint8_t gq_builtin_strs[GQS_COUNT * GQ_STR_SIZE] = {
 
 t_gq_int *game_id    = (t_gq_int *) &gq_builtin_ints[GQI_GAME_ID * GQ_INT_SIZE];
 t_gq_int *game_color = (t_gq_int *) &gq_builtin_ints[GQI_GAME_COLOR * GQ_INT_SIZE];
-t_gq_int *anim0_x    = (t_gq_int *) &gq_builtin_ints[GQI_BGANIM_X * GQ_INT_SIZE];
-t_gq_int *anim0_y    = (t_gq_int *) &gq_builtin_ints[GQI_BGANIM_Y * GQ_INT_SIZE];
-t_gq_int *anim1_x    = (t_gq_int *) &gq_builtin_ints[GQI_FGANIM1_X * GQ_INT_SIZE];
-t_gq_int *anim1_y    = (t_gq_int *) &gq_builtin_ints[GQI_FGANIM1_Y * GQ_INT_SIZE];
-t_gq_int *anim2_x    = (t_gq_int *) &gq_builtin_ints[GQI_FGANIM2_X * GQ_INT_SIZE];
-t_gq_int *anim2_y    = (t_gq_int *) &gq_builtin_ints[GQI_FGANIM2_Y * GQ_INT_SIZE];
+
+// ---- Visual builtin variables (GQI_BGANIM_X..GQI_LABEL_FLAGS below, plus
+// GQS_LABEL1..GQS_LABEL4 further down at `labels[4]`) ----
+//
+// These are the on-screen ("visual") builtins: animation/mask position,
+// label position, label text, label flags. bytecode.c's GQ_OP_SETVAR
+// handler treats writes to this exact address range specially -- as of
+// gamequeer#265/PR#274, it only raises GQ_EVENT_REFRESH when the write
+// actually *changes* the value (snapshot-and-compare), not unconditionally.
+// That means any OTHER code path that writes directly to one of these
+// pointers (bypassing GQ_OP_SETVAR) is responsible for raising
+// GQ_EVENT_REFRESH itself if the write needs to be reflected on screen --
+// SETVAR's gating doesn't apply outside of SETVAR. See load_stage() and
+// load_game() (both force GQ_EVENT_REFRESH unconditionally after their
+// direct writes, since a stage/game (re)load is always a genuine visual
+// reset) and unload_game() (forces it too, so a stale frame isn't left on
+// screen after the labels are cleared).
+t_gq_int *anim0_x = (t_gq_int *) &gq_builtin_ints[GQI_BGANIM_X * GQ_INT_SIZE];
+t_gq_int *anim0_y = (t_gq_int *) &gq_builtin_ints[GQI_BGANIM_Y * GQ_INT_SIZE];
+t_gq_int *anim1_x = (t_gq_int *) &gq_builtin_ints[GQI_FGANIM1_X * GQ_INT_SIZE];
+t_gq_int *anim1_y = (t_gq_int *) &gq_builtin_ints[GQI_FGANIM1_Y * GQ_INT_SIZE];
+t_gq_int *anim2_x = (t_gq_int *) &gq_builtin_ints[GQI_FGANIM2_X * GQ_INT_SIZE];
+t_gq_int *anim2_y = (t_gq_int *) &gq_builtin_ints[GQI_FGANIM2_Y * GQ_INT_SIZE];
 
 t_gq_int *label_x[4] = {
     (t_gq_int *) &gq_builtin_ints[GQI_LABEL1_X * GQ_INT_SIZE],
@@ -151,14 +168,13 @@ uint8_t load_game(uint8_t namespace) {
     }
 
     game.persistent_crc16 = GQ_PTR(GQ_PTR_NS_CART, game.persistent_crc16);
-    game.persistent_vars = GQ_PTR(GQ_PTR_NS_CART, game.persistent_vars);
+    game.persistent_vars  = GQ_PTR(GQ_PTR_NS_CART, game.persistent_vars);
 
     HAL_new_game();
 
     *game_id    = game.id;
     *game_color = game.color;
     memcpy(game_title, game.title, GQ_STR_SIZE);
-
 
     // Clear all unhandled events
     for (uint16_t event_type = 0x0000; event_type < GQ_EVENT_COUNT; event_type++) {
@@ -215,6 +231,13 @@ void unload_game() {
         *label_y[i] = 0;
     }
     *label_flags = 0;
+
+    // These are direct writes to visual builtin variables (see the comment
+    // above their declarations), so -- unlike a GQ_OP_SETVAR write, which
+    // now only raises REFRESH when the value actually changes -- this
+    // function must raise it itself, unconditionally, so a stale frame
+    // isn't left on screen after the labels/animations above are cleared.
+    GQ_EVENT_SET(GQ_EVENT_REFRESH);
 }
 
 uint8_t load_animation(uint8_t index, t_gq_pointer anim_ptr) {
@@ -343,7 +366,21 @@ void draw_label_stack() {
     }
 }
 
+#ifdef GQ_HEADLESS
+// Headless-build-only instrumentation counter, incremented once per
+// draw_oled_stack() call. Used by the golden-test harness
+// (tests/run_draw_count_test.cmake) to assert exact draw counts for the
+// #265/PR#274 redundant-SETVAR-refresh regression fixture -- a pixel-level
+// golden alone can't distinguish "1 draw" from "20 identical draws".
+// Compiled out entirely on the firmware build (GQ_HEADLESS is never
+// defined there), so this has zero cost on the MSP430 target.
+uint32_t gq_draw_oled_stack_count = 0;
+#endif
+
 void draw_oled_stack() {
+#ifdef GQ_HEADLESS
+    gq_draw_oled_stack_count++;
+#endif
     // First, start with a blank slate.
     Graphics_setForegroundColor(&g_sContext, GRAPHICS_COLOR_WHITE);
     Graphics_setBackgroundColor(&g_sContext, GRAPHICS_COLOR_BLACK);
@@ -421,7 +458,7 @@ t_gq_int get_badge_word(t_gq_int badge_id) {
     }
 
     t_gq_pointer badge_word_offset = badge_id / (GQ_INT_SIZE * 8);
-    return gq_load_int(game.persistent_vars + GQP_OFFSET_BADGES + badge_word_offset*GQ_INT_SIZE);
+    return gq_load_int(game.persistent_vars + GQP_OFFSET_BADGES + badge_word_offset * GQ_INT_SIZE);
 }
 
 void set_badge_bit(t_gq_int badge_id, t_gq_int value) {
@@ -430,7 +467,7 @@ void set_badge_bit(t_gq_int badge_id, t_gq_int value) {
     }
 
     t_gq_pointer badge_word_offset = badge_id / (GQ_INT_SIZE * 8);
-    t_gq_pointer badge_word_ptr    = game.persistent_vars + GQP_OFFSET_BADGES + badge_word_offset*GQ_INT_SIZE;
+    t_gq_pointer badge_word_ptr    = game.persistent_vars + GQP_OFFSET_BADGES + badge_word_offset * GQ_INT_SIZE;
     t_gq_int badge_word            = gq_load_int(badge_word_ptr);
 
     t_gq_int bit_offset = badge_id % (GQ_INT_SIZE * 8);

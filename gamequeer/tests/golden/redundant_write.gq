@@ -1,0 +1,88 @@
+/*
+ * redundant_write.gq — Golden-test fixture locking in the SETVAR
+ * redundant-refresh fix from gamequeer#265/PR#274 (bytecode.c's GQ_OP_SETVAR
+ * handler now only raises GQ_EVENT_REFRESH when a write to a visual builtin
+ * var actually changes its value).
+ *
+ * Design:
+ *
+ *   `enter` sets GQS_LABEL1 to "COUNT: A" once and arms a 1-tick timer.
+ *   The `timer` handler re-arms itself every tick (a self-perpetuating
+ *   1-tick timer), so it fires on *every* system_tick from tick 2 onward.
+ *   Until `tick_count` reaches CHANGE_AT, it re-writes GQS_LABEL1 to the
+ *   *same* string ("COUNT: A") every single tick -- this is exactly the
+ *   redundant-write pattern #265 was filed against (e.g. a HUD/score label
+ *   re-asserted every tick regardless of whether the value changed). Once
+ *   `tick_count` reaches CHANGE_AT, GQS_LABEL1 switches to "COUNT: B" and
+ *   then stays there, re-asserting the *new* value redundantly on every
+ *   remaining tick -- exercising the suppression logic symmetrically on
+ *   both sides of the one real change.
+ *
+ * Three ctest cases share this one compiled cart, run for different tick
+ * counts (see tests/CMakeLists.txt's add_golden_test TICKS/GOLDEN_SUFFIX
+ * extension), asserting two things pixel-for-pixel:
+ *
+ *   1. golden_framebuffer_redundant_write_initial (TICKS=3) and
+ *      golden_framebuffer_redundant_write_phase_a (TICKS=20) are compared
+ *      against the *same* committed golden PGM. TICKS=20 lands after 17
+ *      ticks (3..20) of purely redundant "COUNT: A" rewrites (tick_count
+ *      reaches 19, still < CHANGE_AT=20) -- if a redundant SETVAR ever
+ *      incorrectly forces a redraw, this would still pass (same pixels
+ *      redrawn), but if suppression ever *breaks correctness* (stale or
+ *      corrupted redraw), the two runs would diverge and this test would
+ *      catch it. Byte-identical output across a 17-tick gap of no-op
+ *      writes is the "suppression is not a rendering change" guarantee.
+ *   2. golden_framebuffer_redundant_write_phase_b (TICKS=30) lands well
+ *      after tick_count reaches CHANGE_AT=20 (at tick 21) and after 9 more
+ *      redundant "COUNT: B" rewrites (ticks 22..30) -- asserts the one
+ *      real change is *not* missed (no swallowed redraw after a run of
+ *      no-op writes) and that the visible label reads "COUNT: B".
+ *
+ * See the PR body for the negative-control validation (reverting the
+ * bytecode.c compare logic and confirming phase_b still passes, since
+ * suppression-off just means more redraws of the same pixels) and the
+ * instrumented draw-count numbers (500 draws -> 1 draw over 500 ticks for
+ * this exact redundant-write pattern) that a pixel golden can't directly
+ * assert.
+ *
+ * How to reproduce the compiled fixture (redundant_write.gqgame):
+ *
+ *   From the gamequeer repo root, using the builder container:
+ *     docker run --rm -v $(pwd):/workspaces/gamequeer --workdir /workspaces/gamequeer \
+ *         --user $(id -u):$(id -g) gamequeer-builder:latest \
+ *         /bin/bash -c "PYTHONPATH=gqc/src python -m gqc compile --no-mem-map \
+ *             -o gamequeer/tests/golden gamequeer/tests/golden/redundant_write.gq"
+ *
+ *   Or via the Makefile target:
+ *     make golden-fixture
+ */
+
+game {
+    id = 1;
+    title := "RedundantWrite";
+    author := "test";
+    starting_stage = redraw_test;
+}
+
+volatile {
+    int tick_count = 0;
+}
+
+stage redraw_test {
+    event enter {
+        GQS_LABEL1 := "COUNT: A";
+        GQI_LABEL1_X = 10;
+        GQI_LABEL1_Y = 60;
+        timer 1;
+    }
+
+    event timer {
+        tick_count = tick_count + 1;
+        if (tick_count >= 20) {
+            GQS_LABEL1 := "COUNT: B";
+        } else {
+            GQS_LABEL1 := "COUNT: A";
+        }
+        timer 1;
+    }
+}

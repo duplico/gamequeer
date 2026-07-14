@@ -37,6 +37,34 @@ void init() {
  */
 extern uint8_t frame_buffer[OLED_HORIZONTAL_MAX][OLED_VERTICAL_MAX];
 
+#ifdef GQ_HEADLESS
+/* Instrumentation counter defined in gamequeer.c (draw_oled_stack() call
+ * count), only compiled in headless builds -- see its declaration there
+ * for why a pixel-level golden alone can't assert "N draws" vs "1 draw,
+ * same pixels". */
+extern uint32_t gq_draw_oled_stack_count;
+#endif
+
+/* Write the current draw_oled_stack() invocation count as a decimal integer
+ * followed by a newline. Headless-build-only (see gq_draw_oled_stack_count
+ * above); the caller is responsible for gating on GQ_HEADLESS. */
+static int dump_draw_count(const char *path) {
+#ifdef GQ_HEADLESS
+    FILE *f = fopen(path, "wb");
+    if (!f) {
+        fprintf(stderr, "dump_draw_count: cannot open %s for writing\n", path);
+        return 0;
+    }
+    fprintf(f, "%u\n", gq_draw_oled_stack_count);
+    fclose(f);
+    return 1;
+#else
+    (void) path;
+    fprintf(stderr, "dump_draw_count: --draw-count-out requires a GQ_HEADLESS build\n");
+    return 0;
+#endif
+}
+
 static int dump_framebuffer(const char *path) {
     FILE *f = fopen(path, "wb");
     if (!f) {
@@ -64,15 +92,19 @@ static int dump_framebuffer(const char *path) {
 
 int main(int argc, char *argv[]) {
     /* Deterministic-run parameters.
-     *   --ticks N   : run exactly N system_tick iterations then exit
-     *   --dump PATH : write the framebuffer as a binary PGM after the run
-     *   --input FILE: replay button events from a script (see HAL_input_load)
-     * Defaults: unlimited ticks, no dump, no scripted input (same as before).
+     *   --ticks N            : run exactly N system_tick iterations then exit
+     *   --dump PATH          : write the framebuffer as a binary PGM after the run
+     *   --input FILE         : replay button events from a script (see HAL_input_load)
+     *   --draw-count-out PATH: write the draw_oled_stack() invocation count
+     *                          (decimal, headless builds only)
+     * Defaults: unlimited ticks, no dump, no scripted input, no draw-count
+     * output (same as before).
      */
-    long ticks_limit  = -1; /* -1 = run forever */
-    const char *dump  = NULL;
-    const char *input = NULL;
-    const char *cart  = NULL;
+    long ticks_limit           = -1; /* -1 = run forever */
+    const char *dump           = NULL;
+    const char *input          = NULL;
+    const char *cart           = NULL;
+    const char *draw_count_out = NULL;
 
     /* Build a filtered argv for HAL_init that strips our new flags so it
      * still sees the cart path at argv[1]. */
@@ -119,6 +151,15 @@ int main(int argc, char *argv[]) {
                 return 1;
             }
             input = argv[++i];
+        } else if (strcmp(argv[i], "--draw-count-out") == 0) {
+            /* Only require that a next argument exists; a path legitimately
+             * starting with '-' should not be rejected. */
+            if (i + 1 >= argc) {
+                fprintf(stderr, "main: --draw-count-out requires a value\n");
+                free(hal_argv);
+                return 1;
+            }
+            draw_count_out = argv[++i];
         } else {
             if (cart == NULL) {
                 cart = argv[i];
@@ -161,6 +202,12 @@ int main(int argc, char *argv[]) {
 
     if (dump != NULL) {
         if (!dump_framebuffer(dump)) {
+            return 1;
+        }
+    }
+
+    if (draw_count_out != NULL) {
+        if (!dump_draw_count(draw_count_out)) {
             return 1;
         }
     }
