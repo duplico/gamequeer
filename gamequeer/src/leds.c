@@ -10,12 +10,30 @@ rgbcolor16_t gq_leds[5] = {
 
 #define LEDS_SUBTICKS 4
 
+// Number of fractional bits used to represent the per-tick interpolation
+// deltas computed in led_setup_frame() and consumed in led_tick(). This
+// lets led_tick() replace a 32-bit divide (done every smooth-cue subtick,
+// in RTC ISR context) with a precomputed reciprocal and a multiply+shift.
+//
+// 17 bits of fraction keeps the worst-case accumulated rounding error
+// below 1 LSB of the 16-bit LED output even at the maximum possible
+// gq_ledcue_frame_t.duration (0xFFFF ticks, i.e. up to 65534 smooth-cue
+// evaluations of a single frame): error <= duration / 2^LED_DELTA_FRAC_BITS
+// < 1. See leds.c unit-test sweep for empirical validation.
+#define LED_DELTA_FRAC_BITS 17
+
 uint8_t leds_animating = 0;
 gq_ledcue_frame_t leds_cue_fg_frames[GQ_CUE_MAX_FRAMES];
 gq_ledcue_frame_t leds_cue_bg_frames[GQ_CUE_MAX_FRAMES];
 gq_ledcue_frame_t leds_cue_frame_curr;
 rgbcolor16_t leds_cue_color_curr[5];
 rgbcolor16_t leds_cue_color_next[5];
+// Precomputed per-tick interpolation deltas for the current frame's smooth
+// transition, in LED_DELTA_FRAC_BITS fixed point. Computed once per frame in
+// led_setup_frame(); consumed (add-and-shift only, no divide) every smooth-cue
+// subtick in led_tick(). rgbdelta_t is deliberately not persisted anywhere
+// (not part of the on-cart cue format), so it costs RAM only, not FRAM/flash.
+rgbdelta_t leds_cue_color_delta[5];
 gq_ledcue_t leds_cue;
 uint16_t leds_cue_frame_index         = 0;
 uint16_t leds_cue_frame_ticks_elapsed = 0;
@@ -26,6 +44,45 @@ uint16_t leds_cue_bg_frame_index         = 0;
 uint16_t leds_cue_bg_frame_ticks_elapsed = 0;
 
 void led_setup_frame();
+
+// Precompute the fixed-point per-tick interpolation delta for one channel of
+// one LED, given the signed distance to travel (diff = next - curr) and the
+// frame duration (in ticks) over which to travel it.
+//
+// This is the one 32-bit divide per channel that used to happen every smooth
+// subtick in led_tick() (in RTC ISR context); it now happens once per frame,
+// in led_setup_frame(), instead.
+//
+// duration == 0 is guarded against (returns 0): the cooker always emits
+// durations that are multiples of LEDS_SUBTICKS (see gqc's cues.py), so a
+// legitimately-compiled cart never produces duration == 0 for a frame with a
+// following frame, but nothing on this side of the cart format enforces that,
+// so we guard here rather than trust it.
+//
+// The intermediate product is computed in 64-bit arithmetic (diff and
+// duration are both well within 32 bits, but diff << LED_DELTA_FRAC_BITS is
+// not) and the final fixed-point delta is saturated to fit in the 32-bit
+// rgbdelta_t field. Saturation only matters for pathologically small
+// durations (< ~5 ticks), which led_tick() never actually walks (the "frame
+// done" transition fires before any interpolation step is taken for such
+// short frames), so it exists purely to keep this function free of signed
+// overflow (UB) rather than to affect anything visible.
+static int32_t led_calc_delta(int32_t diff, uint16_t duration) {
+    if (duration == 0) {
+        return 0;
+    }
+
+    int64_t scaled = (int64_t) diff << LED_DELTA_FRAC_BITS;
+    int64_t delta  = scaled / (int32_t) duration;
+
+    if (delta > INT32_MAX) {
+        delta = INT32_MAX;
+    } else if (delta < INT32_MIN) {
+        delta = INT32_MIN;
+    }
+
+    return (int32_t) delta;
+}
 
 void led_stop() {
     // Stop the animation flag.
@@ -100,7 +157,16 @@ void led_setup_frame() {
         }
     }
 
-    // TODO: Set up the frame transition deltas
+    // Set up the frame transition deltas: one 32-bit divide per channel here,
+    // instead of one per channel on every smooth-cue subtick in led_tick().
+    for (uint8_t i = 0; i < 5; i++) {
+        leds_cue_color_delta[i].r = led_calc_delta(
+            (int32_t) leds_cue_color_next[i].r - leds_cue_color_curr[i].r, leds_cue_frame_curr.duration);
+        leds_cue_color_delta[i].g = led_calc_delta(
+            (int32_t) leds_cue_color_next[i].g - leds_cue_color_curr[i].g, leds_cue_frame_curr.duration);
+        leds_cue_color_delta[i].b = led_calc_delta(
+            (int32_t) leds_cue_color_next[i].b - leds_cue_color_curr[i].b, leds_cue_frame_curr.duration);
+    }
 
     leds_cue_frame_ticks_elapsed = 0;
 }
@@ -182,22 +248,20 @@ void led_tick() {
                 }
                 need_to_redraw = 1;
             } else if (leds_cue_frame_curr.transition_smooth) {
-                // If the frame is not done and is a smooth transition, interpolate the colors.
+                // If the frame is not done and is a smooth transition, interpolate the colors
+                // using the per-tick deltas precomputed in led_setup_frame(). No divide here:
+                // just a 64-bit intermediate multiply (hardware-assisted via MPY32) and a
+                // constant shift, instead of a 32-bit software divide per channel per subtick.
                 for (uint8_t i = 0; i < 5; i++) {
-                    // Interpolate the colors.
-                    // TODO: Calculate this elsewhere
                     gq_leds[i].r = leds_cue_color_curr[i].r +
-                        ((((int32_t) leds_cue_color_next[i].r - leds_cue_color_curr[i].r) *
-                          leds_cue_frame_ticks_elapsed) /
-                         leds_cue_frame_curr.duration);
+                        (int32_t) (((int64_t) leds_cue_color_delta[i].r * leds_cue_frame_ticks_elapsed) >>
+                                   LED_DELTA_FRAC_BITS);
                     gq_leds[i].g = leds_cue_color_curr[i].g +
-                        ((((int32_t) leds_cue_color_next[i].g - leds_cue_color_curr[i].g) *
-                          leds_cue_frame_ticks_elapsed) /
-                         leds_cue_frame_curr.duration);
+                        (int32_t) (((int64_t) leds_cue_color_delta[i].g * leds_cue_frame_ticks_elapsed) >>
+                                   LED_DELTA_FRAC_BITS);
                     gq_leds[i].b = leds_cue_color_curr[i].b +
-                        ((((int32_t) leds_cue_color_next[i].b - leds_cue_color_curr[i].b) *
-                          leds_cue_frame_ticks_elapsed) /
-                         leds_cue_frame_curr.duration);
+                        (int32_t) (((int64_t) leds_cue_color_delta[i].b * leds_cue_frame_ticks_elapsed) >>
+                                   LED_DELTA_FRAC_BITS);
                 }
 
                 need_to_redraw = 1;
