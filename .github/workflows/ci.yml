@@ -20,8 +20,8 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install gqc (editable)
-        run: pip install -e gqc/
+      - name: Install gqc (editable, with test deps)
+        run: pip install -e "gqc/[test]"
 
       - name: Run pytest
         run: |
