@@ -29,24 +29,59 @@
 //     exhaustive) to keep runtime bounded regardless of duration size.
 //
 // Asserts, for every sampled (diff, duration, ticks_elapsed):
-//   1. |new - old| <= 1, EXCLUDING cases where the OLD formula's own
-//      `int32_t` intermediate (diff * ticks_elapsed) overflows -- see
-//      old_formula_offset()'s comment. (Those are a pre-existing bug in the
-//      formula being replaced, not a new-code regression; flagged in the PR
-//      body rather than silently patched here or treated as a test failure.)
+//   1. |new - old| <= LED_FADE_TEST_TOLERANCE, EXCLUDING cases where the OLD
+//      formula's own `int32_t` intermediate (diff * ticks_elapsed) overflows
+//      -- see old_formula_offset()'s comment. (Those are a pre-existing bug
+//      in the formula being replaced, not a new-code regression; flagged in
+//      the PR body rather than silently patched here or treated as a test
+//      failure.)
+//
+//      LED_DELTA_FRAC_BITS was reduced from 17 to 14 bits (gamequeer#241
+//      redesign, PR #284) to make the fade-delta pipeline fit entirely in
+//      32-bit arithmetic (no int64_t), which widens the new formula's own
+//      truncation error relative to the *true* (real-valued) linear
+//      interpolation offset_true = diff*ticks_elapsed/duration: writing
+//      offset_new for what the formula above computes,
+//        offset_true - offset_new = phi + eps2,  0 <= phi < ticks_elapsed/2^14,
+//                                                 0 <= eps2 < 1
+//      (phi is led_calc_delta()'s own delta-truncation error carried through
+//      the multiply; eps2 is led_delta_shift()'s truncation). At exactly
+//      ticks_elapsed == duration (see the "exact landing" check below),
+//      offset_true == diff exactly (an integer), so that error is itself a
+//      nonnegative *integer* strictly less than duration/2^14 + 1
+//      <= 65535/16384 + 1 < 4.99994 -- i.e. at most 4. That rigorously
+//      bounds check #3 below. Away from the boundary, offset_true generally
+//      isn't an integer, so bounding |new - old| this way isn't as clean
+//      (the OLD reference formula has its own, single-truncation, < 1 error
+//      against the same true value, but the two errors aren't independent);
+//      an exhaustive sweep of the *full* reachable domain (every diff, every
+//      duration 5..65535, every multiple-of-4 ticks_elapsed -- run offline,
+//      not as part of this file, to keep this test's runtime bounded; see
+//      this PR's body for the script and results) confirms the two formulas
+//      never differ by more than 4 anywhere in that domain.
+//      LED_FADE_TEST_TOLERANCE is set to that verified value (see its
+//      definition below); it is NOT a number backed into the test to make
+//      empirical failures pass -- the empirical max observed by *this*
+//      (sampled) sweep is reported in the test's stdout summary and is
+//      <= LED_FADE_TEST_TOLERANCE, which is itself validated by the
+//      offline exhaustive sweep described above.
 //   2. Monotonicity: as ticks_elapsed increases, the new formula's output
-//      moves toward `next` and never backtracks.
+//      moves toward `next` and never backtracks (still strictly non-
+//      decreasing/non-increasing, matching the pre-redesign behavior --
+//      unaffected by the frac-bits change, since it follows purely from
+//      delta being constant-sign for a given frame and both the divide and
+//      the shift being truncations of a monotonic function of their input).
 //   3. "Exact landing" bound at the frame boundary: evaluated exactly at
 //      ticks_elapsed == duration (never actually reached by led_tick(),
 //      which snaps directly to `next` instead -- see led_tick()'s frame-done
 //      branch, untouched by this PR), the interpolation formula alone still
-//      lands within +/-1 of the true target. This is not what makes fades
-//      land exactly on target at runtime (the direct-assignment bypass in
-//      led_tick() does that, unconditionally, regardless of this formula) --
-//      it demonstrates the formula doesn't blow up or diverge as
-//      ticks_elapsed approaches duration, i.e. the exact landing isn't
-//      quietly relying on the interpolation formula happening to be skipped
-//      just in time.
+//      lands within +/-LED_FADE_TEST_TOLERANCE of the true target. This is
+//      not what makes fades land exactly on target at runtime (the direct-
+//      assignment bypass in led_tick() does that, unconditionally,
+//      regardless of this formula) -- it demonstrates the formula doesn't
+//      blow up or diverge as ticks_elapsed approaches duration, i.e. the
+//      exact landing isn't quietly relying on the interpolation formula
+//      happening to be skipped just in time.
 
 #include <stdint.h>
 #include <stdio.h>
@@ -54,7 +89,7 @@
 
 // ---- Duplicated from gamequeer/src/leds.c (keep in sync) -----------------
 
-#define LED_DELTA_FRAC_BITS 17
+#define LED_DELTA_FRAC_BITS 14
 #define LEDS_SUBTICKS       4
 
 static int32_t led_calc_delta(int32_t diff, uint16_t duration) {
@@ -62,27 +97,22 @@ static int32_t led_calc_delta(int32_t diff, uint16_t duration) {
         return 0;
     }
 
-    int64_t scaled = (int64_t) diff << LED_DELTA_FRAC_BITS;
-    int64_t delta  = scaled / (int32_t) duration;
+    uint32_t magnitude = (diff < 0) ? (uint32_t) (-diff) : (uint32_t) diff;
+    uint32_t scaled    = magnitude << LED_DELTA_FRAC_BITS;
+    int32_t delta      = (int32_t) (scaled / (uint32_t) duration);
 
-    if (delta > INT32_MAX) {
-        delta = INT32_MAX;
-    } else if (delta < INT32_MIN) {
-        delta = INT32_MIN;
-    }
-
-    return (int32_t) delta;
+    return (diff < 0) ? -delta : delta;
 }
 
-static int32_t led_delta_shift(int64_t product) {
-    uint64_t magnitude = (product < 0) ? (uint64_t) (-product) : (uint64_t) product;
+static int32_t led_delta_shift(int32_t product) {
+    uint32_t magnitude = (product < 0) ? (uint32_t) (-product) : (uint32_t) product;
     int32_t shifted    = (int32_t) (magnitude >> LED_DELTA_FRAC_BITS);
     return (product < 0) ? -shifted : shifted;
 }
 
 static int32_t new_formula_offset(int32_t diff, uint16_t duration, uint16_t ticks_elapsed) {
     int32_t delta = led_calc_delta(diff, duration);
-    return led_delta_shift((int64_t) delta * ticks_elapsed);
+    return led_delta_shift(delta * (int32_t) ticks_elapsed);
 }
 
 // ---- Pre-#284 reference formula (no longer present in leds.c) ------------
@@ -110,6 +140,12 @@ static int old_formula_overflows(int32_t diff, uint16_t ticks_elapsed) {
 }
 
 // ---- Sweep ----------------------------------------------------------------
+
+// Derived (frame-boundary case, see this file's header comment) and
+// verified (offline exhaustive sweep of the full reachable domain, see this
+// PR's body): both the new-vs-old comparison (check #1) and the exact-
+// landing comparison (check #3) are bounded by 4.
+#define LED_FADE_TEST_TOLERANCE 4
 
 #define NUM_DURATIONS 14
 static const uint16_t k_durations[NUM_DURATIONS] = {
@@ -199,7 +235,14 @@ int main(void) {
                         err = -err;
                     }
                     compared++;
-                    check(err <= 1, "new-vs-old within +/-1", diff, duration, ticks_elapsed, new_val, old_val);
+                    check(
+                        err <= LED_FADE_TEST_TOLERANCE,
+                        "new-vs-old within tolerance",
+                        diff,
+                        duration,
+                        ticks_elapsed,
+                        new_val,
+                        old_val);
                 }
 
                 if (have_prev) {
@@ -233,15 +276,24 @@ int main(void) {
             // exactly at the frame boundary (ticks_elapsed == duration),
             // even though led_tick() never actually does this (it snaps
             // directly to `next` instead -- see led_tick()'s frame-done
-            // branch). The formula alone should still land within +/-1 of
-            // `diff`, confirming it doesn't diverge as ticks_elapsed
-            // approaches duration.
+            // branch). At this exact point, offset_true == diff (an
+            // integer), so the rigorous bound derived in this file's header
+            // comment applies directly: the formula's output must land
+            // within LED_FADE_TEST_TOLERANCE of `diff`, confirming it
+            // doesn't diverge as ticks_elapsed approaches duration.
             int32_t at_boundary  = new_formula_offset(diff, duration, duration);
             int32_t boundary_err = at_boundary - diff;
             if (boundary_err < 0) {
                 boundary_err = -boundary_err;
             }
-            check(boundary_err <= 1, "exact landing at frame end (+/-1)", diff, duration, duration, at_boundary, diff);
+            check(
+                boundary_err <= LED_FADE_TEST_TOLERANCE,
+                "exact landing at frame end within tolerance",
+                diff,
+                duration,
+                duration,
+                at_boundary,
+                diff);
             checked++;
         }
     }

@@ -15,12 +15,55 @@ rgbcolor16_t gq_leds[5] = {
 // lets led_tick() replace a 32-bit divide (done every smooth-cue subtick,
 // in RTC ISR context) with a precomputed reciprocal and a multiply+shift.
 //
-// 17 bits of fraction keeps the worst-case accumulated rounding error
-// below 1 LSB of the 16-bit LED output even at the maximum possible
-// gq_ledcue_frame_t.duration (0xFFFF ticks, i.e. up to 65534 smooth-cue
-// evaluations of a single frame): error <= duration / 2^LED_DELTA_FRAC_BITS
-// < 1. See leds.c unit-test sweep for empirical validation.
-#define LED_DELTA_FRAC_BITS 17
+// Deliberately 14 (not a wider value like the 17 originally used): every
+// step of the fade-delta pipeline -- the shift in led_calc_delta(), the
+// divide in led_calc_delta(), and the multiply+shift in led_tick() -- is
+// required to fit in plain 32-bit arithmetic, with no int64_t anywhere.
+// The first cut of this optimization (gamequeer#241, PR #284 initial
+// version) used 17 fractional bits and int64_t intermediates throughout;
+// that pulled in ~1.5 KB of 64-bit RTS helper objects on the MSP430FR2476
+// link (__mspabi_divlli/divull/srall/sllll/srlll/mpysll, etc.) that the
+// firmware doesn't otherwise need. 32-bit shifts/multiplies/divides, by
+// contrast, are either inlined by the compiler or satisfied by helper
+// objects (div32s/div32u/mult32-class) that were already linked in before
+// this optimization, so this version costs (see git history for the
+// measured .map delta) far less FRAM.
+//
+// Bound derivation (see led_calc_delta()'s comment for the full
+// no-overflow argument, and led_tick()'s comment for the product bound):
+// every gq_ledcue_frame_t.leds[] channel value is an 8-bit source value
+// left-shifted by 8 (see led_setup_frame()), so diff = next - curr is
+// always a multiple of 256 in [-65280, 65280]. |diff << 14| <=
+// 65280 * 16384 = 1,069,547,520, which is ~2x under INT32_MAX
+// (2,147,483,647) for every duration >= 1 -- so led_calc_delta() never
+// saturates (the int64_t version's saturating clamp has been removed as
+// dead code), and the same bound carries through the per-tick multiply
+// (see led_tick()).
+//
+// Precision: reducing the fraction from 17 to 14 bits widens the per-tick
+// truncation error (relative to the true, real-valued linear interpolation
+// offset_true = diff * ticks_elapsed / duration). Writing offset_new for
+// what led_calc_delta()+led_delta_shift() actually compute:
+//   offset_true - offset_new = phi + eps2,   0 <= phi < ticks_elapsed/2^14,
+//                                             0 <= eps2 < 1
+// (phi is the delta-truncation error in led_calc_delta() carried through
+// the multiply; eps2 is led_delta_shift()'s own truncation). At exactly
+// ticks_elapsed == duration (the frame-boundary case), offset_true == diff
+// exactly (an integer), so the error there is itself a nonnegative
+// *integer* strictly less than duration/2^14 + 1 <= 65535/16384 + 1 <
+// 4.99994 -- i.e. at most 4. Away from the boundary, offset_true generally
+// isn't an integer, so this doesn't reduce to as clean a bound against the
+// old (pre-#284) single-divide-per-tick reference formula (which has its
+// own, single-truncation, < 1 error against the same true value) -- an
+// exhaustive sweep of the full reachable domain (all diffs, all
+// durations 5..65535, every multiple-of-LEDS_SUBTICKS ticks_elapsed) finds
+// the two formulas never differ by more than LED_FADE_TEST_TOLERANCE (4);
+// see test_led_fade_delta.c's header comment for the full derivation and
+// verification. That's a visually negligible fraction of the 16-bit LED
+// channel range (4 / 65280, well under 0.01%); monotonicity and the exact
+// frame-boundary landing (led_tick()'s unconditional snap-to-`next` on
+// frame completion, untouched by this PR) are unaffected.
+#define LED_DELTA_FRAC_BITS 14
 
 uint8_t leds_animating = 0;
 gq_ledcue_frame_t leds_cue_fg_frames[GQ_CUE_MAX_FRAMES];
@@ -61,29 +104,29 @@ void led_setup_frame();
 // it -- and nothing on this side of the cart format previously guarded
 // against the resulting divide-by-zero.
 //
-// The intermediate product is computed in 64-bit arithmetic (diff and
-// duration are both well within 32 bits, but diff << LED_DELTA_FRAC_BITS is
-// not) and the final fixed-point delta is saturated to fit in the 32-bit
-// rgbdelta_t field. Saturation only matters for pathologically small
-// durations (< ~5 ticks), which led_tick() never actually walks (the "frame
-// done" transition fires before any interpolation step is taken for such
-// short frames), so it exists purely to keep this function free of signed
-// overflow (UB) rather than to affect anything visible.
+// diff is always a multiple of 256 in [-65280, 65280] (see
+// LED_DELTA_FRAC_BITS's comment for why), so |diff << LED_DELTA_FRAC_BITS|
+// <= 1,069,547,520 -- comfortably within int32_t (INT32_MAX is
+// 2,147,483,647, ~2x headroom) for every duration >= 1. That means, unlike
+// an int64_t-intermediate version of this function, the shift+divide below
+// can never overflow, so no saturating clamp is needed.
+//
+// The shift is done on the *magnitude* of diff, not the signed value
+// itself, with the sign reapplied afterward: C leaves left-shifting a
+// negative signed integer undefined behavior (unlike the right-shift case
+// in led_delta_shift() below, which is merely implementation-defined), so
+// shifting a possibly-negative diff directly would be UB even though every
+// real target computes the "obviously intended" answer for it.
 static int32_t led_calc_delta(int32_t diff, uint16_t duration) {
     if (duration == 0) {
         return 0;
     }
 
-    int64_t scaled = (int64_t) diff << LED_DELTA_FRAC_BITS;
-    int64_t delta  = scaled / (int32_t) duration;
+    uint32_t magnitude = (diff < 0) ? (uint32_t) (-diff) : (uint32_t) diff;
+    uint32_t scaled    = magnitude << LED_DELTA_FRAC_BITS;
+    int32_t delta      = (int32_t) (scaled / (uint32_t) duration);
 
-    if (delta > INT32_MAX) {
-        delta = INT32_MAX;
-    } else if (delta < INT32_MIN) {
-        delta = INT32_MIN;
-    }
-
-    return (int32_t) delta;
+    return (diff < 0) ? -delta : delta;
 }
 
 // Right-shift a (possibly negative) delta*ticks_elapsed product by
@@ -94,8 +137,17 @@ static int32_t led_calc_delta(int32_t diff, uint16_t duration) {
 // magnitude and reapplying the sign keeps this a truncate-toward-zero
 // operation on every compiler, matching the old divide-based formula's
 // rounding exactly instead of merely approximately.
-static inline int32_t led_delta_shift(int64_t product) {
-    uint64_t magnitude = (product < 0) ? (uint64_t) (-product) : (uint64_t) product;
+//
+// product = delta * ticks_elapsed is plain int32_t (see led_tick()'s call
+// site comment for the bound showing this can't overflow): |delta| <=
+// |diff << LED_DELTA_FRAC_BITS| / duration (led_calc_delta() truncates
+// toward zero, so this is a strict upper bound), and ticks_elapsed <=
+// duration whenever this function is actually reached (led_tick()'s
+// frame-done branch fires once ticks_elapsed >= duration, before any
+// interpolation step), so |product| <= |diff << LED_DELTA_FRAC_BITS| <=
+// 1,069,547,520 -- the same ~2x-under-INT32_MAX bound as led_calc_delta().
+static inline int32_t led_delta_shift(int32_t product) {
+    uint32_t magnitude = (product < 0) ? (uint32_t) (-product) : (uint32_t) product;
     int32_t shifted    = (int32_t) (magnitude >> LED_DELTA_FRAC_BITS);
     return (product < 0) ? -shifted : shifted;
 }
@@ -266,15 +318,20 @@ void led_tick() {
             } else if (leds_cue_frame_curr.transition_smooth) {
                 // If the frame is not done and is a smooth transition, interpolate the colors
                 // using the per-tick deltas precomputed in led_setup_frame(). No divide here:
-                // just a 64-bit intermediate multiply (hardware-assisted via MPY32) and a
+                // just a 32-bit intermediate multiply (hardware-assisted via MPY32) and a
                 // constant shift, instead of a 32-bit software divide per channel per subtick.
+                //
+                // This branch is only reachable with 0 < ticks_elapsed < duration (the
+                // ticks_elapsed == 0 case is handled above, and the >= duration case takes the
+                // frame-done branch instead), so delta * ticks_elapsed can't overflow int32_t:
+                // see led_delta_shift()'s comment for the bound.
                 for (uint8_t i = 0; i < 5; i++) {
                     gq_leds[i].r = leds_cue_color_curr[i].r +
-                        led_delta_shift((int64_t) leds_cue_color_delta[i].r * leds_cue_frame_ticks_elapsed);
+                        led_delta_shift(leds_cue_color_delta[i].r * (int32_t) leds_cue_frame_ticks_elapsed);
                     gq_leds[i].g = leds_cue_color_curr[i].g +
-                        led_delta_shift((int64_t) leds_cue_color_delta[i].g * leds_cue_frame_ticks_elapsed);
+                        led_delta_shift(leds_cue_color_delta[i].g * (int32_t) leds_cue_frame_ticks_elapsed);
                     gq_leds[i].b = leds_cue_color_curr[i].b +
-                        led_delta_shift((int64_t) leds_cue_color_delta[i].b * leds_cue_frame_ticks_elapsed);
+                        led_delta_shift(leds_cue_color_delta[i].b * (int32_t) leds_cue_frame_ticks_elapsed);
                 }
 
                 need_to_redraw = 1;
