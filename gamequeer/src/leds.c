@@ -227,13 +227,33 @@ void led_setup_frame() {
 
     // Set up the frame transition deltas: one 32-bit divide per channel here,
     // instead of one per channel on every smooth-cue subtick in led_tick().
-    for (uint8_t i = 0; i < 5; i++) {
-        leds_cue_color_delta[i].r = led_calc_delta(
-            (int32_t) leds_cue_color_next[i].r - leds_cue_color_curr[i].r, leds_cue_frame_curr.duration);
-        leds_cue_color_delta[i].g = led_calc_delta(
-            (int32_t) leds_cue_color_next[i].g - leds_cue_color_curr[i].g, leds_cue_frame_curr.duration);
-        leds_cue_color_delta[i].b = led_calc_delta(
-            (int32_t) leds_cue_color_next[i].b - leds_cue_color_curr[i].b, leds_cue_frame_curr.duration);
+    //
+    // Only worth doing when led_tick() will actually read the result:
+    //   - A non-smooth frame never reads leds_cue_color_delta at all (see
+    //     led_tick()'s non-smooth branch).
+    //   - A frame with duration <= LEDS_SUBTICKS never reaches a nonzero,
+    //     not-yet-done ticks_elapsed: the first subtick (ticks_elapsed == 0)
+    //     uses leds_cue_color_curr directly, and by the next subtick
+    //     (ticks_elapsed == LEDS_SUBTICKS) the frame-done check
+    //     (ticks_elapsed >= duration) already fires instead. So its delta,
+    //     even if computed, would never be consumed.
+    // Skipping both cases avoids an unnecessary per-channel divide in
+    // led_setup_frame()'s ISR-reachable call path (it's called from
+    // led_tick(), i.e. the RTC ISR, on every frame advance) for the common
+    // non-smooth/short-frame case. The array is explicitly zeroed in the
+    // skipped case, defensively, in case some future caller ever reads it
+    // out of band; current callers don't.
+    if (leds_cue_frame_curr.transition_smooth && leds_cue_frame_curr.duration > LEDS_SUBTICKS) {
+        for (uint8_t i = 0; i < 5; i++) {
+            leds_cue_color_delta[i].r = led_calc_delta(
+                (int32_t) leds_cue_color_next[i].r - leds_cue_color_curr[i].r, leds_cue_frame_curr.duration);
+            leds_cue_color_delta[i].g = led_calc_delta(
+                (int32_t) leds_cue_color_next[i].g - leds_cue_color_curr[i].g, leds_cue_frame_curr.duration);
+            leds_cue_color_delta[i].b = led_calc_delta(
+                (int32_t) leds_cue_color_next[i].b - leds_cue_color_curr[i].b, leds_cue_frame_curr.duration);
+        }
+    } else {
+        memset(leds_cue_color_delta, 0, sizeof(leds_cue_color_delta));
     }
 
     leds_cue_frame_ticks_elapsed = 0;
