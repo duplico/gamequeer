@@ -255,7 +255,10 @@ uint8_t load_animation(uint8_t index, t_gq_pointer anim_ptr) {
 
     anim->in_use = 1;
     anim->frame  = 0;
-    anim->ticks  = anim->anim.ticks_per_frame;
+    // Invalidate any cached frame metadata from a previous animation (or
+    // previous frame index) in this slot -- see frame_meta's comment.
+    anim->frame_meta.data_pointer = 0;
+    anim->ticks                   = anim->anim.ticks_per_frame;
 #ifdef GQ_MIN_FRAME_DURATION
     if (anim->ticks < GQ_MIN_FRAME_DURATION) {
         anim->ticks = GQ_MIN_FRAME_DURATION;
@@ -268,8 +271,6 @@ uint8_t load_animation(uint8_t index, t_gq_pointer anim_ptr) {
 }
 
 void draw_animation_stack() {
-    gq_anim_frame frame_current;
-    gq_anim_frame frame_current_mask;
     uint8_t anim_index = 0;
     do {
         if (current_animations[anim_index].in_use) {
@@ -288,13 +289,24 @@ void draw_animation_stack() {
                     break;
             }
 
-            // Load the current frame metadata
-            if (!gq_memcpy_to_ram(
-                    (uint8_t *) &frame_current,
-                    current_animations[anim_index].anim.frame_pointer +
-                        current_animations[anim_index].frame * sizeof(gq_anim_frame),
-                    sizeof(gq_anim_frame))) {
-                return; // failure
+            // Load the current frame's metadata from cart, unless it's
+            // already cached for this slot's current frame (see
+            // gq_anim_onscreen's frame_meta comment).
+            if (current_animations[anim_index].frame_meta.data_pointer == 0) {
+                if (!gq_memcpy_to_ram(
+                        (uint8_t *) &current_animations[anim_index].frame_meta,
+                        current_animations[anim_index].anim.frame_pointer +
+                            current_animations[anim_index].frame * sizeof(gq_anim_frame),
+                        sizeof(gq_anim_frame))) {
+                    // A failed/partial copy could otherwise leave garbage
+                    // bytes sitting in frame_meta.data_pointer that happen
+                    // to be non-zero, which would be misread as "cached" on
+                    // every future draw. Re-zero it so the next draw
+                    // attempt retries the cart read instead of trusting a
+                    // half-written struct forever.
+                    current_animations[anim_index].frame_meta.data_pointer = 0;
+                    return; // failure
+                }
             }
 
             // Check whether this animation has a mask
@@ -302,24 +314,31 @@ void draw_animation_stack() {
                 current_animations[anim_index + 1].anim.width == current_animations[anim_index].anim.width &&
                 current_animations[anim_index + 1].anim.height == current_animations[anim_index].anim.height) {
                 // The animation has a mask. Note that we enforce that the mask has the same dimensions as the frame.
-                if (!gq_memcpy_to_ram(
-                        (uint8_t *) &frame_current_mask,
-                        current_animations[anim_index + 1].anim.frame_pointer +
-                            current_animations[anim_index + 1].frame * sizeof(gq_anim_frame),
-                        sizeof(gq_anim_frame))) {
-                    return; // failure
+                if (current_animations[anim_index + 1].frame_meta.data_pointer == 0) {
+                    if (!gq_memcpy_to_ram(
+                            (uint8_t *) &current_animations[anim_index + 1].frame_meta,
+                            current_animations[anim_index + 1].anim.frame_pointer +
+                                current_animations[anim_index + 1].frame * sizeof(gq_anim_frame),
+                            sizeof(gq_anim_frame))) {
+                        // See the frame_meta failure-path comment above:
+                        // re-zero on a failed/partial copy so a future draw
+                        // retries the cart read instead of trusting a
+                        // half-written struct forever.
+                        current_animations[anim_index + 1].frame_meta.data_pointer = 0;
+                        return; // failure
+                    }
                 }
 
                 gq_draw_image_with_mask(
                     &g_sContext,
-                    frame_current.data_pointer,
-                    frame_current.bPP,
-                    frame_current_mask.data_pointer,
-                    frame_current_mask.bPP,
+                    current_animations[anim_index].frame_meta.data_pointer,
+                    current_animations[anim_index].frame_meta.bPP,
+                    current_animations[anim_index + 1].frame_meta.data_pointer,
+                    current_animations[anim_index + 1].frame_meta.bPP,
                     current_animations[anim_index].anim.width,
                     current_animations[anim_index].anim.height,
-                    frame_current.data_size,
-                    frame_current_mask.data_size,
+                    current_animations[anim_index].frame_meta.data_size,
+                    current_animations[anim_index + 1].frame_meta.data_size,
                     current_animations[anim_index].x,
                     current_animations[anim_index].y);
 
@@ -328,11 +347,11 @@ void draw_animation_stack() {
                 // Draw the frame on the screen
                 gq_draw_image(
                     &g_sContext,
-                    frame_current.data_pointer,
-                    frame_current.bPP,
+                    current_animations[anim_index].frame_meta.data_pointer,
+                    current_animations[anim_index].frame_meta.bPP,
                     current_animations[anim_index].anim.width,
                     current_animations[anim_index].anim.height,
-                    frame_current.data_size,
+                    current_animations[anim_index].frame_meta.data_size,
                     current_animations[anim_index].x,
                     current_animations[anim_index].y);
             }
@@ -432,7 +451,10 @@ void system_tick() {
 
         // If we're here, it's time for this animation to go to the next frame.
         current_animations[i].frame++;
-        current_animations[i].ticks = current_animations[i].anim.ticks_per_frame;
+        // The frame index changed, so the cached frame metadata (if any) is
+        // now stale -- see gq_anim_onscreen's frame_meta comment.
+        current_animations[i].frame_meta.data_pointer = 0;
+        current_animations[i].ticks                   = current_animations[i].anim.ticks_per_frame;
         if (current_animations[i].frame >= current_animations[i].anim.frame_count) {
             // Animation is complete
             current_animations[i].in_use = 0;

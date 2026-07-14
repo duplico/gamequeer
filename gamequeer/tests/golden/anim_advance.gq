@@ -1,0 +1,100 @@
+/*
+ * anim_advance.gq — Golden-test fixture locking in the frame-metadata cache
+ * from gamequeer#264/PR#282 (draw_animation_stack() caches the current
+ * frame's gq_anim_frame in gq_anim_onscreen.frame_meta instead of re-reading
+ * it from cart on every redraw, invalidating the cache only when a slot's
+ * `frame`/`anim` field actually changes -- see gq_anim_onscreen's frame_meta
+ * comment in include/gamequeer.h).
+ *
+ * None of the other committed golden fixtures ever advance an animation
+ * frame (hello.gq has none; mask_encoding_{a,b}.gq load a single static
+ * frame and never tick further; redundant_write.gq has no animations at
+ * all), so the cache-invalidate-on-frame-advance path introduced by #264 had
+ * zero CI-visible coverage before this fixture.
+ *
+ * Uses `bwcircles.gif` (the exact same asset + frame_rate combination as
+ * `pop` in gqc/examples/skel/games/working_samples/tutorial_1.gq, already
+ * confirmed to survive gqc's ffmpeg/fps-filter resampling as a genuine
+ * multi-frame animation -- unlike a hand-authored GIF, which can silently
+ * collapse to a single extracted frame) as a plain bganim, started from the
+ * `enter` event.
+ *
+ * Timing -- empirically verified by dumping every tick from 1..34 and
+ * diffing the PGMs, rather than trusted from the frame_rate arithmetic
+ * alone (gqc's Animation.__init__ computes ticks_per_frame = 100/frame_rate
+ * = 100/10 = 10, but gamequeer.c's `load_animation()` clamps the *first*
+ * frame's `ticks` up to `GQ_MIN_FRAME_DURATION` (20, include/gamequeer.h)
+ * since 10 < 20 -- `system_tick()`'s own per-advance reset does *not*
+ * re-apply that clamp, so frame 0's duration (20 ticks) and every
+ * subsequent frame's duration (10 ticks, the unclamped value) actually
+ * differ. This asymmetry is pre-existing/unrelated to #264 and out of
+ * scope here; it's just why the tick counts below aren't evenly spaced):
+ *
+ *   tick 1:  `enter` fires (first handle_events() pass), runs `play bganim
+ *            pop`, which calls load_animation() (frame=0, ticks clamped to
+ *            20, unconditional REFRESH) -- frame 0 is drawn.
+ *   ticks 2..21: system_tick() decrements the per-frame counter to 0; no
+ *            REFRESH fires in this window, so the framebuffer is untouched
+ *            (still frame 0's pixels) -- confirmed identical for every
+ *            tick count in [1, 21].
+ *   tick 22: the counter hits 0 -> frame advances to 1, the cache is
+ *            invalidated (frame_meta.data_pointer zeroed), a fresh cart
+ *            read repopulates it, and REFRESH fires -- frame 1 is drawn.
+ *   ticks 23..32: same idle window (unclamped ticks_per_frame=10 this
+ *            time); still frame 1's pixels -- confirmed identical for
+ *            every tick count in [22, 32].
+ *   tick 33: frame advances to 2 and is drawn, by the same mechanism.
+ *
+ * Three ctest cases share this one compiled cart (see tests/CMakeLists.txt):
+ *   golden_framebuffer_anim_advance_frame0 (TICKS=1)  -- frame 0.
+ *   golden_framebuffer_anim_advance_frame1 (TICKS=22) -- frame 1: proves the
+ *     cache invalidates and the *new* frame's metadata is actually read
+ *     (a stale/frozen cache would still show frame 0's pixels here).
+ *   golden_framebuffer_anim_advance_frame2 (TICKS=33) -- frame 2: proves
+ *     invalidation isn't a one-shot fluke and keeps working on the *second*
+ *     advance too (guards against a fix that only clears the cache once).
+ * Each of the three goldens differs pixel-for-pixel from the other two
+ * (confirmed via md5sum of the dumped PGMs when this fixture was authored:
+ * three distinct hashes across the [1,21]/[22,32]/33+ tick ranges).
+ *
+ * Negative-control validation performed when authoring this fixture (per
+ * the PR body): with the `frame_meta.data_pointer = 0` invalidation lines
+ * in system_tick() and load_animation() commented out locally
+ * (uncommitted), golden_framebuffer_anim_advance_frame1 and _frame2 both
+ * FAIL, because draw_animation_stack() keeps re-drawing the cached frame 0
+ * metadata forever (the frame index itself still advances -- only the
+ * *cache* goes stale) -- the emulator output was frozen at frame 0's pixels
+ * at TICKS=22 and TICKS=33 instead of showing frame 1/frame 2. Restored
+ * before committing.
+ *
+ * How to reproduce the compiled fixture (anim_advance.gqgame):
+ *
+ *   From the gamequeer repo root, using the builder container:
+ *     docker run --rm -v $(pwd):/workspaces/gamequeer --workdir /workspaces/gamequeer \
+ *         --user $(id -u):$(id -g) gamequeer-builder:latest \
+ *         /bin/bash -c "cd gamequeer/tests/golden && PYTHONPATH=/workspaces/gamequeer/gqc/src \
+ *             python -m gqc compile --no-mem-map -o . anim_advance.gq"
+ *
+ *   Or via the Makefile target:
+ *     make golden-fixture
+ */
+
+game {
+    id = 1;
+    title := "AnimAdvance";
+    author := "test";
+    starting_stage = anim_test;
+}
+
+animations {
+    pop <- "bwcircles.gif" {
+        frame_rate = 10;
+        dithering := "sierra2_4a";
+    }
+}
+
+stage anim_test {
+    event enter {
+        play bganim pop;
+    }
+}

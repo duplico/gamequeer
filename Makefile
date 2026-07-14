@@ -75,12 +75,17 @@ DOCKER_CMD_NIT := docker run --rm --workdir /workspaces/gamequeer -v $(PWD):/wor
 #    follow-up).
 #  - redundant_write.gq: SETVAR redundant-refresh regression fixture (#265/
 #    PR#274); no ffmpeg/image assets needed either.
-golden-fixture: builder-build gamequeer/tests/golden/hello.gq gamequeer/tests/golden/mask_encoding_a.gq gamequeer/tests/golden/mask_encoding_b.gq gamequeer/tests/golden/redundant_write.gq
+#  - anim_advance.gq: multi-frame animation cache-invalidation regression
+#    fixture (#264/PR#282), using bwcircles.gif under
+#    gamequeer/tests/golden/assets/animations/ (same ffmpeg/GIF pipeline as
+#    mask_encoding_{a,b}.gq, so compiled from gamequeer/tests/golden too).
+golden-fixture: builder-build gamequeer/tests/golden/hello.gq gamequeer/tests/golden/mask_encoding_a.gq gamequeer/tests/golden/mask_encoding_b.gq gamequeer/tests/golden/redundant_write.gq gamequeer/tests/golden/anim_advance.gq
 	$(DOCKER_CMD_NIT) /bin/bash -c "PYTHONPATH=gqc/src python -m gqc compile --no-mem-map -o gamequeer/tests/golden gamequeer/tests/golden/hello.gq && \
 		PYTHONPATH=gqc/src python -m gqc compile --no-mem-map -o gamequeer/tests/golden gamequeer/tests/golden/redundant_write.gq && \
 		cd gamequeer/tests/golden && \
 		PYTHONPATH=/workspaces/gamequeer/gqc/src python -m gqc compile --no-mem-map -o . mask_encoding_a.gq && \
 		PYTHONPATH=/workspaces/gamequeer/gqc/src python -m gqc compile --no-mem-map -o . mask_encoding_b.gq && \
+		PYTHONPATH=/workspaces/gamequeer/gqc/src python -m gqc compile --no-mem-map -o . anim_advance.gq && \
 		rm -rf build"
 
 # Build the headless emulator and run the golden framebuffer test.
