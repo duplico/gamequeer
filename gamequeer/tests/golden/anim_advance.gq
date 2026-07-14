@@ -9,7 +9,7 @@
  * None of the other committed golden fixtures ever advance an animation
  * frame (hello.gq has none; mask_encoding_{a,b}.gq load a single static
  * frame and never tick further; redundant_write.gq has no animations at
- * all), so the cache-invalidate-on-frame-advance path #264 introduces had
+ * all), so the cache-invalidate-on-frame-advance path introduced by #264 had
  * zero CI-visible coverage before this fixture.
  *
  * Uses `bwcircles.gif` (the exact same asset + frame_rate combination as
