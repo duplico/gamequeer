@@ -68,7 +68,7 @@ DOCKER_CMD_NIT := docker run --rm --workdir /workspaces/gamequeer -v $(PWD):/wor
 # Compile the hello.gq test fixture (no ffmpeg needed; no GIF assets).
 # The output gamequeer/tests/golden/hello.gqgame is committed to the repo.
 golden-fixture: builder-build gamequeer/tests/golden/hello.gq
-	$(DOCKER_CMD_NIT) /bin/bash -c "PYTHONPATH=gqc/src python -m gqc compile -o gamequeer/tests/golden gamequeer/tests/golden/hello.gq"
+	$(DOCKER_CMD_NIT) /bin/bash -c "PYTHONPATH=gqc/src python -m gqc compile --no-mem-map -o gamequeer/tests/golden gamequeer/tests/golden/hello.gq"
 
 # Build the headless emulator and run the golden framebuffer test.
 test-headless: builder-build
