@@ -25,9 +25,10 @@ void init() {
  * Write frame_buffer[OLED_HORIZONTAL_MAX][OLED_VERTICAL_MAX] as a binary PGM
  * (P5).  Each entry is 0 or 1; we map 0->0 and 1->255.
  *
- * The framebuffer is 127x127 pixels: OLED_HORIZONTAL_MAX = OLED_VERTICAL_MAX = 127
- * (not 128x128 — the OLED_*_MAX constants are the maximum coordinate index, which
- * is also the pixel count since grlib uses 0-based indexing up to and including MAX).
+ * The framebuffer is 127x127 pixels: OLED_HORIZONTAL_MAX = OLED_VERTICAL_MAX = 127.
+ * The OLED_*_MAX constants are the width/height (exclusive upper bound on the
+ * coordinate index); valid coordinates run 0..MAX-1, as enforced by the bounds
+ * check in grlib_gfx_driver.c.
  * Golden fixture authors: the PGM header will read "P5\n127 127\n255\n".
  *
  * frame_buffer is indexed [x][y] with x=column, y=row.  PGM rows are written

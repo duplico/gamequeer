@@ -167,7 +167,7 @@ void HAL_input_load(const char *path) {
     FILE *f = fopen(path, "r");
     if (!f) {
         fprintf(stderr, "HAL_input_load: cannot open %s\n", path);
-        return;
+        exit(1);
     }
 
     char line[64];
