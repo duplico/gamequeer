@@ -1,0 +1,38 @@
+/*
+ * hello.gq — Minimal golden-test fixture for the headless regression harness.
+ *
+ * Design goals:
+ *  - No animations (no GIF assets, no ffmpeg dependency).
+ *  - No light cues (no .gqcue assets).
+ *  - Uses GQS_LABEL1 and GQI_LABEL1_X/Y to render a text string onto the
+ *    framebuffer so the golden test exercises at least one full-screen text
+ *    render via Graphics_drawString.
+ *  - Deterministic: the enter event fires immediately on stage load and sets
+ *    the label; the framebuffer is stable after the first system_tick.
+ *
+ * How to reproduce the compiled fixture (hello.gqgame):
+ *
+ *   From the gamequeer repo root, using the builder container:
+ *     docker run --rm -v $(pwd):/workspaces/gamequeer --workdir /workspaces/gamequeer \
+ *         --user $(id -u):$(id -g) gamequeer-builder:latest \
+ *         /bin/bash -c "PYTHONPATH=gqc/src python -m gqc compile \
+ *             -o gamequeer/tests/golden gamequeer/tests/golden/hello.gq"
+ *
+ *   Or via the Makefile target:
+ *     make golden-fixture
+ */
+
+game {
+    id = 1;
+    title := "Hello";
+    author := "test";
+    starting_stage = hello;
+}
+
+stage hello {
+    event enter {
+        GQS_LABEL1 := "HELLO WORLD";
+        GQI_LABEL1_X = 10;
+        GQI_LABEL1_Y = 60;
+    }
+}

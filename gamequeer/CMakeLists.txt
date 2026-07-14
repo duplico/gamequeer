@@ -13,13 +13,23 @@ set_property(
     PROPERTY C_STANDARD 99
 )
 
-# Find X11:
-find_package(X11 REQUIRED)
-message(STATUS "X11_FOUND = ${X11_FOUND}")
-message(STATUS "X11_INCLUDE_DIR = ${X11_INCLUDE_DIR}")
-message(STATUS "X11_LIBRARIES = ${X11_LIBRARIES}")
-include_directories(${X11_INCLUDE_DIR})
-link_directories(${X11_LIBRARIES})
+# Headless build option: swaps X11 gfx backend for a no-op stub so the
+# emulator builds and runs without a DISPLAY.  The grlib→frame_buffer render
+# path stays fully intact; only the X11 sink is replaced.
+option(GQ_HEADLESS "Build without X11 display (headless mode)" OFF)
+
+if(GQ_HEADLESS)
+    message(STATUS "GQ_HEADLESS=ON: building without X11")
+    set(GFX_SOURCE src/gfx/gfx_headless.c)
+else()
+    # Find X11:
+    find_package(X11 REQUIRED)
+    message(STATUS "X11_FOUND = ${X11_FOUND}")
+    message(STATUS "X11_INCLUDE_DIR = ${X11_INCLUDE_DIR}")
+    message(STATUS "X11_LIBRARIES = ${X11_LIBRARIES}")
+    include_directories(${X11_INCLUDE_DIR})
+    set(GFX_SOURCE src/gfx/gfx.c)
+endif()
 
 # Main sources:
 add_executable(
@@ -35,7 +45,7 @@ add_executable(
     # Graphics driver:
     src/grlib_gfx_driver/grlib_gfx_driver.c
     # gfx (Linux graphics library) sources:
-    src/gfx/gfx.c
+    ${GFX_SOURCE}
     # grlib sources:
     src/grlib/grlib/context.c
     src/grlib/grlib/circle.c
@@ -47,11 +57,15 @@ add_executable(
     src/grlib/fonts/fontfixed6x8.c
 )
 
-# Link X11:
-target_link_libraries(
-    ${PROJECT_NAME}
-    ${X11_LIBRARIES}
-)
+if(GQ_HEADLESS)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE GQ_HEADLESS)
+else()
+    # Link X11:
+    target_link_libraries(
+        ${PROJECT_NAME}
+        ${X11_LIBRARIES}
+    )
+endif()
 
 # Link math:
 target_link_libraries(
@@ -66,3 +80,11 @@ target_include_directories(
 )
 
 target_compile_options(${PROJECT_NAME} PUBLIC -Wall -Wextra -Wpedantic)
+
+# Testing (CTest): only register the test tree in the headless build.
+# A plain X11 build does not have the golden-test infrastructure,
+# so we avoid the confusing "No tests were found" ctest output.
+if(GQ_HEADLESS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()

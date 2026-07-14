@@ -140,13 +140,75 @@ void HAL_init(int argc, char *argv[]) {
         exit(1);
     }
     size_t bytesRead = fread(flash_cart, sizeof(uint8_t), CART_FLASH_SIZE_MBYTES * 1024 * 1024, file);
+    (void) bytesRead;
 
     if (file != stdin) {
         fclose(file);
     }
 }
 
+/* -------------------------------------------------------------------------
+ * Scripted input for deterministic / headless runs
+ * -------------------------------------------------------------------------
+ * HAL_input_load() reads a text file of button-event names (one per line):
+ *   A, B, L, R, CLICK
+ * Events are injected by HAL_event_poll() one at a time (one event per poll
+ * call) then exhausted.  Blank lines and unknown tokens are silently skipped.
+ * This is minimal — enough to exercise button-driven game logic in tests.
+ */
+
+#define HAL_INPUT_MAX_EVENTS 256
+
+static uint16_t hal_input_events[HAL_INPUT_MAX_EVENTS];
+static int hal_input_count  = 0;
+static int hal_input_cursor = 0;
+
+void HAL_input_load(const char *path) {
+    FILE *f = fopen(path, "r");
+    if (!f) {
+        fprintf(stderr, "HAL_input_load: cannot open %s\n", path);
+        exit(1);
+    }
+
+    char line[64];
+    hal_input_count  = 0;
+    hal_input_cursor = 0;
+
+    while (fgets(line, sizeof(line), f) && hal_input_count < HAL_INPUT_MAX_EVENTS) {
+        /* Strip trailing newline/whitespace */
+        size_t len = strlen(line);
+        while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r' || line[len - 1] == ' ')) {
+            line[--len] = '\0';
+        }
+
+        uint16_t ev = 0;
+        if (strcmp(line, "A") == 0) {
+            ev = (uint16_t) (1u << GQ_EVENT_BUTTON_A);
+        } else if (strcmp(line, "B") == 0) {
+            ev = (uint16_t) (1u << GQ_EVENT_BUTTON_B);
+        } else if (strcmp(line, "L") == 0) {
+            ev = (uint16_t) (1u << GQ_EVENT_BUTTON_L);
+        } else if (strcmp(line, "R") == 0) {
+            ev = (uint16_t) (1u << GQ_EVENT_BUTTON_R);
+        } else if (strcmp(line, "CLICK") == 0) {
+            ev = (uint16_t) (1u << GQ_EVENT_BUTTON_CLICK);
+        }
+
+        if (ev != 0) {
+            hal_input_events[hal_input_count++] = ev;
+        }
+    }
+    fclose(f);
+}
+
 void HAL_event_poll() {
+    /* If a scripted input sequence is loaded, drain it one event per poll. */
+    if (hal_input_count > 0 && hal_input_cursor < hal_input_count) {
+        s_gq_event |= hal_input_events[hal_input_cursor++];
+        return;
+    }
+
+    /* Otherwise fall through to live X11 key polling (no-op in headless). */
     static char c;
     c = gfx_getKey(); // returns 0 if no key pressed, 1,2,3 for mouse buttons, or ascii code of keyboard character
     switch (c) {
@@ -169,6 +231,11 @@ void HAL_event_poll() {
 }
 
 void HAL_sleep() {
+#ifdef GQ_HEADLESS
+    /* In headless mode, skip the 10ms timing loop entirely so that --ticks N
+     * runs complete instantly without real-time delays. */
+    return;
+#else
     static uint8_t first_loop           = 1;
     static int32_t time_diff_us         = 0;
     static int32_t time_diff_us_catchup = 0;
@@ -212,4 +279,5 @@ void HAL_sleep() {
     // Now that we're done sleeping, it's time to enter a new event loop.
     //  Record the time that happened.
     gettimeofday(&pre_event_loop, NULL);
+#endif /* GQ_HEADLESS */
 }
