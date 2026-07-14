@@ -55,7 +55,7 @@ static int dump_draw_count(const char *path) {
         fprintf(stderr, "dump_draw_count: cannot open %s for writing\n", path);
         return 0;
     }
-    fprintf(f, "%u\n", gq_draw_oled_stack_count);
+    fprintf(f, "%lu\n", (unsigned long) gq_draw_oled_stack_count);
     fclose(f);
     return 1;
 #else
