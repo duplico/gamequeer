@@ -101,6 +101,12 @@ typedef struct gq_anim {
     t_gq_pointer frame_pointer; // Pointer to the first gq_anim_frame
 } __attribute__((packed)) gq_anim;
 
+typedef struct gq_anim_frame {
+    uint8_t bPP;               // Bits per pixel and compression flags
+    t_gq_pointer data_pointer; // Pointer to the frame data
+    uint32_t data_size;        // Size of the frame data
+} __attribute__((packed)) gq_anim_frame;
+
 typedef struct gq_anim_onscreen {
     uint16_t ticks;  // Number of ticks until the next frame
     uint16_t frame;  // Current frame
@@ -108,13 +114,20 @@ typedef struct gq_anim_onscreen {
     t_gq_int x;      // X position of the animation
     t_gq_int y;      // Y position of the animation
     gq_anim anim;    // Animation playing
+    // Cached copy of the gq_anim_frame that `frame` currently points to in
+    // this slot's animation, so draw_animation_stack() doesn't have to
+    // re-read it from cart on every refresh if the frame index hasn't
+    // advanced since the last draw. data_pointer == 0 means "not cached" --
+    // a real frame's data_pointer is always non-zero, since gqc namespace-
+    // encodes it (GQ_PTR_NS_CART) at link time (see FrameData in
+    // gqc/src/gqc/datamodel.py), the same convention already used for
+    // gq_stage's anim_bg_pointer/cue_bg_pointer being falsy-if-absent.
+    // Invalidated (zeroed) by load_animation() and system_tick() -- the
+    // only two writers of a slot's `frame`/`anim` fields -- whenever either
+    // changes; (re)filled by draw_animation_stack() on the next draw that
+    // needs it.
+    gq_anim_frame frame_meta;
 } __attribute__((packed)) gq_anim_onscreen;
-
-typedef struct gq_anim_frame {
-    uint8_t bPP;               // Bits per pixel and compression flags
-    t_gq_pointer data_pointer; // Pointer to the frame data
-    uint32_t data_size;        // Size of the frame data
-} __attribute__((packed)) gq_anim_frame;
 
 typedef struct rgbcolor16_t {
     uint16_t r;
