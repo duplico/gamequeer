@@ -3,9 +3,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/time.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "gamequeer.h"
+#include "gq_perf.h"
 #include "grlib_gfx.h"
 
 uint8_t flash_cart[CART_FLASH_SIZE_MBYTES * 1024 * 1024];
@@ -281,3 +283,38 @@ void HAL_sleep() {
     gettimeofday(&pre_event_loop, NULL);
 #endif /* GQ_HEADLESS */
 }
+
+#ifdef GQ_PERF_INSTRUMENT
+/*
+ * Emulator implementation of HAL_perf_now() -- see gq_perf.h for the full
+ * timing-source design note, including what a firmware implementation must
+ * provide (this is the emulator half only; the firmware side is a separate,
+ * not-yet-done task in ccs_workspace/qc2024/).
+ *
+ * CLOCK_MONOTONIC is immune to wall-clock adjustments (NTP steps, etc.),
+ * which matters for a duration measurement even though this build never
+ * runs long enough in practice for that to bite. Scaled to whole
+ * microseconds and truncated to uint32_t, matching gq_perf_time_t; this
+ * wraps every ~71.6 minutes, which is fine per gq_perf.h's timer-width
+ * note -- gq_perf_record()'s delta math only needs correctness across a
+ * single measured interval, not across the whole process lifetime.
+ */
+gq_perf_time_t HAL_perf_now(void) {
+    /* Cache the last successful reading. A bare 0 on clock_gettime() failure
+     * is not actually benign here: gq_perf_record()'s delta math (see
+     * gq_perf.h) is HAL_perf_now() - entry_time, so a lone 0 on either side
+     * of an ENTER/EXIT pair underflows to a spurious ~UINT32_MAX-us duration
+     * and poisons that section's max_us. Falling back to the last known-good
+     * timestamp instead keeps a single (practically unreachable, but not
+     * impossible) clock_gettime() failure from corrupting stats -- at worst
+     * it slightly under/over-counts one interval, which is an accepted
+     * limitation for a development/measurement-only build (see gq_perf.h). */
+    static gq_perf_time_t last_good_us = 0;
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
+        return last_good_us;
+    }
+    last_good_us = (gq_perf_time_t) ((uint64_t) ts.tv_sec * 1000000u + (uint64_t) ts.tv_nsec / 1000u);
+    return last_good_us;
+}
+#endif /* GQ_PERF_INSTRUMENT */

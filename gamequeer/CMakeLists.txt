@@ -18,6 +18,15 @@ set_property(
 # path stays fully intact; only the X11 sink is replaced.
 option(GQ_HEADLESS "Build without X11 display (headless mode)" OFF)
 
+# Perf-instrumentation build option: adds a small RAM stats struct (see
+# include/gq_perf.h) with per-section count/duration/min/max timing, updated
+# by GQ_PERF_ENTER/EXIT macros around a handful of hot-path functions in
+# gamequeer.c. OFF by default and independent of GQ_HEADLESS (either can be
+# combined with the other), so a normal (non-instrumented) build never
+# compiles src/gq_perf.c and never defines GQ_PERF_INSTRUMENT -- see
+# gq_perf.h for why that matters for the zero-cost claim.
+option(GQ_PERF_INSTRUMENT "Build with GQ_PERF_INSTRUMENT performance stats (see include/gq_perf.h)" OFF)
+
 if(GQ_HEADLESS)
     message(STATUS "GQ_HEADLESS=ON: building without X11")
     set(GFX_SOURCE src/gfx/gfx_headless.c)
@@ -65,6 +74,12 @@ else()
         ${PROJECT_NAME}
         ${X11_LIBRARIES}
     )
+endif()
+
+if(GQ_PERF_INSTRUMENT)
+    message(STATUS "GQ_PERF_INSTRUMENT=ON: building with performance instrumentation (see include/gq_perf.h)")
+    target_sources(${PROJECT_NAME} PRIVATE src/gq_perf.c)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE GQ_PERF_INSTRUMENT)
 endif()
 
 # Link math:
