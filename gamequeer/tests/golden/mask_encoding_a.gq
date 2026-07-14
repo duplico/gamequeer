@@ -1,0 +1,109 @@
+/*
+ * mask_encoding_a.gq — Golden-test fixture locking in the masked-sprite fix
+ * from gamequeer#262/PR#272 (removal of a vestigial unmasked pre-draw in
+ * gq_draw_image_with_mask), covering the RLE-7 and UNCOMPRESSED 1bpp image
+ * encodings that gqc's Frame cooker can actually produce.
+ *
+ * Two fganim/fgmask pairs are rendered simultaneously, using both
+ * concurrent foreground slots the VM supports:
+ *
+ *   fganim(1) / fgmask(1): solid_white.png (RLE7) masked by
+ *                          tophalf_mask.png (RLE7)
+ *     -- this is the exact shape from #262's manual bug repro: "a 32x32
+ *        test sprite with a top-half-only mask". Pre-fix, this rendered
+ *        as a fully solid 32x32 square; post-fix, only the top half
+ *        should be visible.
+ *
+ *   fganim(2) / fgmask(2): checker.png (UNCOMPRESSED, since a dense
+ *                          checkerboard is the worst case for RLE) masked
+ *                          by tophalf_mask.png (RLE7)
+ *     -- exercises an UNCOMPRESSED-encoded *image* combined with an
+ *        RLE7-encoded mask.
+ *
+ * See mask_encoding_b.gq for the remaining two encoding combinations
+ * (RLE7 image + UNCOMPRESSED mask, UNCOMPRESSED image + UNCOMPRESSED
+ * mask).
+ *
+ * gqc's Frame encoder (gqc/src/gqc/datamodel.py, class Frame) currently
+ * only ever selects between IMAGE_FMT_1BPP_UNCOMP and
+ * IMAGE_FMT_1BPP_COMP_RLE7 (whichever is smaller) -- RLE4 is commented
+ * out of both the `image_types` size-comparison dict and the
+ * `image_formats` lookup table, so it cannot be produced by the public
+ * gqc compile pipeline as of this writing. That's a real, separate gap;
+ * see the PR body for #272's golden-test follow-up.
+ *
+ * NOTE on the committed golden PGM: the single pixel at (39,23) -- the
+ * bottom-right corner of fganim(1)'s visible (top) half -- renders as
+ * background instead of sprite white. This is NOT a masking bug and is
+ * unrelated to #262/#272: it's a distinct, pre-existing off-by-one in
+ * gq_image_get_pixel's RLE decode (oled.c). When an RLE run boundary is
+ * consumed (pixel_repeat hits 0), gq_image_load_byte() is called to
+ * prefetch the *next* run before the *current* pixel's value is
+ * returned, and gq_image_load_byte() unconditionally overwrites
+ * frame->pixel_value for rle_type 4/7. So the last pixel of any RLE4/7
+ * run whose value differs from the next run's value is rendered with
+ * the *next* run's value instead of its own. It's invisible whenever
+ * consecutive runs share a value (e.g. solid_white.png's own 8 same-
+ * valued RLE7 bytes), which is why it only shows up here, at
+ * tophalf_mask.png's one visible->hidden transition. Confirmed via a
+ * standalone Python re-implementation of the exact decode loop, and
+ * confirmed independent of the #272 fix (present with or without it,
+ * and present in the unmasked gq_draw_image() path too, since it's the
+ * same shared gq_image_get_pixel()). Left as-is (not fixed here -- out
+ * of scope for this golden-test PR) and worth its own follow-up issue;
+ * flagged in the PR body.
+ *
+ * How to reproduce the compiled fixture (mask_encoding_a.gqgame):
+ *
+ *   From the gamequeer repo root, using the builder container:
+ *     docker run --rm -v $(pwd):/workspaces/gamequeer --workdir /workspaces/gamequeer \
+ *         --user $(id -u):$(id -g) gamequeer-builder:latest \
+ *         /bin/bash -c "cd gamequeer/tests/golden && PYTHONPATH=/workspaces/gamequeer/gqc/src \
+ *             python -m gqc compile --no-mem-map -o . mask_encoding_a.gq"
+ *
+ *   Or via the Makefile target:
+ *     make golden-fixture
+ */
+
+game {
+    id = 1;
+    title := "MaskEncA";
+    author := "test";
+    starting_stage = mask_test;
+}
+
+animations {
+    sprite1 <- "solid_white.png" {
+        w = 32;
+        h = 32;
+    }
+
+    mask1 <- "tophalf_mask.png" {
+        w = 32;
+        h = 32;
+    }
+
+    sprite2 <- "checker.png" {
+        w = 32;
+        h = 32;
+    }
+
+    mask2 <- "tophalf_mask.png" {
+        w = 32;
+        h = 32;
+    }
+}
+
+stage mask_test {
+    event enter {
+        GQI_FGANIM1_X = 8;
+        GQI_FGANIM1_Y = 8;
+        play fganim(1) sprite1;
+        play fgmask(1) mask1;
+
+        GQI_FGANIM2_X = 8;
+        GQI_FGANIM2_Y = 72;
+        play fganim(2) sprite2;
+        play fgmask(2) mask2;
+    }
+}
