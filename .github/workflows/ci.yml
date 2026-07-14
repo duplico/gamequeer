@@ -40,7 +40,7 @@ jobs:
         working-directory: gqc/
 
   gamequeer-vm-build:
-    name: gamequeer C VM native build
+    name: gamequeer C VM native build + headless golden suite
     runs-on: ubuntu-latest
 
     steps:
@@ -64,3 +64,24 @@ jobs:
       - name: Build
         run: cmake --build build --parallel
         working-directory: gamequeer/
+
+      - name: Configure headless build (golden framebuffer suite)
+        # GQ_HEADLESS swaps the X11 gfx backend for a no-op stub (see
+        # src/gfx/gfx_headless.c), so this configure step itself needs no
+        # extra apt packages. libx11-dev was already installed above, but
+        # only for the earlier native build — it (and a DISPLAY) is not
+        # required for this headless one.
+        # This also registers the tests/ CTest tree (see CMakeLists.txt: only
+        # added when GQ_HEADLESS=ON), which runs the golden-framebuffer
+        # regression suite (gamequeer#268/#270/#275) against the .gqgame
+        # fixtures already committed under tests/golden/.
+        run: cmake -B build-headless -DGQ_HEADLESS=ON
+        working-directory: gamequeer/
+
+      - name: Build (headless)
+        run: cmake --build build-headless --parallel
+        working-directory: gamequeer/
+
+      - name: Run golden framebuffer regression suite
+        run: ctest --output-on-failure
+        working-directory: gamequeer/build-headless

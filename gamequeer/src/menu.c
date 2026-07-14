@@ -168,9 +168,12 @@ void menu_choice_load(t_gq_pointer menu_ptr, t_gq_pointer menu_prompt) {
 }
 
 void menu_close() {
-    *menu_active = 0;
+    t_gq_int was_active = *menu_active;
+    *menu_active        = 0;
 
-    if (*menu_active) {
+    if (was_active) {
+        // The menu was actually showing something on screen; closing it is
+        // always a real visual change, so raise the redraw event.
         GQ_EVENT_SET(GQ_EVENT_REFRESH);
     }
 }
@@ -524,9 +527,9 @@ uint8_t handle_event_menu_text(uint16_t event_type) {
                     if (menu_text_result[menu_option_selected]) {
                         menu_select_symbol_type_from_index();
                     }
+                    GQ_EVENT_SET(GQ_EVENT_REFRESH);
                 }
             }
-            GQ_EVENT_SET(GQ_EVENT_REFRESH);
             break;
         case GQ_EVENT_BUTTON_CLICK:
             // Toggle the selection mode

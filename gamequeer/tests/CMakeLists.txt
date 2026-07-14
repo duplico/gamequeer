@@ -184,3 +184,20 @@ add_executable(test_led_fade_delta test_led_fade_delta.c)
 target_compile_options(test_led_fade_delta PRIVATE -Wall -Wextra -Wpedantic)
 
 add_test(NAME led_fade_delta COMMAND test_led_fade_delta)
+
+# ---- golden_framebuffer_anim_advance_{frame0,frame1,frame2}: animation
+# frame-metadata cache regression coverage for gamequeer#264/PR#282
+# (draw_animation_stack() caches the current frame's gq_anim_frame instead of
+# re-reading it from cart on every redraw, invalidating on every real frame
+# advance). None of the other fixtures above ever advance an animation frame,
+# so this is the first golden coverage of that invalidation path. See
+# anim_advance.gq's header comment for the full tick-timing derivation and
+# the negative-control result (frame1/frame2 both go stale at frame 0's
+# pixels if the cache-invalidation writes are reverted).
+
+add_golden_test(golden_framebuffer_anim_advance_frame0 anim_advance
+    TICKS 1  GOLDEN_SUFFIX anim_advance_frame0)
+add_golden_test(golden_framebuffer_anim_advance_frame1 anim_advance
+    TICKS 22 GOLDEN_SUFFIX anim_advance_frame1)
+add_golden_test(golden_framebuffer_anim_advance_frame2 anim_advance
+    TICKS 33 GOLDEN_SUFFIX anim_advance_frame2)

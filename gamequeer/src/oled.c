@@ -74,6 +74,7 @@ uint8_t gq_image_get_pixel(gq_image_frame_on_screen *frame) {
     // NB: gate this function call on gq_image_done() to avoid undefined behavior
     // Also, you need to bootstrap it by calling a read_byte
     uint8_t need_to_read_byte = 0;
+    uint8_t current_pixel_value;
 
     // Get the current pixel.
     if (frame->rle_type == 1) {
@@ -84,7 +85,12 @@ uint8_t gq_image_get_pixel(gq_image_frame_on_screen *frame) {
             frame->x_bit_offset = 0;
             need_to_read_byte   = 1;
         }
+        current_pixel_value = frame->pixel_value;
     } else {
+        // Capture the current run's value before a possible run-boundary
+        // prefetch (below) overwrites frame->pixel_value with the *next*
+        // run's value.
+        current_pixel_value = frame->pixel_value;
         frame->pixel_repeat--;
         if (frame->pixel_repeat == 0) {
             need_to_read_byte = 1;
@@ -107,8 +113,10 @@ uint8_t gq_image_get_pixel(gq_image_frame_on_screen *frame) {
         gq_image_load_byte(frame);
     }
 
-    // Return the current pixel value.
-    return frame->pixel_value;
+    // Return the current pixel's value (captured above; must not be the
+    // next run's value, which may have just been prefetched into
+    // frame->pixel_value).
+    return current_pixel_value;
 }
 
 void gq_load_image(

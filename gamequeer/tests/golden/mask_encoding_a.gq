@@ -32,26 +32,36 @@
  * gqc compile pipeline as of this writing. That's a real, separate gap;
  * see the PR body for #272's golden-test follow-up.
  *
- * NOTE on the committed golden PGM: the single pixel at (39,23) -- the
- * bottom-right corner of fganim(1)'s visible (top) half -- renders as
- * background instead of sprite white. This is NOT a masking bug and is
- * unrelated to #262/#272: it's a distinct, pre-existing off-by-one in
- * gq_image_get_pixel's RLE decode (oled.c). When an RLE run boundary is
- * consumed (pixel_repeat hits 0), gq_image_load_byte() is called to
- * prefetch the *next* run before the *current* pixel's value is
- * returned, and gq_image_load_byte() unconditionally overwrites
- * frame->pixel_value for rle_type 4/7. So the last pixel of any RLE4/7
- * run whose value differs from the next run's value is rendered with
- * the *next* run's value instead of its own. It's invisible whenever
- * consecutive runs share a value (e.g. solid_white.png's own 8 same-
- * valued RLE7 bytes), which is why it only shows up here, at
- * tophalf_mask.png's one visible->hidden transition. Confirmed via a
- * standalone Python re-implementation of the exact decode loop, and
- * confirmed independent of the #272 fix (present with or without it,
- * and present in the unmasked gq_draw_image() path too, since it's the
- * same shared gq_image_get_pixel()). Left as-is (not fixed here -- out
- * of scope for this golden-test PR) and worth its own follow-up issue;
- * flagged in the PR body.
+ * HISTORICAL NOTE (fixed by #276): earlier revisions of this golden PGM had
+ * the single pixel at (39,23) -- the bottom-right corner of fganim(1)'s
+ * visible (top) half -- rendering as background instead of sprite white.
+ * That was NOT a masking bug and was unrelated to #262/#272: it was a
+ * distinct, pre-existing off-by-one in gq_image_get_pixel's RLE decode
+ * (oled.c). When an RLE run boundary is consumed (pixel_repeat hits 0),
+ * gq_image_load_byte() is called to prefetch the *next* run before the
+ * *current* pixel's value is returned, and gq_image_load_byte()
+ * unconditionally overwrote frame->pixel_value for rle_type 4/7. So the
+ * last pixel of any RLE4/7 run whose value differed from the next run's
+ * value was rendered with the *next* run's value instead of its own. It
+ * was invisible whenever consecutive runs shared a value (e.g.
+ * solid_white.png's own 8 same-valued RLE7 bytes), which is why it only
+ * showed up here, at tophalf_mask.png's one visible->hidden transition.
+ * Fixed in gamequeer#276 by returning the current run's captured pixel
+ * value from gq_image_get_pixel() before the run-boundary prefetch can
+ * overwrite frame->pixel_value; the golden PGM was regenerated as part of
+ * that fix (pixel (39,23) is now correctly sprite white).
+ *
+ * NUANCE: tophalf_mask.png is reused as-is for fgmask(2), so the #276 fix
+ * above actually fires *twice* in this fixture -- visibly at (39,23) for
+ * fganim(1), and invisibly at fganim(2)'s corresponding pixel (39,87). It's
+ * invisible there only because checker.png's bit at that mask's local
+ * (31,15) transition happens to be 0: "not drawn, background 0" and "drawn
+ * with sprite value 0" render identically. checker.png itself never
+ * exercises the RLE path at all -- gqc's Frame encoder picks
+ * IMAGE_FMT_1BPP_UNCOMP for it, since RLE7 would be ~7.7x larger for a
+ * dense checkerboard. Net effect: editing checker.png's *content* (not
+ * just this comment) could flip that local (31,15) bit and surface a
+ * second pixel diff here with no code change -- don't be surprised.
  *
  * How to reproduce the compiled fixture (mask_encoding_a.gqgame):
  *
