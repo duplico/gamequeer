@@ -240,6 +240,19 @@ void unload_game() {
     GQ_EVENT_SET(GQ_EVENT_REFRESH);
 }
 
+// Applies GQ_MIN_FRAME_DURATION to a frame's raw ticks_per_frame value. Used
+// both when an animation is (re)loaded and on every subsequent frame advance
+// in system_tick(), so every frame of every animation -- not just frame 0 --
+// is shown for at least GQ_MIN_FRAME_DURATION ticks.
+static uint16_t gq_clamp_frame_duration(uint16_t ticks_per_frame) {
+#ifdef GQ_MIN_FRAME_DURATION
+    if (ticks_per_frame < GQ_MIN_FRAME_DURATION) {
+        return GQ_MIN_FRAME_DURATION;
+    }
+#endif
+    return ticks_per_frame;
+}
+
 uint8_t load_animation(uint8_t index, t_gq_pointer anim_ptr) {
     if (index >= MAX_CONCURRENT_ANIMATIONS) {
         return 0;
@@ -258,12 +271,7 @@ uint8_t load_animation(uint8_t index, t_gq_pointer anim_ptr) {
     // Invalidate any cached frame metadata from a previous animation (or
     // previous frame index) in this slot -- see frame_meta's comment.
     anim->frame_meta.data_pointer = 0;
-    anim->ticks                   = anim->anim.ticks_per_frame;
-#ifdef GQ_MIN_FRAME_DURATION
-    if (anim->ticks < GQ_MIN_FRAME_DURATION) {
-        anim->ticks = GQ_MIN_FRAME_DURATION;
-    }
-#endif
+    anim->ticks                   = gq_clamp_frame_duration(anim->anim.ticks_per_frame);
 
     GQ_EVENT_SET(GQ_EVENT_REFRESH);
 
@@ -454,7 +462,7 @@ void system_tick() {
         // The frame index changed, so the cached frame metadata (if any) is
         // now stale -- see gq_anim_onscreen's frame_meta comment.
         current_animations[i].frame_meta.data_pointer = 0;
-        current_animations[i].ticks                   = current_animations[i].anim.ticks_per_frame;
+        current_animations[i].ticks = gq_clamp_frame_duration(current_animations[i].anim.ticks_per_frame);
         if (current_animations[i].frame >= current_animations[i].anim.frame_count) {
             // Animation is complete
             current_animations[i].in_use = 0;

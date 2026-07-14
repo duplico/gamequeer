@@ -19,16 +19,16 @@
  * collapse to a single extracted frame) as a plain bganim, started from the
  * `enter` event.
  *
- * Timing -- empirically verified by dumping every tick from 1..34 and
+ * Timing -- empirically verified by dumping every tick from 1..45 and
  * diffing the PGMs, rather than trusted from the frame_rate arithmetic
  * alone (gqc's Animation.__init__ computes ticks_per_frame = 100/frame_rate
- * = 100/10 = 10, but gamequeer.c's `load_animation()` clamps the *first*
- * frame's `ticks` up to `GQ_MIN_FRAME_DURATION` (20, include/gamequeer.h)
- * since 10 < 20 -- `system_tick()`'s own per-advance reset does *not*
- * re-apply that clamp, so frame 0's duration (20 ticks) and every
- * subsequent frame's duration (10 ticks, the unclamped value) actually
- * differ. This asymmetry is pre-existing/unrelated to #264 and out of
- * scope here; it's just why the tick counts below aren't evenly spaced):
+ * = 100/10 = 10, but gamequeer.c clamps every frame's `ticks` up to
+ * `GQ_MIN_FRAME_DURATION` (20, include/gamequeer.h) since 10 < 20 -- see
+ * gq_clamp_frame_duration(), shared by both load_animation() and
+ * system_tick()'s per-advance reset as of gamequeer#288, which fixed a
+ * prior asymmetry where only frame 0's duration was clamped and every
+ * later frame ran at the unclamped 10-tick rate. With the clamp applied
+ * uniformly, every frame of this animation is shown for 20 ticks):
  *
  *   tick 1:  `enter` fires (first handle_events() pass), runs `play bganim
  *            pop`, which calls load_animation() (frame=0, ticks clamped to
@@ -40,22 +40,26 @@
  *   tick 22: the counter hits 0 -> frame advances to 1, the cache is
  *            invalidated (frame_meta.data_pointer zeroed), a fresh cart
  *            read repopulates it, and REFRESH fires -- frame 1 is drawn.
- *   ticks 23..32: same idle window (unclamped ticks_per_frame=10 this
- *            time); still frame 1's pixels -- confirmed identical for
- *            every tick count in [22, 32].
- *   tick 33: frame advances to 2 and is drawn, by the same mechanism.
+ *   ticks 23..42: same idle window (clamped ticks_per_frame=20 again);
+ *            still frame 1's pixels -- confirmed identical for every
+ *            tick count in [22, 42].
+ *   tick 43: frame advances to 2 and is drawn, by the same mechanism.
  *
  * Three ctest cases share this one compiled cart (see tests/CMakeLists.txt):
  *   golden_framebuffer_anim_advance_frame0 (TICKS=1)  -- frame 0.
  *   golden_framebuffer_anim_advance_frame1 (TICKS=22) -- frame 1: proves the
  *     cache invalidates and the *new* frame's metadata is actually read
- *     (a stale/frozen cache would still show frame 0's pixels here).
- *   golden_framebuffer_anim_advance_frame2 (TICKS=33) -- frame 2: proves
+ *     (a stale/frozen cache would still show frame 0's pixels here). This
+ *     boundary happens to be unchanged by the uniform-clamp fix, since
+ *     frame 0's duration was already clamped to 20 ticks before it too.
+ *   golden_framebuffer_anim_advance_frame2 (TICKS=43) -- frame 2: proves
  *     invalidation isn't a one-shot fluke and keeps working on the *second*
  *     advance too (guards against a fix that only clears the cache once).
+ *     This boundary moved from 33 to 43 once frame 1's duration was also
+ *     clamped to 20 ticks (was 10, unclamped) by the uniform-clamp fix.
  * Each of the three goldens differs pixel-for-pixel from the other two
  * (confirmed via md5sum of the dumped PGMs when this fixture was authored:
- * three distinct hashes across the [1,21]/[22,32]/33+ tick ranges).
+ * three distinct hashes across the [1,21]/[22,42]/43+ tick ranges).
  *
  * Negative-control validation performed when authoring this fixture (per
  * the PR body): with the `frame_meta.data_pointer = 0` invalidation lines
