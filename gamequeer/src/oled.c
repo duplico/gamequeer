@@ -199,7 +199,6 @@ void gq_draw_image_with_mask(
     uint32_t mask_frame_data_size,
     t_gq_int x,
     t_gq_int y) {
-    gq_draw_image(context, image_bytes, image_bPP, width, height, img_frame_data_size, x, y);
     // Structs for the image and mask.
     gq_image_frame_on_screen image_frame = {0};
     gq_image_frame_on_screen mask_frame  = {0};
