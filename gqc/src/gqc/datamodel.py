@@ -418,7 +418,7 @@ class Animation:
             hash_task = animation_progress.add_task(f" [dim]-- digest", total=1, start=False)
             
             if 100 % frame_rate != 0:
-                print(f"[red][bold]WARNING[/bold][/red]: [blue][italic]{self.name}[/italic][/blue] frame rate {frame_rate} not a factor of 100; setting to {100 / self.tiks_per_frame}")
+                print(f"[red][bold]WARNING[/bold][/red]: [blue][italic]{self.name}[/italic][/blue] frame rate {frame_rate} not a factor of 100; setting to {100 / self.ticks_per_frame}")
                 frame_rate = 100 / self.ticks_per_frame
 
             if frame_rate > 5:
