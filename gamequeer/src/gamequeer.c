@@ -6,6 +6,7 @@
 #include "HAL.h"
 #include "gamequeer.h"
 #include "gamequeer_bytecode.h"
+#include "gq_perf.h"
 #include "grlib.h"
 
 gq_header game;
@@ -279,6 +280,7 @@ uint8_t load_animation(uint8_t index, t_gq_pointer anim_ptr) {
 }
 
 void draw_animation_stack() {
+    GQ_PERF_ENTER(DRAW_ANIMATION_STACK);
     uint8_t anim_index = 0;
     do {
         if (current_animations[anim_index].in_use) {
@@ -373,6 +375,7 @@ void draw_animation_stack() {
             break;
         }
     } while (1);
+    GQ_PERF_EXIT(DRAW_ANIMATION_STACK);
 }
 
 void draw_label_stack() {
@@ -405,6 +408,7 @@ uint32_t gq_draw_oled_stack_count = 0;
 #endif
 
 void draw_oled_stack() {
+    GQ_PERF_ENTER(DRAW_OLED_STACK);
 #ifdef GQ_HEADLESS
     gq_draw_oled_stack_count++;
 #endif
@@ -426,11 +430,21 @@ void draw_oled_stack() {
         draw_menu_text();
     }
 
+    // Measured directly around Graphics_flushBuffer() rather than via a new
+    // HAL primitive -- see gq_perf.h's "Flush-section hook placement" note
+    // for why this shared-code call site already brackets the real flush
+    // cost on both the badge (dispatches to sh1107.c's oled_flush() via the
+    // grlib pfnFlush pointer) and the emulator (dispatches to gfx_flush()).
+    GQ_PERF_ENTER(OLED_FLUSH);
     Graphics_flushBuffer(&g_sContext);
+    GQ_PERF_EXIT(OLED_FLUSH);
+
+    GQ_PERF_EXIT(DRAW_OLED_STACK);
 }
 
 void system_tick() {
     // Should be called by the 100 Hz system tick
+    GQ_PERF_ENTER(SYSTEM_TICK);
 
     // Handle the LEDs
 #ifndef GQ_SUPPRESS_LED_TICK
@@ -479,6 +493,7 @@ void system_tick() {
         }
         GQ_EVENT_SET(GQ_EVENT_REFRESH);
     }
+    GQ_PERF_EXIT(SYSTEM_TICK);
 }
 
 t_gq_int get_badge_word(t_gq_int badge_id) {
@@ -537,6 +552,12 @@ t_gq_int get_badge_bit(t_gq_int badge_id) {
 }
 
 void handle_events() {
+    // "handle_events/run_code aggregate" section: covers the full
+    // event-dispatch pass, including any run_code() calls it triggers and
+    // (if GQ_EVENT_REFRESH fires) a nested DRAW_OLED_STACK pass -- see
+    // gq_perf.h's HANDLE_EVENTS entry for why this is reported as one
+    // number rather than split further.
+    GQ_PERF_ENTER(HANDLE_EVENTS);
     for (uint16_t event_type = 0x0000; event_type < GQ_EVENT_COUNT; event_type++) {
         if (GQ_EVENT_GET(event_type)) {
             GQ_EVENT_CLR(event_type);
@@ -573,4 +594,5 @@ void handle_events() {
             }
         }
     }
+    GQ_PERF_EXIT(HANDLE_EVENTS);
 }

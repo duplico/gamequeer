@@ -3,9 +3,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/time.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "gamequeer.h"
+#include "gq_perf.h"
 #include "grlib_gfx.h"
 
 uint8_t flash_cart[CART_FLASH_SIZE_MBYTES * 1024 * 1024];
@@ -281,3 +283,25 @@ void HAL_sleep() {
     gettimeofday(&pre_event_loop, NULL);
 #endif /* GQ_HEADLESS */
 }
+
+#ifdef GQ_PERF_INSTRUMENT
+/*
+ * Emulator implementation of HAL_perf_now() -- see gq_perf.h for the full
+ * timing-source design note, including what a firmware implementation must
+ * provide (this is the emulator half only; the firmware side is a separate,
+ * not-yet-done task in ccs_workspace/qc2024/).
+ *
+ * CLOCK_MONOTONIC is immune to wall-clock adjustments (NTP steps, etc.),
+ * which matters for a duration measurement even though this build never
+ * runs long enough in practice for that to bite. Scaled to whole
+ * microseconds and truncated to uint32_t, matching gq_perf_time_t; this
+ * wraps every ~71.6 minutes, which is fine per gq_perf.h's timer-width
+ * note -- gq_perf_record()'s delta math only needs correctness across a
+ * single measured interval, not across the whole process lifetime.
+ */
+gq_perf_time_t HAL_perf_now(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (gq_perf_time_t) ((uint64_t) ts.tv_sec * 1000000u + (uint64_t) ts.tv_nsec / 1000u);
+}
+#endif /* GQ_PERF_INSTRUMENT */

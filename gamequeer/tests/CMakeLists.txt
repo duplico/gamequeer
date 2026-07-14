@@ -185,3 +185,26 @@ add_golden_test(golden_framebuffer_anim_advance_frame1 anim_advance
     TICKS 22 GOLDEN_SUFFIX anim_advance_frame1)
 add_golden_test(golden_framebuffer_anim_advance_frame2 anim_advance
     TICKS 43 GOLDEN_SUFFIX anim_advance_frame2)
+
+# ---- perf_draw_count_cross_check: GQ_PERF_INSTRUMENT-only ----------------
+# Only registered when this build is ALSO configured with
+# -DGQ_PERF_INSTRUMENT=ON (a plain -DGQ_HEADLESS=ON build has no --perf-dump
+# flag at all -- see main.c's GQ_PERF_INSTRUMENT-gated CLI parsing). Cross-
+# checks gq_perf_stats's DRAW_OLED_STACK section count against the existing,
+# independently-implemented gq_draw_oled_stack_count (--draw-count-out) for
+# the same run: two different instrumentation mechanisms measuring the same
+# event, which is a cheap sanity check that GQ_PERF_ENTER/EXIT is wired up
+# correctly around draw_oled_stack(). See run_perf_draw_count_cross_check.cmake.
+if(GQ_PERF_INSTRUMENT)
+    add_test(
+        NAME perf_draw_count_cross_check
+        COMMAND
+            ${CMAKE_COMMAND}
+            -DEXE=$<TARGET_FILE:gamequeer>
+            -DFIXTURE=${GOLDEN_DIR}/anim_advance.gqgame
+            -DDRAW_COUNT=${CMAKE_CURRENT_BINARY_DIR}/perf_draw_count_cross_check_drawcount.txt
+            -DPERF_DUMP=${CMAKE_CURRENT_BINARY_DIR}/perf_draw_count_cross_check_perfdump.txt
+            -DTICKS=43
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/run_perf_draw_count_cross_check.cmake"
+    )
+endif()
