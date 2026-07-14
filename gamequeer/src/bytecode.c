@@ -1,4 +1,5 @@
 #include <stddef.h>
+#include <string.h>
 
 #include "HAL.h"
 #include "gamequeer.h"
@@ -206,7 +207,29 @@ void run_code(t_gq_pointer code_ptr) {
             case GQ_OP_CUE:
                 led_play_cue(cmd.arg1, 0);
                 break;
-            case GQ_OP_SETVAR:
+            case GQ_OP_SETVAR: {
+                // If this write targets one of the on-screen ("visual") builtin
+                // variables (animation/label position, label text, label
+                // flags), snapshot its current value first so we can tell,
+                // after the write, whether anything actually changed. A
+                // SETVAR that re-writes the same value it already held (e.g.
+                // a timer handler that unconditionally re-sets a label every
+                // tick) shouldn't force a full clear+render+flush -- see
+                // gamequeer#265.
+                uint8_t visual_write = (cmd.arg1 >= GQ_PTR(GQ_PTR_BUILTIN_INT, GQI_BGANIM_X * GQ_INT_SIZE) &&
+                                        cmd.arg1 <= GQ_PTR(GQ_PTR_BUILTIN_INT, GQI_LABEL_FLAGS * GQ_INT_SIZE)) ||
+                    (cmd.arg1 >= GQ_PTR(GQ_PTR_BUILTIN_STR, GQS_LABEL1 * GQ_STR_SIZE) &&
+                     cmd.arg1 <= GQ_PTR(GQ_PTR_BUILTIN_STR, GQS_LABEL4 * GQ_STR_SIZE));
+                // A str-typed write (including the int->str cast, which also
+                // sets GQ_OPF_TYPE_STR) is GQ_STR_SIZE wide; a plain int
+                // write is GQ_INT_SIZE wide. GQ_STR_SIZE is the larger of
+                // the two, so it's big enough to hold either snapshot.
+                size_t write_size = (cmd.flags & GQ_OPF_TYPE_STR) ? GQ_STR_SIZE : GQ_INT_SIZE;
+                uint8_t old_value[GQ_STR_SIZE];
+                if (visual_write) {
+                    gq_memcpy_to_ram(old_value, cmd.arg1, write_size);
+                }
+
                 if (cmd.flags & GQ_OPF_TYPE_INT && cmd.flags & GQ_OPF_TYPE_STR) {
                     // If both STR and INT flags are set, this is a cast from int to str.
                     // TODO: This command is one of the danger zones. We have no type
@@ -235,16 +258,20 @@ void run_code(t_gq_pointer code_ptr) {
                     // If only the STR flag is set, this is a str to str assignment.
                     gq_memcpy(cmd.arg1, cmd.arg2, GQ_STR_SIZE);
                 }
-                // If we're doing an assignment to a variable that should update the screen,
-                if ((cmd.arg1 >= GQ_PTR(GQ_PTR_BUILTIN_INT, GQI_BGANIM_X * GQ_INT_SIZE) &&
-                     cmd.arg1 <= GQ_PTR(GQ_PTR_BUILTIN_INT, GQI_LABEL_FLAGS * GQ_INT_SIZE)) ||
-                    (cmd.arg1 >= GQ_PTR(GQ_PTR_BUILTIN_STR, GQS_LABEL1 * GQ_STR_SIZE) &&
-                     cmd.arg1 <= GQ_PTR(GQ_PTR_BUILTIN_STR, GQS_LABEL4 * GQ_STR_SIZE))) {
-                    //  then generate a screen refresh event.
-                    GQ_EVENT_SET(GQ_EVENT_REFRESH);
+                // If we just wrote to a visual variable, and the value actually
+                // changed, generate a screen refresh event. (If it's not a
+                // visual variable, or the value is unchanged, no redraw is
+                // needed.)
+                if (visual_write) {
+                    uint8_t new_value[GQ_STR_SIZE];
+                    gq_memcpy_to_ram(new_value, cmd.arg1, write_size);
+                    if (memcmp(old_value, new_value, write_size) != 0) {
+                        GQ_EVENT_SET(GQ_EVENT_REFRESH);
+                    }
                 }
 
                 break;
+            }
             case GQ_OP_GOTO:
                 code_ptr = cmd.arg1;
                 // Skip the rest of this loop, as we've already loaded the next command.
