@@ -154,10 +154,19 @@ typedef struct rgbcolor8_t {
 
 // NOTE: This is specifically not packed, because it doesn't need to be
 //       saved, so we'll just keep it in its native bit alignment.
+//
+// Explicitly int32_t (not int_fast32_t): the fade-delta arithmetic in
+// leds.c is deliberately kept to 32-bit-only precision (see
+// LED_DELTA_FRAC_BITS's comment there), and int_fast32_t is only
+// guaranteed to be *at least* 32 bits -- on the x86_64 host build used for
+// the unit tests/emulator it resolves to a 64-bit type, which would make
+// host-side testing exercise different arithmetic than the MSP430FR2476
+// target (where int_fast32_t happens to be 32 bits). Using int32_t here
+// keeps the two builds identical.
 typedef struct rgbdelta_t {
-    int_fast32_t r;
-    int_fast32_t g;
-    int_fast32_t b;
+    int32_t r;
+    int32_t g;
+    int32_t b;
 } rgbdelta_t;
 
 typedef struct gq_ledcue_frame_t {
