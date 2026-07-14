@@ -4,10 +4,21 @@
 #include "gamequeer.h"
 #include "gamequeer_bytecode.h"
 
-// Converts a signed 32-bit integer to a NUL-terminated decimal string,
-// writing at most buf_size - 1 characters plus the terminator (matching the
-// truncation semantics of `snprintf(buf, buf_size, "%ld", value)`, which
-// this replaces). Avoids pulling in TI's _printfi/div64u for the badge link.
+// Zero-fills buf[from..buf_size), so that bytes beyond the NUL terminator
+// don't carry stale stack contents when the whole buf_size-byte buffer is
+// later copied out into VM memory (e.g. via gq_memcpy_from_ram).
+static void gq_str_zero_pad(char *buf, size_t buf_size, size_t from) {
+    while (from < buf_size) {
+        buf[from++] = '\0';
+    }
+}
+
+// Converts a signed 32-bit integer (`t_gq_int`) to a NUL-terminated decimal
+// string, writing at most buf_size - 1 characters plus the terminator. This
+// matches the truncation semantics of `snprintf` given a format specifier
+// correctly widened for a 32-bit int (e.g. `%d`) -- not `%ld`, which this
+// replaces and which is itself a varargs width mismatch for `int32_t` on
+// LP64 hosts. Avoids pulling in TI's _printfi/div64u for the badge link.
 static void gq_itoa(t_gq_int value, char *buf, size_t buf_size) {
     char digits[10]; // Max digits in a 32-bit magnitude (2147483648) is 10.
     size_t ndigits = 0;
@@ -45,6 +56,7 @@ static void gq_itoa(t_gq_int value, char *buf, size_t buf_size) {
     }
 
     buf[pos] = '\0';
+    gq_str_zero_pad(buf, buf_size, pos + 1);
 }
 
 // Appends up to src_size bytes of the NUL-terminated string src onto dst,
@@ -306,6 +318,7 @@ void run_code(t_gq_pointer code_ptr) {
                 gq_str_append_bounded(result_str, GQ_STR_SIZE, &result_len, arg1_str, GQ_STR_SIZE);
                 gq_str_append_bounded(result_str, GQ_STR_SIZE, &result_len, arg2_str, GQ_STR_SIZE);
                 result_str[result_len] = '\0';
+                gq_str_zero_pad(result_str, GQ_STR_SIZE, result_len + 1);
                 gq_memcpy_from_ram(cmd.arg1, (uint8_t *) result_str, GQ_STR_SIZE);
                 break;
             }
