@@ -1,0 +1,75 @@
+/*
+ * mask_encoding_b.gq — Golden-test fixture locking in the masked-sprite fix
+ * from gamequeer#262/PR#272 (removal of a vestigial unmasked pre-draw in
+ * gq_draw_image_with_mask). Companion to mask_encoding_a.gq: covers the
+ * remaining two RLE7/UNCOMPRESSED combinations left untested there.
+ *
+ *   fganim(1) / fgmask(1): solid_white.png (RLE7) masked by
+ *                          checker.png (UNCOMPRESSED)
+ *     -- an RLE7-encoded *image* combined with an UNCOMPRESSED-encoded
+ *        mask (the reverse pairing from mask_encoding_a.gq's slot 1).
+ *
+ *   fganim(2) / fgmask(2): checker.png (UNCOMPRESSED) masked by
+ *                          checker.png (UNCOMPRESSED)
+ *     -- both image and mask UNCOMPRESSED.
+ *
+ * Together, mask_encoding_a.gq and mask_encoding_b.gq exercise all four
+ * (image encoding x mask encoding) combinations reachable through gqc's
+ * current Frame cooker (UNCOMPRESSED, RLE7). RLE4 is not reachable via
+ * the public compile pipeline as of this writing -- see mask_encoding_a.gq
+ * for details and the PR body for the documented gap.
+ *
+ * How to reproduce the compiled fixture (mask_encoding_b.gqgame):
+ *
+ *   From the gamequeer repo root, using the builder container:
+ *     docker run --rm -v $(pwd):/workspaces/gamequeer --workdir /workspaces/gamequeer \
+ *         --user $(id -u):$(id -g) gamequeer-builder:latest \
+ *         /bin/bash -c "cd gamequeer/tests/golden && PYTHONPATH=/workspaces/gamequeer/gqc/src \
+ *             python -m gqc compile --no-mem-map -o . mask_encoding_b.gq"
+ *
+ *   Or via the Makefile target:
+ *     make golden-fixture
+ */
+
+game {
+    id = 1;
+    title := "MaskEncB";
+    author := "test";
+    starting_stage = mask_test;
+}
+
+animations {
+    sprite1 <- "solid_white.png" {
+        w = 32;
+        h = 32;
+    }
+
+    mask1 <- "checker.png" {
+        w = 32;
+        h = 32;
+    }
+
+    sprite2 <- "checker.png" {
+        w = 32;
+        h = 32;
+    }
+
+    mask2 <- "checker.png" {
+        w = 32;
+        h = 32;
+    }
+}
+
+stage mask_test {
+    event enter {
+        GQI_FGANIM1_X = 8;
+        GQI_FGANIM1_Y = 8;
+        play fganim(1) sprite1;
+        play fgmask(1) mask1;
+
+        GQI_FGANIM2_X = 8;
+        GQI_FGANIM2_Y = 72;
+        play fganim(2) sprite2;
+        play fgmask(2) mask2;
+    }
+}
