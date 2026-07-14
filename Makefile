@@ -65,10 +65,20 @@ gq-game-language: build/gq-game-language.vsix
 
 DOCKER_CMD_NIT := docker run --rm --workdir /workspaces/gamequeer -v $(PWD):/workspaces/gamequeer --user $(CURRENT_UID):$(CURRENT_GID) $(project_name)-builder:latest
 
-# Compile the hello.gq test fixture (no ffmpeg needed; no GIF assets).
-# The output gamequeer/tests/golden/hello.gqgame is committed to the repo.
-golden-fixture: builder-build gamequeer/tests/golden/hello.gq
-	$(DOCKER_CMD_NIT) /bin/bash -c "PYTHONPATH=gqc/src python -m gqc compile --no-mem-map -o gamequeer/tests/golden gamequeer/tests/golden/hello.gq"
+# Compile the golden-test fixtures. The output .gqgame carts under
+# gamequeer/tests/golden/ are committed to the repo.
+#  - hello.gq: no ffmpeg needed; no GIF/image assets.
+#  - mask_encoding_a.gq / mask_encoding_b.gq: masked-sprite (fganim/fgmask)
+#    fixtures with PNG assets under gamequeer/tests/golden/assets/animations/;
+#    gqc resolves animation sources relative to CWD, so these must be
+#    compiled from gamequeer/tests/golden itself (see #262/#272 golden-test
+#    follow-up).
+golden-fixture: builder-build gamequeer/tests/golden/hello.gq gamequeer/tests/golden/mask_encoding_a.gq gamequeer/tests/golden/mask_encoding_b.gq
+	$(DOCKER_CMD_NIT) /bin/bash -c "PYTHONPATH=gqc/src python -m gqc compile --no-mem-map -o gamequeer/tests/golden gamequeer/tests/golden/hello.gq && \
+		cd gamequeer/tests/golden && \
+		PYTHONPATH=/workspaces/gamequeer/gqc/src python -m gqc compile --no-mem-map -o . mask_encoding_a.gq && \
+		PYTHONPATH=/workspaces/gamequeer/gqc/src python -m gqc compile --no-mem-map -o . mask_encoding_b.gq && \
+		rm -rf build"
 
 # Build the headless emulator and run the golden framebuffer test.
 test-headless: builder-build
