@@ -67,8 +67,10 @@ jobs:
 
       - name: Configure headless build (golden framebuffer suite)
         # GQ_HEADLESS swaps the X11 gfx backend for a no-op stub (see
-        # src/gfx/gfx_headless.c), so no extra apt packages are needed beyond
-        # the cmake already installed above — no libx11-dev/DISPLAY required.
+        # src/gfx/gfx_headless.c), so this configure step itself needs no
+        # extra apt packages. libx11-dev was already installed above, but
+        # only for the earlier native build — it (and a DISPLAY) is not
+        # required for this headless one.
         # This also registers the tests/ CTest tree (see CMakeLists.txt: only
         # added when GQ_HEADLESS=ON), which runs the golden-framebuffer
         # regression suite (gamequeer#268/#270/#275) against the .gqgame
