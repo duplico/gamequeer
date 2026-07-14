@@ -184,4 +184,4 @@ add_golden_test(golden_framebuffer_anim_advance_frame0 anim_advance
 add_golden_test(golden_framebuffer_anim_advance_frame1 anim_advance
     TICKS 22 GOLDEN_SUFFIX anim_advance_frame1)
 add_golden_test(golden_framebuffer_anim_advance_frame2 anim_advance
-    TICKS 33 GOLDEN_SUFFIX anim_advance_frame2)
+    TICKS 43 GOLDEN_SUFFIX anim_advance_frame2)
