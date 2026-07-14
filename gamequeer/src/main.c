@@ -85,7 +85,10 @@ int main(int argc, char *argv[]) {
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--ticks") == 0) {
-            if (i + 1 >= argc || argv[i + 1][0] == '-') {
+            /* Only require that a next argument exists; don't reject values
+             * that happen to start with '-' (e.g. a negative number), since
+             * the strtol() check below already validates the value itself. */
+            if (i + 1 >= argc) {
                 fprintf(stderr, "main: --ticks requires a value\n");
                 free(hal_argv);
                 return 1;
@@ -98,14 +101,18 @@ int main(int argc, char *argv[]) {
                 return 1;
             }
         } else if (strcmp(argv[i], "--dump") == 0) {
-            if (i + 1 >= argc || argv[i + 1][0] == '-') {
+            /* Only require that a next argument exists; a path legitimately
+             * starting with '-' should not be rejected. */
+            if (i + 1 >= argc) {
                 fprintf(stderr, "main: --dump requires a value\n");
                 free(hal_argv);
                 return 1;
             }
             dump = argv[++i];
         } else if (strcmp(argv[i], "--input") == 0) {
-            if (i + 1 >= argc || argv[i + 1][0] == '-') {
+            /* Only require that a next argument exists; a path legitimately
+             * starting with '-' should not be rejected. */
+            if (i + 1 >= argc) {
                 fprintf(stderr, "main: --input requires a value\n");
                 free(hal_argv);
                 return 1;
