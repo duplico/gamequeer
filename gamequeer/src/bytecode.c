@@ -1,8 +1,70 @@
-#include <stdio.h>
+#include <stddef.h>
 
 #include "HAL.h"
 #include "gamequeer.h"
 #include "gamequeer_bytecode.h"
+
+// Converts a signed 32-bit integer to a NUL-terminated decimal string,
+// writing at most buf_size - 1 characters plus the terminator (matching the
+// truncation semantics of `snprintf(buf, buf_size, "%ld", value)`, which
+// this replaces). Avoids pulling in TI's _printfi/div64u for the badge link.
+static void gq_itoa(t_gq_int value, char *buf, size_t buf_size) {
+    char digits[10]; // Max digits in a 32-bit magnitude (2147483648) is 10.
+    size_t ndigits = 0;
+    uint32_t uval;
+    uint8_t negative = value < 0;
+    size_t pos       = 0;
+
+    if (buf_size == 0) {
+        return;
+    }
+
+    if (negative) {
+        // Negate via unsigned arithmetic to avoid signed overflow on INT32_MIN,
+        // whose magnitude doesn't fit in a positive t_gq_int.
+        uval = (uint32_t) (-(value + 1)) + 1u;
+    } else {
+        uval = (uint32_t) value;
+    }
+
+    if (uval == 0) {
+        digits[ndigits++] = '0';
+    } else {
+        while (uval > 0) {
+            digits[ndigits++] = (char) ('0' + (uval % 10));
+            uval /= 10;
+        }
+    }
+
+    if (negative && pos < buf_size - 1) {
+        buf[pos++] = '-';
+    }
+
+    while (ndigits > 0 && pos < buf_size - 1) {
+        buf[pos++] = digits[--ndigits];
+    }
+
+    buf[pos] = '\0';
+}
+
+// Appends up to src_size bytes of the NUL-terminated string src onto dst,
+// starting at *dst_pos, without writing past dst_size - 1 bytes of dst
+// (leaving room for the terminator) or reading past src_size bytes of src.
+// *dst_pos is updated to the new write position; the caller is responsible
+// for NUL-terminating dst at *dst_pos once all fragments are appended.
+static void gq_str_append_bounded(char *dst, size_t dst_size, size_t *dst_pos, const char *src, size_t src_size) {
+    size_t i = 0;
+
+    if (dst_size == 0) {
+        return;
+    }
+
+    while (i < src_size && src[i] != '\0' && *dst_pos < dst_size - 1) {
+        dst[*dst_pos] = src[i];
+        (*dst_pos)++;
+        i++;
+    }
+}
 
 void run_arithmetic(gq_op *cmd) {
     t_gq_int arg1;
@@ -144,10 +206,10 @@ void run_code(t_gq_pointer code_ptr) {
                     //  is a string and arg2 is an int, then we'll probably print some garbage,
                     //  but it won't hurt anything.
                     if (cmd.flags & GQ_OPF_LITERAL_ARG2) {
-                        snprintf(result_str, GQ_STR_SIZE, "%ld", (t_gq_int) cmd.arg2);
+                        gq_itoa((t_gq_int) cmd.arg2, result_str, GQ_STR_SIZE);
                     } else {
                         t_gq_int arg2_int = gq_load_int(cmd.arg2);
-                        snprintf(result_str, GQ_STR_SIZE, "%ld", arg2_int);
+                        gq_itoa(arg2_int, result_str, GQ_STR_SIZE);
                     }
                     gq_memcpy_from_ram(cmd.arg1, (uint8_t *) result_str, GQ_STR_SIZE);
                 } else if (cmd.flags & GQ_OPF_TYPE_INT) {
@@ -236,13 +298,17 @@ void run_code(t_gq_pointer code_ptr) {
                     set_badge_bit(gq_load_int(cmd.arg2), 0);
                 }
                 break;
-            case GQ_OP_STRCAT:
+            case GQ_OP_STRCAT: {
                 // TODO: Break out into a function, maybe?
+                size_t result_len = 0;
                 gq_memcpy_to_ram((uint8_t *) arg1_str, cmd.arg1, GQ_STR_SIZE);
                 gq_memcpy_to_ram((uint8_t *) arg2_str, cmd.arg2, GQ_STR_SIZE);
-                snprintf(result_str, GQ_STR_SIZE, "%s%s", arg1_str, arg2_str);
+                gq_str_append_bounded(result_str, GQ_STR_SIZE, &result_len, arg1_str, GQ_STR_SIZE);
+                gq_str_append_bounded(result_str, GQ_STR_SIZE, &result_len, arg2_str, GQ_STR_SIZE);
+                result_str[result_len] = '\0';
                 gq_memcpy_from_ram(cmd.arg1, (uint8_t *) result_str, GQ_STR_SIZE);
                 break;
+            }
             default:
                 gq_game_unload_flag = 1;
                 break;
