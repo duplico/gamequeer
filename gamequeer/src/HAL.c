@@ -300,12 +300,21 @@ void HAL_sleep() {
  * single measured interval, not across the whole process lifetime.
  */
 gq_perf_time_t HAL_perf_now(void) {
-    /* Zero-initialized so a (practically unreachable, but not impossible)
-     * clock_gettime() failure degrades to a benign 0 reading rather than an
-     * undefined one -- acceptable for a development/measurement-only build
-     * per this header's accepted-limitation philosophy (see gq_perf.h). */
-    struct timespec ts = {0};
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (gq_perf_time_t) ((uint64_t) ts.tv_sec * 1000000u + (uint64_t) ts.tv_nsec / 1000u);
+    /* Cache the last successful reading. A bare 0 on clock_gettime() failure
+     * is not actually benign here: gq_perf_record()'s delta math (see
+     * gq_perf.h) is HAL_perf_now() - entry_time, so a lone 0 on either side
+     * of an ENTER/EXIT pair underflows to a spurious ~UINT32_MAX-us duration
+     * and poisons that section's max_us. Falling back to the last known-good
+     * timestamp instead keeps a single (practically unreachable, but not
+     * impossible) clock_gettime() failure from corrupting stats -- at worst
+     * it slightly under/over-counts one interval, which is an accepted
+     * limitation for a development/measurement-only build (see gq_perf.h). */
+    static gq_perf_time_t last_good_us = 0;
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
+        return last_good_us;
+    }
+    last_good_us = (gq_perf_time_t) ((uint64_t) ts.tv_sec * 1000000u + (uint64_t) ts.tv_nsec / 1000u);
+    return last_good_us;
 }
 #endif /* GQ_PERF_INSTRUMENT */
