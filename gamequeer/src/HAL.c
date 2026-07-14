@@ -300,7 +300,11 @@ void HAL_sleep() {
  * single measured interval, not across the whole process lifetime.
  */
 gq_perf_time_t HAL_perf_now(void) {
-    struct timespec ts;
+    /* Zero-initialized so a (practically unreachable, but not impossible)
+     * clock_gettime() failure degrades to a benign 0 reading rather than an
+     * undefined one -- acceptable for a development/measurement-only build
+     * per this header's accepted-limitation philosophy (see gq_perf.h). */
+    struct timespec ts = {0};
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (gq_perf_time_t) ((uint64_t) ts.tv_sec * 1000000u + (uint64_t) ts.tv_nsec / 1000u);
 }
