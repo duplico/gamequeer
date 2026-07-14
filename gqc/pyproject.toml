@@ -19,10 +19,18 @@ classifiers = [
 dependencies = [
     "click>=8.0",
     "pyparsing>=3.1",
+    "rich>=13.7",
+    "webcolors>=24.6.0",
+    "ffmpeg-python>=0.2",
+    "pillow>=10.3",
+    "tabulate>=0.9",
 ]
 
 [project.optional-dependencies]
 test = ["pytest>=8.2"]
+
+[project.scripts]
+gqc = "gqc.gqc:gqc_cli"
 
 [project.urls]
 Homepage = "https://github.com/duplico/gamequeer"
