@@ -126,6 +126,17 @@ typedef struct gq_anim_onscreen {
     // only two writers of a slot's `frame`/`anim` fields -- whenever either
     // changes; (re)filled by draw_animation_stack() on the next draw that
     // needs it.
+    //
+    // This invariant also relies on `in_use` gating: load_stage() and
+    // unload_game() clear a slot's `in_use` (in bulk, across all slots)
+    // without touching `frame_meta` at all, which is safe *only* because
+    // load_animation() -- the sole setter of `in_use = 1` -- always clears
+    // frame_meta itself as part of the same call, before anything can read
+    // it. So a slot's stale `frame_meta` from a previous animation can
+    // never be read while `in_use` is 0 (draw_animation_stack() skips it
+    // entirely), and can't survive into the next animation that reuses the
+    // slot either (load_animation() clears it on the way back to
+    // `in_use = 1`).
     gq_anim_frame frame_meta;
 } __attribute__((packed)) gq_anim_onscreen;
 

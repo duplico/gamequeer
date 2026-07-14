@@ -298,6 +298,13 @@ void draw_animation_stack() {
                         current_animations[anim_index].anim.frame_pointer +
                             current_animations[anim_index].frame * sizeof(gq_anim_frame),
                         sizeof(gq_anim_frame))) {
+                    // A failed/partial copy could otherwise leave garbage
+                    // bytes sitting in frame_meta.data_pointer that happen
+                    // to be non-zero, which would be misread as "cached" on
+                    // every future draw. Re-zero it so the next draw
+                    // attempt retries the cart read instead of trusting a
+                    // half-written struct forever.
+                    current_animations[anim_index].frame_meta.data_pointer = 0;
                     return; // failure
                 }
             }
@@ -313,6 +320,11 @@ void draw_animation_stack() {
                             current_animations[anim_index + 1].anim.frame_pointer +
                                 current_animations[anim_index + 1].frame * sizeof(gq_anim_frame),
                             sizeof(gq_anim_frame))) {
+                        // See the frame_meta failure-path comment above:
+                        // re-zero on a failed/partial copy so a future draw
+                        // retries the cart read instead of trusting a
+                        // half-written struct forever.
+                        current_animations[anim_index + 1].frame_meta.data_pointer = 0;
                         return; // failure
                     }
                 }
