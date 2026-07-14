@@ -51,6 +51,18 @@
  * overwrite frame->pixel_value; the golden PGM was regenerated as part of
  * that fix (pixel (39,23) is now correctly sprite white).
  *
+ * NUANCE: tophalf_mask.png is reused as-is for fgmask(2), so the #276 fix
+ * above actually fires *twice* in this fixture -- visibly at (39,23) for
+ * fganim(1), and invisibly at fganim(2)'s corresponding pixel (39,87). It's
+ * invisible there only because checker.png's bit at that mask's local
+ * (31,15) transition happens to be 0: "not drawn, background 0" and "drawn
+ * with sprite value 0" render identically. checker.png itself never
+ * exercises the RLE path at all -- gqc's Frame encoder picks
+ * IMAGE_FMT_1BPP_UNCOMP for it, since RLE7 would be ~7.7x larger for a
+ * dense checkerboard. Net effect: editing checker.png's *content* (not
+ * just this comment) could flip that local (31,15) bit and surface a
+ * second pixel diff here with no code change -- don't be surprised.
+ *
  * How to reproduce the compiled fixture (mask_encoding_a.gqgame):
  *
  *   From the gamequeer repo root, using the builder container:
