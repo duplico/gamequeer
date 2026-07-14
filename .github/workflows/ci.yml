@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: ["default"]
+  pull_request:
+    branches: ["default"]
+
+jobs:
+  gqc-tests:
+    name: gqc Python compiler tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        # gamequeer has no submodules; omit submodules: recursive
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install gqc (editable, with test deps)
+        run: pip install -e "gqc/[test]"
+
+      - name: Run pytest
+        run: |
+          # The test suite is currently all TODO stubs; pytest exits 5 ("no tests
+          # collected") until real tests are written.  Treat exit 5 as success so
+          # CI stays green, but still fail on import/syntax errors (any other
+          # non-zero exit).
+          #
+          # Note: do NOT write `pytest ...; code=$?` on separate lines under
+          # `set -e` (GitHub's default shell) — the command line itself would
+          # abort before $? is captured.  Use a list operator instead:
+          pytest tests || code=$?
+          if [ "${code:-0}" -ne 0 ] && [ "${code:-0}" -ne 5 ]; then
+            exit "${code}"
+          fi
+        working-directory: gqc/
+
+  gamequeer-vm-build:
+    name: gamequeer C VM native build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -q
+          # cmake: build system; libx11-dev: required by the Linux HAL / gfx layer.
+          # libm is part of libc on glibc systems and needs no separate package.
+          sudo apt-get install -y cmake libx11-dev
+
+      - name: Configure (CMake)
+        # Native host build — faster than the repo's Docker path
+        # (make builder-build && make), and sufficient for verifying the VM
+        # sources compile.  The Docker path remains available as a fallback
+        # for a fully-reproducible environment.
+        run: cmake -B build
+        working-directory: gamequeer/
+
+      - name: Build
+        run: cmake --build build --parallel
+        working-directory: gamequeer/
