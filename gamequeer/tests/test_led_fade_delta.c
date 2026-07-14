@@ -121,11 +121,15 @@ static int32_t new_formula_offset(int32_t diff, uint16_t duration, uint16_t tick
 //   curr + ((int32_t)(next - curr) * ticks_elapsed) / duration
 // i.e. the offset alone was `((int32_t) diff * ticks_elapsed) / duration`,
 // with the multiplication's intermediate held in a plain 32-bit int32_t --
-// no 64-bit widening. See feedback_old_formula_overflow_false_positive
-// agent-memory note / this PR's body: that 32-bit intermediate genuinely
-// overflows for large |diff| * large ticks_elapsed (both can independently
-// approach their ~65280/65535 maximums), which is a pre-existing bug in the
-// formula being replaced, not a regression introduced by this PR.
+// no 64-bit widening. That 32-bit intermediate genuinely overflows for large
+// |diff| * large ticks_elapsed (both can independently approach their
+// ~65280/65535 maximums -- e.g. diff=47104, ticks_elapsed=65520 gives a true
+// product of ~3.09e9, which overflows INT32_MAX's ~2.15e9 by ~1.4x). This is
+// a pre-existing bug in the formula being replaced (see this PR's body for
+// the original finding), not a regression introduced by this PR.
+// old_formula_overflows() below detects exactly this condition so the sweep
+// can exclude it from the new-vs-old comparison, instead of treating the old
+// formula's wrapped garbage as a trustworthy reference value in that region.
 static int32_t old_formula_offset(int32_t diff, uint16_t duration, uint16_t ticks_elapsed) {
     int32_t product = diff * (int32_t) ticks_elapsed;
     return product / (int32_t) duration;
@@ -198,6 +202,23 @@ int main(void) {
     long checked        = 0;
     long compared       = 0;
     long skipped_old_ov = 0;
+
+    // duration == 0 guard: led_calc_delta() must return exactly 0 (not
+    // divide by zero) regardless of diff's sign/magnitude -- see leds.c's
+    // led_calc_delta() comment for why a legitimately-compiled cart can
+    // produce duration == 0 (gqc's cue parser rounds 1-3 tick durations
+    // down to 0). This is exercised directly here since the main sweep
+    // below starts at duration == 5 (the minimum that actually reaches
+    // led_tick()'s interpolation branch) and would otherwise never hit it.
+    {
+        static const int32_t k_zero_duration_diffs[] = {-65280, -256, 0, 256, 65280};
+        for (size_t i = 0; i < sizeof(k_zero_duration_diffs) / sizeof(k_zero_duration_diffs[0]); i++) {
+            int32_t diff  = k_zero_duration_diffs[i];
+            int32_t delta = led_calc_delta(diff, 0);
+            check(delta == 0, "duration==0 guard returns exactly 0", diff, 0, 0, delta, 0);
+            checked++;
+        }
+    }
 
     for (int32_t diff = -65280; diff <= 65280; diff += 256) {
         for (int di = 0; di < NUM_DURATIONS; di++) {
