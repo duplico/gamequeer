@@ -158,6 +158,35 @@ static void gq_image_advance_run(gq_image_frame_on_screen *frame, uint16_t count
     }
 }
 
+/*
+ * gq_image_advance_byte() -- fast-path advance for the byte-aligned
+ * uncompressed fast paths in gq_draw_image() / gq_draw_image_with_mask()
+ * below: consumes exactly 8 pixels (one full decoded source byte) in one
+ * call, equivalent to calling gq_image_advance_run(frame, 1) eight times
+ * in a row for an rle_type == 1 frame that starts byte-aligned
+ * (frame->x_bit_offset == 0 on entry, which every caller's fast-path guard
+ * already ensures). Skips the per-pixel x_bit_offset increment/compare
+ * loop that eight individual gq_image_advance_run() calls would otherwise
+ * pay, while updating decode state identically (byte/row-boundary
+ * prefetch happens at the same point in the stream either way).
+ */
+static void gq_image_advance_byte(gq_image_frame_on_screen *frame) {
+    frame->byte_index++;
+    frame->x_pixel_offset = (uint16_t) (frame->x_pixel_offset + 8);
+
+    if (frame->x_pixel_offset >= (uint16_t) frame->width) {
+        frame->y_curr++;
+        frame->x_pixel_offset = 0;
+    }
+
+    // A full source byte was just consumed -- always load the next one
+    // (mirrors gq_image_advance_run()'s need_to_read_byte == 1 case for
+    // rle_type == 1, which is unconditional there too).
+    if (!gq_image_done(frame)) {
+        gq_image_load_byte(frame);
+    }
+}
+
 void gq_load_image(
     t_gq_pointer image_bytes,
     int16_t bPP,
@@ -229,11 +258,38 @@ void gq_draw_image(
         int16_t draw_x = x + frame.x_pixel_offset;
         int16_t draw_y = y + frame.y_curr;
 
+        // Byte-aligned uncompressed fast path (row-major framebuffer,
+        // duplico/qc2024#45 Stage 1 / duplico/gamequeer#295): an
+        // uncompressed source byte that is (a) currently byte-aligned in
+        // the decode stream, (b) entirely within the current image row,
+        // and (c) entirely within the clip region can be forwarded
+        // straight from the decoded cart byte to the framebuffer in one
+        // call, skipping the generic one-pixel-at-a-time peek/advance/
+        // write path below entirely -- see HAL_oled_blit_byte()'s doc
+        // comment (gamequeer.h) for why this is only a real win once the
+        // destination framebuffer is row-major. Falls through to the
+        // general per-run path for RLE content and any row/clip edge that
+        // doesn't satisfy all three conditions.
+        if (frame.rle_type == 1 && frame.x_bit_offset == 0 &&
+            (uint16_t) (frame.x_pixel_offset + 8) <= (uint16_t) frame.width && draw_y >= context->clipRegion.yMin &&
+            draw_y <= context->clipRegion.yMax && draw_x >= context->clipRegion.xMin &&
+            (draw_x + 7) <= context->clipRegion.xMax) {
+            GQ_PERF_ENTER_RUNS(DRAW_DECODE);
+            uint8_t src_byte = frame.render_byte;
+            gq_image_advance_byte(&frame);
+            GQ_PERF_EXIT_RUNS(DRAW_DECODE);
+
+            GQ_PERF_ENTER_RUNS(DRAW_WRITE);
+            HAL_oled_blit_byte(draw_x, draw_y, src_byte, 8);
+            GQ_PERF_EXIT_RUNS(DRAW_WRITE);
+            continue;
+        }
+
         uint16_t run_avail;
-        GQ_PERF_ENTER(DRAW_DECODE);
+        GQ_PERF_ENTER_RUNS(DRAW_DECODE);
         uint8_t draw_pixel = gq_image_peek_run(&frame, &run_avail);
         gq_image_advance_run(&frame, run_avail);
-        GQ_PERF_EXIT(DRAW_DECODE);
+        GQ_PERF_EXIT_RUNS(DRAW_DECODE);
 
         // Vertical clip: matches the original per-pixel check, which only
         // ever tested draw_y >= yMin -- the upper bound is already enforced
@@ -257,9 +313,9 @@ void gq_draw_image(
             seg_len = context->clipRegion.xMax - seg_x0 + 1;
         }
         if (seg_len > 0) {
-            GQ_PERF_ENTER(DRAW_WRITE);
+            GQ_PERF_ENTER_RUNS(DRAW_WRITE);
             HAL_oled_fill_run(seg_x0, draw_y, (uint16_t) seg_len, (uint8_t) palette[draw_pixel]);
-            GQ_PERF_EXIT(DRAW_WRITE);
+            GQ_PERF_EXIT_RUNS(DRAW_WRITE);
         }
     }
 }
@@ -293,6 +349,43 @@ void gq_draw_image_with_mask(
         int16_t draw_x = x + image_frame.x_pixel_offset;
         int16_t draw_y = y + image_frame.y_curr;
 
+        // Byte-aligned masked fast path (row-major framebuffer,
+        // duplico/qc2024#45 Stage 1 / duplico/gamequeer#295): when BOTH
+        // the image and mask streams are (a) uncompressed, (b) currently
+        // byte-aligned in their own decode stream, and the shared position
+        // is (c) entirely within the current image row and (d) entirely
+        // within the clip region, one decoded image byte and one decoded
+        // mask byte can be composited and written in a single byte-
+        // parallel masked blit -- see HAL_oled_blit_byte_masked()'s doc
+        // comment (gamequeer.h). image_frame.x_pixel_offset and
+        // mask_frame.x_pixel_offset are always equal here (both frames
+        // share `width` and are always advanced together, by run or by
+        // byte, so they can only ever drift apart in x_bit_offset/rle
+        // state, which this condition checks independently for each
+        // stream). Falls through to the generic per-run merge loop below
+        // for RLE content on either stream, any decode misalignment
+        // between the two streams, or any row/clip edge that doesn't
+        // satisfy all four conditions -- correctness for those cases is
+        // unchanged (the merge loop below, using HAL_oled_fill_run(),
+        // already gets whole-byte-fast RLE runs for free from that
+        // primitive's own row-major implementation).
+        if (image_frame.rle_type == 1 && mask_frame.rle_type == 1 && image_frame.x_bit_offset == 0 &&
+            mask_frame.x_bit_offset == 0 && (uint16_t) (image_frame.x_pixel_offset + 8) <= (uint16_t) width &&
+            draw_y >= context->clipRegion.yMin && draw_y <= context->clipRegion.yMax &&
+            draw_x >= context->clipRegion.xMin && (draw_x + 7) <= context->clipRegion.xMax) {
+            GQ_PERF_ENTER_RUNS(DRAW_DECODE);
+            uint8_t src_byte  = image_frame.render_byte;
+            uint8_t mask_byte = mask_frame.render_byte;
+            gq_image_advance_byte(&image_frame);
+            gq_image_advance_byte(&mask_frame);
+            GQ_PERF_EXIT_RUNS(DRAW_DECODE);
+
+            GQ_PERF_ENTER_RUNS(DRAW_WRITE);
+            HAL_oled_blit_byte_masked(draw_x, draw_y, src_byte, mask_byte, 8);
+            GQ_PERF_EXIT_RUNS(DRAW_WRITE);
+            continue;
+        }
+
         // Peek both streams' available run lengths at the current position
         // without committing either one -- the image and mask are
         // independently RLE-encoded, so one may offer a longer run than
@@ -302,14 +395,14 @@ void gq_draw_image_with_mask(
         // (or row) ends first; within that shared run, both the image
         // value and the mask value are constant.
         uint16_t image_avail, mask_avail;
-        GQ_PERF_ENTER(DRAW_DECODE);
+        GQ_PERF_ENTER_RUNS(DRAW_DECODE);
         uint8_t image_pixel = gq_image_peek_run(&image_frame, &image_avail);
         uint8_t mask_pixel  = gq_image_peek_run(&mask_frame, &mask_avail);
         uint16_t run_avail  = image_avail < mask_avail ? image_avail : mask_avail;
 
         gq_image_advance_run(&image_frame, run_avail);
         gq_image_advance_run(&mask_frame, run_avail);
-        GQ_PERF_EXIT(DRAW_DECODE);
+        GQ_PERF_EXIT_RUNS(DRAW_DECODE);
 
         // Transparent (mask=0) run: nothing to draw, same as the original
         // per-pixel path which never called Graphics_drawPixelOnDisplay()
@@ -335,9 +428,9 @@ void gq_draw_image_with_mask(
             seg_len = context->clipRegion.xMax - seg_x0 + 1;
         }
         if (seg_len > 0) {
-            GQ_PERF_ENTER(DRAW_WRITE);
+            GQ_PERF_ENTER_RUNS(DRAW_WRITE);
             HAL_oled_fill_run(seg_x0, draw_y, (uint16_t) seg_len, (uint8_t) palette[image_pixel]);
-            GQ_PERF_EXIT(DRAW_WRITE);
+            GQ_PERF_EXIT_RUNS(DRAW_WRITE);
         }
     }
 }

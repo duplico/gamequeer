@@ -1,0 +1,91 @@
+/*
+ * rowmajor_byte_blit.gq — Golden-test fixture locking in gq_draw_image()'s
+ * byte-aligned uncompressed fast path from the render rework
+ * (duplico/qc2024#45 Stage 1 / duplico/gamequeer#295), i.e. the *unmasked*
+ * counterpart of mask_encoding_{a,b}.gq's masked byte-parallel coverage.
+ *
+ * checker.png is reused deliberately (see mask_encoding_a.gq's header for
+ * why gqc's Frame cooker always picks IMAGE_FMT_1BPP_UNCOMP for it -- a
+ * dense checkerboard is the worst case for RLE): every pixel differs from
+ * its neighbor, so this is the most bit-position-adversarial content
+ * available for exercising HAL_oled_blit_byte()'s MSB-first bit order,
+ * with none of the "all-same-value run" slack that would let an off-by-one
+ * bit-shift bug hide.
+ *
+ * Three unmasked placements, all UNCOMPRESSED, deliberately chosen to walk
+ * gq_draw_image()'s new fast-path guard condition through its edge cases
+ * (byte-aligned dest / unaligned dest / right-edge clip mid-row) -- the
+ * emulator's HAL_oled_blit_byte() doesn't itself care about x-alignment
+ * (it's a plain per-bit unpack loop either way, see grlib_gfx_driver.c),
+ * so this fixture's value is regression-locking oled.c's fast-path
+ * *activation* and clip math, not the badge's packed-byte arithmetic --
+ * that's firmware-only code (qc2024#46, ccs_workspace/qc2024/sh1107.c) and
+ * can only be validated by review + hardware measurement, not ctest.
+ *
+ *   bganim: checker.png at (0, 0) -- trivially byte-aligned (x=0), fully
+ *     on-screen, full 32x32 coverage: the "prototype-proven" pure fast
+ *     path case, every row taking the fast path start-to-finish (32 is a
+ *     multiple of 8).
+ *
+ *   fganim(1), no fgmask: checker.png at (5, 40) -- x=5 is NOT byte-aligned
+ *     in screen coordinates (frame.x_bit_offset is still 0 at the start of
+ *     each source row, so the fast path DOES activate; HAL_oled_blit_byte()
+ *     must then internally split each 8-pixel write across two destination
+ *     bytes on the badge). Exercises the fast path's dest-unaligned case.
+ *
+ *   fganim(2), no fgmask: checker.png at (100, 80) -- 100 + 32 - 1 = 131,
+ *     past the display's right edge (clipRegion.xMax = 126), so the last
+ *     several columns of every row must fall back to the generic per-pixel
+ *     path mid-row, right after several fast-path iterations for the
+ *     still-visible columns. Exercises the fast-path/slow-path boundary
+ *     within a single image row.
+ *
+ * How to reproduce the compiled fixture (rowmajor_byte_blit.gqgame):
+ *
+ *   From the gamequeer repo root, using the builder container:
+ *     docker run --rm -v $(pwd):/workspaces/gamequeer --workdir /workspaces/gamequeer \
+ *         --user $(id -u):$(id -g) gamequeer-builder:latest \
+ *         /bin/bash -c "cd gamequeer/tests/golden && PYTHONPATH=/workspaces/gamequeer/gqc/src \
+ *             python -m gqc compile --no-mem-map -o . rowmajor_byte_blit.gq"
+ *
+ *   Or via the Makefile target:
+ *     make golden-fixture
+ */
+
+game {
+    id = 1;
+    title := "RMByteBlit";
+    author := "test";
+    starting_stage = blit_test;
+}
+
+animations {
+    bgsprite <- "checker.png" {
+        w = 32;
+        h = 32;
+    }
+
+    fgsprite1 <- "checker.png" {
+        w = 32;
+        h = 32;
+    }
+
+    fgsprite2 <- "checker.png" {
+        w = 32;
+        h = 32;
+    }
+}
+
+stage blit_test {
+    event enter {
+        play bganim bgsprite;
+
+        GQI_FGANIM1_X = 5;
+        GQI_FGANIM1_Y = 40;
+        play fganim(1) fgsprite1;
+
+        GQI_FGANIM2_X = 100;
+        GQI_FGANIM2_Y = 80;
+        play fganim(2) fgsprite2;
+    }
+}

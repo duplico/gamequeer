@@ -64,6 +64,60 @@ void HAL_oled_fill_run(int16_t x, int16_t y, uint16_t length, uint8_t value) {
     }
 }
 
+/*
+ * HAL_oled_blit_byte() -- emulator implementation (see the doc comment on
+ * its declaration in gamequeer.h for the full contract).
+ *
+ * frame_buffer here is one byte per pixel (not bit-packed), so there is no
+ * row/page-major mismatch to exploit -- this is a plain per-bit
+ * unpack-and-store loop, same cost as 8 HAL_oled_fill_run(x+i, y, 1, ...)
+ * calls. Bit order (bit 7 of src_byte = pixel at x) and clip handling must
+ * still match the badge's ROW_BUFFER()-packed math exactly, since this is
+ * the pixel-level oracle the golden tests validate the badge path against.
+ */
+void HAL_oled_blit_byte(int16_t x, int16_t y, uint8_t src_byte, uint8_t bit_count) {
+    if (y < 0 || y >= OLED_VERTICAL_MAX || bit_count == 0 || bit_count > 8) {
+        return;
+    }
+    for (uint8_t i = 0; i < bit_count; i++) {
+        int16_t px = x + i;
+        if (px < 0 || px >= OLED_HORIZONTAL_MAX) {
+            continue;
+        }
+        uint8_t pixel       = (src_byte >> (7 - i)) & 0x01;
+        frame_buffer[px][y] = pixel;
+    }
+}
+
+/*
+ * HAL_oled_blit_byte_masked() -- emulator implementation (see the doc
+ * comment on its declaration in gamequeer.h for the full contract).
+ *
+ * Same per-bit unpack-and-store shape as HAL_oled_blit_byte() above,
+ * except a pixel is only written (and only ever read as "1 unmasked bit
+ * touched") when its mask bit is set -- mask=0 pixels are skipped
+ * entirely, leaving frame_buffer's existing value untouched, matching the
+ * "reveal what's underneath" semantics gq_draw_image_with_mask()'s generic
+ * merge loop already has via HAL_oled_fill_run() only ever being called
+ * for mask=1 runs.
+ */
+void HAL_oled_blit_byte_masked(int16_t x, int16_t y, uint8_t src_byte, uint8_t mask_byte, uint8_t bit_count) {
+    if (y < 0 || y >= OLED_VERTICAL_MAX || bit_count == 0 || bit_count > 8) {
+        return;
+    }
+    for (uint8_t i = 0; i < bit_count; i++) {
+        if (!((mask_byte >> (7 - i)) & 0x01)) {
+            continue;
+        }
+        int16_t px = x + i;
+        if (px < 0 || px >= OLED_HORIZONTAL_MAX) {
+            continue;
+        }
+        uint8_t pixel       = (src_byte >> (7 - i)) & 0x01;
+        frame_buffer[px][y] = pixel;
+    }
+}
+
 static void gfx_driver_pixelDrawMultiple(
     void *displayData,
     int16_t x,

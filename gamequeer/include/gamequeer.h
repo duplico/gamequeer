@@ -313,7 +313,9 @@ void led_stop();
 void handle_events();
 
 /*
- * HAL_oled_fill_run() -- per-platform display primitive (issue #261).
+ * HAL_oled_fill_run() -- per-platform display primitive (issue #261;
+ * row-major framebuffer since the render rework, duplico/qc2024#45 Stage
+ * 1 / duplico/gamequeer#295).
  *
  * Fills `length` consecutive horizontal pixels, starting at (x, y), to
  * `value` (0 or 1). This is the batched replacement for calling
@@ -335,15 +337,79 @@ void handle_events();
  *   - The whole run shares one pixel value (0 or 1) by construction --
  *     see gq_image_peek_run()'s doc comment in oled.c.
  *
- * Per-platform implementations: sh1107.c (badge, packed 1bpp page-major
- * frame_buffer) and grlib_gfx_driver.c (emulator,
- * uint8_t[OLED_HORIZONTAL_MAX][OLED_VERTICAL_MAX] frame_buffer, currently
- * [127][127]). The badge implementation precomputes the page index and
- * bit mask once per call (both are constant across a horizontal run,
- * since page = y / 8 and the bit position is y % 8) instead of recomputing
- * them per pixel the way qc12_oledPixelDraw() did.
+ * Per-platform implementations: sh1107.c (badge, packed 1bpp ROW-major
+ * frame_buffer -- one byte holds 8 horizontally-consecutive pixels of a
+ * single display row, matching gqc's cart image formats byte-for-byte;
+ * see sh1107.c's ROW_BUFFER() layout comment) and grlib_gfx_driver.c
+ * (emulator, uint8_t[OLED_HORIZONTAL_MAX][OLED_VERTICAL_MAX] frame_buffer,
+ * one byte per pixel -- no packing, so row-major vs. page-major has no
+ * cost implication there; its job is to be a faithful pixel-level oracle
+ * for the badge's packed math, not to share its layout). The badge
+ * implementation splits a run into at most one partial leading byte + N
+ * whole-byte stores (no read-modify-write at all) + one partial trailing
+ * byte, since a horizontal run now stays within a single display row's
+ * bytes instead of scattering across `length` different page-major bytes.
  */
 void HAL_oled_fill_run(int16_t x, int16_t y, uint16_t length, uint8_t value);
+
+/*
+ * HAL_oled_blit_byte() -- per-platform display primitive (render rework,
+ * duplico/qc2024#45 Stage 1 / duplico/gamequeer#295).
+ *
+ * Writes `bit_count` (1-8) consecutive horizontal pixels starting at
+ * (x, y) directly from one source byte's bits, MSB-first (bit 7 of
+ * `src_byte` is the pixel at x, bit 6 is x+1, ... bit (8-bit_count) is the
+ * last pixel written) -- this is the exact bit order gqc's uncompressed
+ * frame encoder uses (Frame.uncompressed_bytes(), `0b10000000 >> run`), so
+ * a fully-aligned, fully-visible 8-pixel span can be forwarded from the
+ * decoded cart byte straight into this call with NO per-pixel unpacking.
+ * This is the near-memcpy draw path uncompressed (typically dithered)
+ * image content needs to reach cost parity with RLE content's whole-byte
+ * run fill (HAL_oled_fill_run() above), once the destination framebuffer
+ * is row-major.
+ *
+ * Contract with callers (oled.c):
+ *   - 1 <= bit_count <= 8.
+ *   - The caller has already verified [x, x + bit_count - 1] lies fully
+ *     within the active clip region and 0 <= y -- this primitive does NOT
+ *     clip or split a partially-visible span; callers fall back to
+ *     per-pixel/per-run HAL_oled_fill_run() calls for any span that needs
+ *     clipping.
+ */
+void HAL_oled_blit_byte(int16_t x, int16_t y, uint8_t src_byte, uint8_t bit_count);
+
+/*
+ * HAL_oled_blit_byte_masked() -- per-platform display primitive (masked
+ * counterpart of HAL_oled_blit_byte(), for gq_draw_image_with_mask() --
+ * duplico/qc2024#45 Stage 1 / duplico/gamequeer#295).
+ *
+ * Writes `bit_count` (1-8) consecutive horizontal pixels starting at
+ * (x, y), each taken from `src_byte` (same MSB-first bit order as
+ * HAL_oled_blit_byte()) but ONLY where the corresponding bit of
+ * `mask_byte` is 1 -- pixels whose mask bit is 0 are left completely
+ * untouched (the existing framebuffer content shows through, i.e. mask=0
+ * means transparent/"reveal what's underneath", matching
+ * gq_draw_image_with_mask()'s pre-existing per-pixel semantics). Bits of
+ * `src_byte`/`mask_byte` at or past position `bit_count` (i.e. the low
+ * (8 - bit_count) bits) are ignored by the implementation, so callers
+ * don't need to pre-mask them.
+ *
+ * This is the byte-parallel merge primitive the fully-aligned masked
+ * uncompressed+uncompressed fast path in gq_draw_image_with_mask() needs:
+ * on a row-major destination, an aligned 8-pixel masked write is exactly
+ * one `dest = (dest & ~mask) | (src & mask)` per touched destination byte
+ * (one byte if x is byte-aligned in the destination row, two if not) --
+ * no per-pixel branch or loop.
+ *
+ * Contract with callers (oled.c):
+ *   - 1 <= bit_count <= 8.
+ *   - The caller has already verified [x, x + bit_count - 1] lies fully
+ *     within the active clip region and 0 <= y -- this primitive does NOT
+ *     clip or split a partially-visible span; callers fall back to the
+ *     generic per-run merge loop (HAL_oled_fill_run(), only called for
+ *     mask=1 runs) for any span that needs clipping.
+ */
+void HAL_oled_blit_byte_masked(int16_t x, int16_t y, uint8_t src_byte, uint8_t mask_byte, uint8_t bit_count);
 
 void gq_draw_image(
     const Graphics_Context *context,
