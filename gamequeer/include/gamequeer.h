@@ -336,8 +336,9 @@ void handle_events();
  *     see gq_image_peek_run()'s doc comment in oled.c.
  *
  * Per-platform implementations: sh1107.c (badge, packed 1bpp page-major
- * frame_buffer) and grlib_gfx_driver.c (emulator, uint8_t[128][128]
- * frame_buffer). The badge implementation precomputes the page index and
+ * frame_buffer) and grlib_gfx_driver.c (emulator,
+ * uint8_t[OLED_HORIZONTAL_MAX][OLED_VERTICAL_MAX] frame_buffer, currently
+ * [127][127]). The badge implementation precomputes the page index and
  * bit mask once per call (both are constant across a horizontal run,
  * since page = y / 8 and the bit position is y % 8) instead of recomputing
  * them per pixel the way qc12_oledPixelDraw() did.

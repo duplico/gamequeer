@@ -100,7 +100,7 @@ void gq_image_load_byte(gq_image_frame_on_screen *frame) {
  * happen at the same point in the stream either way, so output is
  * pixel-identical to the old code for any valid `count`.
  */
-uint8_t gq_image_peek_run(gq_image_frame_on_screen *frame, uint16_t *out_avail) {
+static uint8_t gq_image_peek_run(gq_image_frame_on_screen *frame, uint16_t *out_avail) {
     // NB: only call this function while !gq_image_done(frame) -- calling it
     // once the frame is done is undefined behavior (see the while
     // (!gq_image_done(...)) loops in gq_draw_image() and
@@ -123,7 +123,7 @@ uint8_t gq_image_peek_run(gq_image_frame_on_screen *frame, uint16_t *out_avail) 
     return frame->pixel_value;
 }
 
-void gq_image_advance_run(gq_image_frame_on_screen *frame, uint16_t count) {
+static void gq_image_advance_run(gq_image_frame_on_screen *frame, uint16_t count) {
     uint8_t need_to_read_byte = 0;
 
     if (frame->rle_type == 1) {
