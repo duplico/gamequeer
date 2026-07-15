@@ -211,7 +211,19 @@ add_golden_test(golden_framebuffer_anim_advance_frame2 anim_advance
 # the same run: two different instrumentation mechanisms measuring the same
 # event, which is a cheap sanity check that GQ_PERF_ENTER/EXIT is wired up
 # correctly around draw_oled_stack(). See run_perf_draw_count_cross_check.cmake.
+# EXPECT_RUNS_INSTRUMENTED also tells the script whether to additionally
+# assert on the draw_decode section's zero/nonzero state, which is a direct
+# check that GQ_PERF_INSTRUMENT_RUNS (see include/gq_perf.h) is wired up:
+# draw_decode must be all-zero when GQ_PERF_INSTRUMENT_RUNS is OFF (its
+# GQ_PERF_ENTER_RUNS/EXIT_RUNS calls compile out) and nonzero when it's ON,
+# for the same anim_advance.gqgame fixture, which does draw RLE-encoded
+# content and so is guaranteed to hit the run loop at least once.
 if(GQ_PERF_INSTRUMENT)
+    if(GQ_PERF_INSTRUMENT_RUNS)
+        set(_expect_runs_instrumented ON)
+    else()
+        set(_expect_runs_instrumented OFF)
+    endif()
     add_test(
         NAME perf_draw_count_cross_check
         COMMAND
@@ -221,6 +233,7 @@ if(GQ_PERF_INSTRUMENT)
             -DDRAW_COUNT=${CMAKE_CURRENT_BINARY_DIR}/perf_draw_count_cross_check_drawcount.txt
             -DPERF_DUMP=${CMAKE_CURRENT_BINARY_DIR}/perf_draw_count_cross_check_perfdump.txt
             -DTICKS=43
+            -DEXPECT_RUNS_INSTRUMENTED=${_expect_runs_instrumented}
             -P "${CMAKE_CURRENT_SOURCE_DIR}/run_perf_draw_count_cross_check.cmake"
     )
 endif()

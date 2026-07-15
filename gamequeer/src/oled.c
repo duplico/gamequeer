@@ -276,22 +276,28 @@ void gq_draw_image(
             (uint16_t) (frame.x_pixel_offset + 8) <= (uint16_t) frame.width && draw_y >= context->clipRegion.yMin &&
             draw_y <= context->clipRegion.yMax && draw_x >= context->clipRegion.xMin &&
             (draw_x + 7) <= context->clipRegion.xMax) {
-            GQ_PERF_ENTER(DRAW_DECODE);
+            // Per-run (here: per-8-pixel-blit) timers -- gated the same
+            // way as the general path's DRAW_DECODE/DRAW_WRITE below
+            // (GQ_PERF_INSTRUMENT_RUNS; see gq_perf.h) so a plain
+            // GQ_PERF_INSTRUMENT=1 build measures this fast path's
+            // contribution to draw_animation_stack without per-call
+            // profiler overhead contaminating that outer number.
+            GQ_PERF_ENTER_RUNS(DRAW_DECODE);
             uint8_t src_byte = frame.render_byte;
             gq_image_advance_byte(&frame);
-            GQ_PERF_EXIT(DRAW_DECODE);
+            GQ_PERF_EXIT_RUNS(DRAW_DECODE);
 
-            GQ_PERF_ENTER(DRAW_WRITE);
+            GQ_PERF_ENTER_RUNS(DRAW_WRITE);
             HAL_oled_blit_byte(draw_x, draw_y, src_byte, 8);
-            GQ_PERF_EXIT(DRAW_WRITE);
+            GQ_PERF_EXIT_RUNS(DRAW_WRITE);
             continue;
         }
 
         uint16_t run_avail;
-        GQ_PERF_ENTER(DRAW_DECODE);
+        GQ_PERF_ENTER_RUNS(DRAW_DECODE);
         uint8_t draw_pixel = gq_image_peek_run(&frame, &run_avail);
         gq_image_advance_run(&frame, run_avail);
-        GQ_PERF_EXIT(DRAW_DECODE);
+        GQ_PERF_EXIT_RUNS(DRAW_DECODE);
 
         // Vertical clip: matches the original per-pixel check, which only
         // ever tested draw_y >= yMin -- the upper bound is already enforced
@@ -315,9 +321,9 @@ void gq_draw_image(
             seg_len = context->clipRegion.xMax - seg_x0 + 1;
         }
         if (seg_len > 0) {
-            GQ_PERF_ENTER(DRAW_WRITE);
+            GQ_PERF_ENTER_RUNS(DRAW_WRITE);
             HAL_oled_fill_run(seg_x0, draw_y, (uint16_t) seg_len, (uint8_t) palette[draw_pixel]);
-            GQ_PERF_EXIT(DRAW_WRITE);
+            GQ_PERF_EXIT_RUNS(DRAW_WRITE);
         }
     }
 }
@@ -377,14 +383,14 @@ void gq_draw_image_with_mask(
         // (or row) ends first; within that shared run, both the image
         // value and the mask value are constant.
         uint16_t image_avail, mask_avail;
-        GQ_PERF_ENTER(DRAW_DECODE);
+        GQ_PERF_ENTER_RUNS(DRAW_DECODE);
         uint8_t image_pixel = gq_image_peek_run(&image_frame, &image_avail);
         uint8_t mask_pixel  = gq_image_peek_run(&mask_frame, &mask_avail);
         uint16_t run_avail  = image_avail < mask_avail ? image_avail : mask_avail;
 
         gq_image_advance_run(&image_frame, run_avail);
         gq_image_advance_run(&mask_frame, run_avail);
-        GQ_PERF_EXIT(DRAW_DECODE);
+        GQ_PERF_EXIT_RUNS(DRAW_DECODE);
 
         // Transparent (mask=0) run: nothing to draw, same as the original
         // per-pixel path which never called Graphics_drawPixelOnDisplay()
@@ -410,9 +416,9 @@ void gq_draw_image_with_mask(
             seg_len = context->clipRegion.xMax - seg_x0 + 1;
         }
         if (seg_len > 0) {
-            GQ_PERF_ENTER(DRAW_WRITE);
+            GQ_PERF_ENTER_RUNS(DRAW_WRITE);
             HAL_oled_fill_run(seg_x0, draw_y, (uint16_t) seg_len, (uint8_t) palette[image_pixel]);
-            GQ_PERF_EXIT(DRAW_WRITE);
+            GQ_PERF_EXIT_RUNS(DRAW_WRITE);
         }
     }
 }
