@@ -47,6 +47,13 @@ void HAL_oled_fill_run(int16_t x, int16_t y, uint16_t length, uint8_t value) {
         length = (uint16_t) (length + x);
         x      = 0;
     }
+    if (x >= OLED_HORIZONTAL_MAX) {
+        // Defensive only -- see above. Without this, the clamp below
+        // (OLED_HORIZONTAL_MAX - x) would underflow when x is already
+        // past the right edge, wrapping length to a huge uint16_t and
+        // driving the fill loop far out of frame_buffer's bounds.
+        return;
+    }
     if (x + length > OLED_HORIZONTAL_MAX) {
         length = (uint16_t) (OLED_HORIZONTAL_MAX - x);
     }
