@@ -1,0 +1,106 @@
+/*
+ * edge_coverage.gq — Golden-test fixture proving the emulator's golden
+ * framebuffer oracle genuinely covers the display's true extreme edge:
+ * the rightmost column (x=127) and bottom row (y=127) of the real 128x128
+ * badge display (gamequeer#297).
+ *
+ * Prior to #297's fix, OLED_HORIZONTAL_MAX/OLED_VERTICAL_MAX were 127
+ * (used as an exclusive size/bound, like the badge's LCD_X_SIZE/
+ * LCD_Y_SIZE), so frame_buffer was only [127][127] and clipRegion.xMax/
+ * yMax were 126 -- x=127 and y=127 could never be stored or golden-tested
+ * at all. No pre-existing fixture's content happened to reach y=127 (a
+ * couple of rowmajor/mask fixtures' right-edge-clip placements do reach
+ * x=127 incidentally once the fix lands, but none reach the bottom row).
+ * This fixture is a dedicated, deliberate test of both edges together,
+ * using checker.png's exact, independently-computable (local_x+local_y)%2
+ * checkerboard so every edge pixel's expected value can be hand-verified
+ * (not just "non-garbage") -- see the PR body for the derivation.
+ *
+ * NB: bganim has no GQI_BGANIM_X/Y -- it is always drawn at (0, 0) (see
+ * gq_draw_animation_stack()'s anim_index==0 case, gamequeer.c) -- so both
+ * placements below use the two positionable foreground slots instead.
+ *
+ *   fganim(1), no fgmask: checker.png at (96, 96) -- byte-aligned
+ *     (96 = 12*8) exact fit: the sprite's bottom-right corner lands
+ *     exactly on the display's bottom-right corner (127, 127), with no
+ *     clipping at all. Exercises the byte-aligned fast path
+ *     (HAL_oled_blit_byte()) writing all the way to the true edge on both
+ *     axes simultaneously.
+ *
+ *   fganim(2), no fgmask: checker.png at (97, 96) -- x=97 is NOT
+ *     byte-aligned, and 97 + 32 - 1 = 128 is one column past the right
+ *     edge, so this is clipped mid-row at x=127 (generic per-run clip
+ *     path, not the fast path) while running the full, unclipped height
+ *     to y=127. Drawn after fganim(1) (draw_animation_stack() walks
+ *     animation slots in index order), so it overwrites fganim(1) across
+ *     x=[97,127] -- the final rendered x=127 column and y=127 row (for
+ *     x>=97) come from this placement's generic clipped path, not the
+ *     fast path, giving edge coverage for both draw paths. Column x=96
+ *     (fganim(1) only, untouched by this overlay) remains a
+ *     fast-path-only data point down to y=127.
+ *
+ * Expected values (checker.png(lx,ly) = 255 if (lx+ly) odd else 0):
+ *   - fganim(1) corner (127,127): local (31,31) relative to (96,96) --
+ *     sum 62, even -> 0 (black) -- but overwritten by fganim(2), see
+ *     below.
+ *   - Final (127,127): fganim(2)'s value, local (30,31) relative to
+ *     (97,96) -- sum 61, odd -> 255 (white). A white pixel at the exact
+ *     bottom-right corner of an otherwise-black-background display is
+ *     unambiguous positive evidence the corner was actually drawn (a
+ *     rendering bug that silently failed to reach x=127/y=127 would leave
+ *     it at the background color, 0 -- which a black checker pixel could
+ *     otherwise be mistaken for).
+ *   - Final x=96 column (fganim(1) only), y=96..127: local_y = y-96,
+ *     alternates 0/255 starting 0 at y=96; y=127 (local 31, odd) -> 255.
+ *   - Final x=127 column, y=96..127: fganim(2) starts at x=97, covering
+ *     x=97..127, so x=127 is covered by fganim(2) for all y): local_x=30
+ *     (constant) relative to (97,96), local_y = y-96 (0..31); value = 255
+ *     when local_y is odd (30 is even, so sum parity == local_y parity).
+ *   - Final y=127 row, x=97..127 (fganim(2)): local_y=31 (constant, odd);
+ *     local_x = x-97; value = 255 when (local_x+31) is odd, i.e. when
+ *     local_x is even, i.e. when x-97 is even. x=97 (local_x=0, even) ->
+ *     255; alternates from there; x=127 (local_x=30, even) -> 255,
+ *     matching the corner value above.
+ *
+ * How to reproduce the compiled fixture (edge_coverage.gqgame):
+ *
+ *   From the gamequeer repo root, using the builder container:
+ *     docker run --rm -v $(pwd):/workspaces/gamequeer --workdir /workspaces/gamequeer \
+ *         --user $(id -u):$(id -g) gamequeer-builder:latest \
+ *         /bin/bash -c "cd gamequeer/tests/golden && PYTHONPATH=/workspaces/gamequeer/gqc/src \
+ *             python -m gqc compile --no-mem-map -o . edge_coverage.gq"
+ *
+ *   Or via the Makefile target:
+ *     make golden-fixture
+ */
+
+game {
+    id = 1;
+    title := "EdgeCov";
+    author := "test";
+    starting_stage = edge_test;
+}
+
+animations {
+    fgsprite1 <- "checker.png" {
+        w = 32;
+        h = 32;
+    }
+
+    fgsprite2 <- "checker.png" {
+        w = 32;
+        h = 32;
+    }
+}
+
+stage edge_test {
+    event enter {
+        GQI_FGANIM1_X = 96;
+        GQI_FGANIM1_Y = 96;
+        play fganim(1) fgsprite1;
+
+        GQI_FGANIM2_X = 97;
+        GQI_FGANIM2_Y = 96;
+        play fganim(2) fgsprite2;
+    }
+}

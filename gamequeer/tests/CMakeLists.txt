@@ -228,6 +228,20 @@ add_golden_test(golden_framebuffer_anim_advance_frame1 anim_advance
 add_golden_test(golden_framebuffer_anim_advance_frame2 anim_advance
     TICKS 43 GOLDEN_SUFFIX anim_advance_frame2)
 
+# ---- golden_framebuffer_edge_coverage: true-display-edge oracle coverage
+# gamequeer#297 fixed the emulator canvas (OLED_HORIZONTAL_MAX/
+# OLED_VERTICAL_MAX) from 127x127 to 128x128, matching the badge's real
+# LCD_X_SIZE/LCD_Y_SIZE -- prior to that fix, x=127 and y=127 could never
+# be stored in frame_buffer or golden-tested at all. This fixture
+# deliberately draws content all the way to the display's true
+# bottom-right corner (both the byte-aligned fast path and the generic
+# clipped path) so the golden suite has dedicated, hand-verifiable
+# coverage of the extreme edge, not just incidental reach from other
+# fixtures' clip placements. See edge_coverage.gq's header comment for the
+# full expected-pixel derivation.
+
+add_golden_test(golden_framebuffer_edge_coverage edge_coverage)
+
 # ---- perf_draw_count_cross_check: GQ_PERF_INSTRUMENT-only ----------------
 # Only registered when this build is ALSO configured with
 # -DGQ_PERF_INSTRUMENT=ON (a plain -DGQ_HEADLESS=ON build has no --perf-dump
