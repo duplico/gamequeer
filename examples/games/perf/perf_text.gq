@@ -1,0 +1,182 @@
+/*
+ * perf_text.gq -- label/text-rendering regression-content cart.
+ *
+ * Exercises the label path (draw_label_stack() -> Graphics_drawString() in
+ * gamequeer.c/grlib) ahead of the Stage 2 render rework (epic
+ * duplico/qc2024#47, which rewrites grlib's text/menu rendering onto a
+ * row-major pixel driver). Content authored NOW captures today's correct
+ * rendering, so a future Stage-2 golden can assert pixel-for-pixel parity --
+ * the same discipline that protected Stage 1's image/mask path (see
+ * gamequeer/tests/golden/mask_encoding_{a,b}.gq).
+ *
+ * Three stages, navigated with A/B (see the emulator --input scripts noted
+ * in the PR description):
+ *
+ *   start   -- the four label slots (GQI_LABEL{1..4}_{X,Y}, GQS_LABEL{1..4})
+ *              exercised together:
+ *                label1 top-left corner (0,0), 21 chars (the max usable
+ *                  length: GQ_STR_SIZE-1), both label-flags bits set
+ *                  (color-inverted + opaque background).
+ *                label2 mid-screen, built from `str(x)` int-cast +
+ *                  string concatenation of a literal, a persistent str var,
+ *                  and a volatile int -- opaque background only.
+ *                label3 positioned so a *full 21-char* string runs well past
+ *                  the right and bottom edges of the display (x=100,y=120:
+ *                  100+21*6=226 >> 127) -- the single highest-value
+ *                  regression case for a row-major rewrite, since off-canvas
+ *                  clipping is exactly the kind of per-pixel bounds logic
+ *                  that a column-major -> row-major driver rewrite is most
+ *                  likely to get subtly wrong. Color-inverted only.
+ *                label4 bottom-left corner (0,120), a negative `str(x)` cast
+ *                  concatenated with a literal -- default (transparent,
+ *                  non-inverted) flags.
+ *              input(A) increments the volatile score and re-renders label2
+ *                (proves the str(x)+concat label updates, not just static
+ *                text). input(B) moves to `glyphs1`.
+ *
+ *   glyphs1 -- full printable-ASCII glyph-coverage sweep, part 1: labels 1-4
+ *              each carry a 21-char consecutive slice of the font's glyph
+ *              range (0x20 ' ' .. 0x7E '~', 95 glyphs), covering all of it
+ *              except '"' (0x22) and '\' (0x5C) -- both awkward to author
+ *              literally inside a `"`-quoted .gq string literal (the
+ *              grammar's plain string token has no escape handling; see
+ *              grammar.py's `string_literal`), so this is an *authoring*
+ *              gap, not a font gap. input(A) moves to `glyphs2` (the
+ *              remaining 9 glyphs); input(B) returns to `start`.
+ *
+ *   glyphs2 -- the tail of the glyph sweep ('v'..'~', 9 chars) in label1.
+ *              input(A) returns to `glyphs1`; input(B) returns to `start`.
+ *
+ * Emulator-confirmed (headless --dump, this PR's report): all three stages
+ * render as expected, including label3's off-canvas clipping and the
+ * str(x)/concatenation content in label2/label4.
+ */
+
+game {
+    id = 104;
+    title := "PerfText";
+    author := "perf";
+    starting_stage = start;
+}
+
+persistent {
+    str player_name := "Ada";
+}
+
+volatile {
+    int score = 0;
+    str score_str := "";
+    str neg_str := "";
+}
+
+stage start {
+    event enter {
+        // label1: top-left corner, max-length (21 char) string, both flag
+        // bits set (color-inverted + opaque background).
+        GQI_LABEL1_X = 0;
+        GQI_LABEL1_Y = 0;
+        GQS_LABEL1 := "TopLeft(0,0) 21chars!";
+
+        // label2: str(int) cast + concatenation of a literal, a persistent
+        // str var, and a volatile int -- updated again on input(A) below.
+        // NB: the grammar only allows `str(x)` as the *entire* RHS of a
+        // `:=` (string_cast is a top-level alternative to string_expression,
+        // not composable inside a `+` chain -- see grammar.py's
+        // string_assignment) -- so the cast has to land in an intermediate
+        // str var (score_str) before it can be concatenated.
+        GQI_LABEL2_X = 30;
+        GQI_LABEL2_Y = 60;
+        score_str := str(score);
+        GQS_LABEL2 := "Hi " + player_name + " score=" + score_str;
+
+        // label3: full 21-char string positioned to run well past the
+        // right and bottom edges -- the highest-value clipping regression
+        // case for a row-major rewrite. Opaque + color-inverted (white
+        // filled background, black text): with the canvas black underneath,
+        // a *non*-opaque color-inverted label here would draw black text on
+        // an untouched black background and be invisible (found while
+        // authoring this fixture) -- opaque makes both the background fill
+        // clip *and* the text clip visible and assertable.
+        GQI_LABEL3_X = 100;
+        GQI_LABEL3_Y = 120;
+        GQS_LABEL3 := "EdgeRightBottom21chr!";
+
+        // label4: negative str(int) cast + concatenation, bottom-left
+        // corner, default (transparent, non-inverted) flags.
+        GQI_LABEL4_X = 0;
+        GQI_LABEL4_Y = 120;
+        neg_str := str(-12345);
+        GQS_LABEL4 := neg_str + "end";
+
+        // Flags: label1 = color-invert(bit0) + opaque(bit1); label2 =
+        // opaque(bit1) only; label3 = color-invert(bit0) + opaque(bit1);
+        // label4 = (unset) transparent, non-inverted.
+        // NB: written as a precomputed literal, not a chained `<<`/`|`
+        // expression (found while authoring this fixture: a 5-term chain of
+        // shift/or operators exhausts the compiler's 4-register int-operand
+        // pool -- "No free registers available" -- see IntExpression in
+        // gqc/src/gqc/datamodel.py; a 2-3 term chain like label1's
+        // conceptual `(1 << 0) | (1 << 1)` is fine).
+        // = (1<<0) | (1<<1) | (1<<9) | (1<<16) | (1<<17)
+        GQI_LABEL_FLAGS = 197123;
+    }
+
+    event input(A) {
+        score = score + 1;
+        score_str := str(score);
+        GQS_LABEL2 := "Hi " + player_name + " score=" + score_str;
+    }
+
+    event input(B) {
+        gostage glyphs1;
+    }
+}
+
+stage glyphs1 {
+    event enter {
+        GQI_LABEL_FLAGS = 0;
+
+        GQI_LABEL1_X = 0;
+        GQI_LABEL1_Y = 0;
+        GQS_LABEL1 := " !#$%&'()*+,-./012345";
+
+        GQI_LABEL2_X = 0;
+        GQI_LABEL2_Y = 10;
+        GQS_LABEL2 := "6789:;<=>?@ABCDEFGHIJ";
+
+        GQI_LABEL3_X = 0;
+        GQI_LABEL3_Y = 20;
+        GQS_LABEL3 := "KLMNOPQRSTUVWXYZ[]^_`";
+
+        GQI_LABEL4_X = 0;
+        GQI_LABEL4_Y = 30;
+        GQS_LABEL4 := "abcdefghijklmnopqrstu";
+    }
+
+    event input(A) {
+        gostage glyphs2;
+    }
+
+    event input(B) {
+        gostage start;
+    }
+}
+
+stage glyphs2 {
+    event enter {
+        GQI_LABEL1_X = 0;
+        GQI_LABEL1_Y = 0;
+        GQS_LABEL1 := "vwxyz{|}~";
+        GQS_LABEL2 := "";
+        GQS_LABEL3 := "";
+        GQS_LABEL4 := "";
+    }
+
+    event input(A) {
+        gostage glyphs1;
+    }
+
+    event input(B) {
+        gostage start;
+    }
+}

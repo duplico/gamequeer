@@ -1,20 +1,27 @@
 /*
- * perf_mask.gq -- masked-rendering perf test cart.
+ * perf_mask.gq -- masked-rendering perf test cart (animated).
  *
  * Exercises the masked foreground blit path (gq_draw_image_with_mask) across
  * a full 128x128 screen, so hardware profiling can measure masked-rendering
  * cost. No "wild" game uses masks, so this is the first cart that drives that
  * path at full-screen scale (epic duplico/qc2024#45).
  *
- * A full-screen solid-circle sprite (RLE7-encoded) is drawn through a
- * horizontal-band mask (RLE7-encoded): only the banded rows of the sprite are
- * composited, the rest shows background. Both anim and mask are single static
- * frames, drawn once from `enter` -- identical structure to the committed
- * mask_encoding_{a,b}.gq golden fixtures, just scaled to the whole display.
+ * A pulsing full-screen solid-circle sprite (RLE7-encoded, 6 frames) is drawn
+ * through a marching horizontal-band mask (RLE7-encoded, 6 frames, same
+ * frame count/timing as the sprite so they stay paired -- see
+ * gen_perf_assets.py's header comment on why mismatched frame counts would
+ * silently fall back to an unmasked draw). Only the banded rows of the
+ * sprite are composited each frame; the rest shows background.
  *
- * Confirmed frame encodings (from map.txt .frame section):
- *   perf_fg_circle.png -> IMAGE_FMT_1BPP_COMP_RLE7
- *   perf_mask_bands.png -> IMAGE_FMT_1BPP_COMP_RLE7
+ * Unlike a single static frame (which draws once on `enter` and then idles,
+ * giving nothing to perf-measure), this animates: `fgdone(1)` fires when the
+ * sprite's 6-frame cycle completes and immediately replays both fganim(1)
+ * and fgmask(1), so the masked-blit path re-runs on every frame advance for
+ * as long as the cart is left running -- perf-usable.
+ *
+ * Confirmed frame encodings (from map.txt .frame section): every frame of
+ * both fg and mask -> IMAGE_FMT_1BPP_COMP_RLE7. Confirmed multi-frame
+ * advance in the headless emulator (see PR description / report).
  */
 
 game {
@@ -25,8 +32,14 @@ game {
 }
 
 animations {
-    fg   <- "perf_fg_circle.png";
-    mask <- "perf_mask_bands.png";
+    fg <- "perf_mask_fg.gif" {
+        frame_rate = 5;
+        dithering := "none";
+    }
+    mask <- "perf_mask_mask.gif" {
+        frame_rate = 5;
+        dithering := "none";
+    }
 }
 
 stage start {
@@ -35,6 +48,11 @@ stage start {
         GQI_FGANIM1_Y = 0;
         GQI_FGMASK1_X = 0;
         GQI_FGMASK1_Y = 0;
+        play fganim(1) fg;
+        play fgmask(1) mask;
+    }
+
+    event fgdone(1) {
         play fganim(1) fg;
         play fgmask(1) mask;
     }

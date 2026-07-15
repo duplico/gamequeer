@@ -1,0 +1,48 @@
+/*
+ * perf_menu_text.gq -- text-entry menu rendering regression-content cart.
+ *
+ * Exercises the text-entry menu path (draw_menu_text() in menu.c) ahead of
+ * the Stage 2 render rework (epic duplico/qc2024#47, which touches menu
+ * chrome as well as text). This path is near-zero-covered today -- no
+ * committed golden fixture opens a text-entry menu at all.
+ *
+ * `textmenu` binds this stage's menu as text entry (the special
+ * GQ_PTR_BUILTIN_MENU_FLAGS sentinel pointer -- see load_stage() /
+ * datamodel.py's Stage.to_bytes()), which menu_text_load() (menu.c) seeds
+ * with a single 'A' at position 0. All navigation below happens through the
+ * *internal* menu input hijack in handle_events()/handle_event_menu_text()
+ * (menu.c) -- entirely outside this stage's own `event input(...)` handlers
+ * (bypassed while a text-entry menu is active) -- exercising:
+ *   input(R)/(L)  -- cycle the character at the cursor through its symbol
+ *                    class (A-Z / a-z / 0-9 / space+specials)
+ *   input(B)      -- change symbol class (CAPS -> lower -> NUM -> SPECIAL)
+ *   input(CLICK)  -- toggle between per-character edit mode and
+ *                    cursor-position select mode (draws a different cursor
+ *                    hint -- up/down arrows vs left/right)
+ *   input(A)      -- confirm, closing the menu and writing the finished
+ *                    string into GQS_TEXTMENU_RESULT
+ * On confirm, `event menu` fires; label1 is updated from
+ * GQS_TEXTMENU_RESULT, proving the menu-close -> label redraw sequence.
+ *
+ * Emulator-confirmed (headless --dump + scripted --input, this PR's
+ * report): pristine text-entry screen (prompt, single seeded char, cursor
+ * box, mode hints), mid-navigation state (position-select mode, cursor
+ * moved), and confirm -> label1 shows the entered text.
+ */
+
+game {
+    id = 106;
+    title := "PerfMenuT";
+    author := "perf";
+    starting_stage = start;
+}
+
+stage start {
+    textmenu prompt "Enter your name:";
+
+    event menu {
+        GQI_LABEL1_X = 0;
+        GQI_LABEL1_Y = 0;
+        GQS_LABEL1 := "You entered: " + GQS_TEXTMENU_RESULT;
+    }
+}
