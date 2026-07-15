@@ -19,6 +19,13 @@
  * before/after .map for a non-instrumented build (see the PR body for the
  * comparison).
  *
+ * NOTE: a SECOND, separate flag, GQ_PERF_INSTRUMENT_RUNS, gates only the
+ * two per-RUN sections (5 DRAW_DECODE, 6 DRAW_WRITE) independently of
+ * GQ_PERF_INSTRUMENT's other five per-draw/per-tick sections -- see that
+ * flag's own doc block further down for why (measurement-methodology tool:
+ * isolates per-run instrumentation overhead from the outer sections it
+ * would otherwise contaminate).
+ *
  * Defined: adds a small RAM stats struct (gq_perf_stats, currently 120 B --
  * an 8 B header plus 7 sections * 16 B each; see layout below) with
  * per-section count / accumulated-duration / min / max, in microseconds,
@@ -315,11 +322,77 @@ void gq_perf_record(gq_perf_section_id_t sec, gq_perf_time_t duration_us);
 #define GQ_PERF_ENTER(SEC) gq_perf_time_t _gq_perf_t0_##SEC = HAL_perf_now()
 #define GQ_PERF_EXIT(SEC)  gq_perf_record(GQ_PERF_SEC_##SEC, (gq_perf_time_t) (HAL_perf_now() - _gq_perf_t0_##SEC))
 
+/* -------------------------------------------------------------------------
+ * GQ_PERF_INSTRUMENT_RUNS -- opt-in, SEPARATE from GQ_PERF_INSTRUMENT.
+ * -------------------------------------------------------------------------
+ * Gates ONLY the per-RUN DRAW_DECODE (5) / DRAW_WRITE (6) ENTER/EXIT pairs
+ * in oled.c's gq_draw_image()/gq_draw_image_with_mask() run loops, via the
+ * GQ_PERF_ENTER_RUNS/GQ_PERF_EXIT_RUNS macros below. It exists to answer a
+ * measurement-methodology question that GQ_PERF_INSTRUMENT alone can't: how
+ * much overhead do those two HAL_perf_now() calls per RLE run add, and do
+ * they contaminate the ENCLOSING per-draw sections (0 DRAW_OLED_STACK, 1
+ * DRAW_ANIMATION_STACK)? On real hardware the run loop fires ~10-100x per
+ * tick and DRAW_DECODE/DRAW_WRITE can fire hundreds of thousands to
+ * millions of times over a measurement window (see the perf-investigation
+ * hardware notes), so their entry/exit overhead -- while individually tiny
+ * -- is large in aggregate and sits entirely inside sections 0/1's timed
+ * interval.
+ *
+ * This flag does NOT change gq_perf_stats's layout: it is still 8 B header
+ * + 7 * 16 B sections = 120 B either way (GQ_PERF_SECTION_LIST is
+ * unconditional -- see above), so a raw-memory SBW reader's byte-offset
+ * math is unaffected by whether this flag is set. When
+ * GQ_PERF_INSTRUMENT_RUNS is NOT defined, sections 5/6 simply never get a
+ * GQ_PERF_ENTER/EXIT call and stay all-zero (count/total_us/min_us/max_us
+ * == 0) for the life of the run -- easily distinguished in a dump from "ran
+ * but recorded nothing".
+ *
+ * Meaningless (and silently a no-op, not an error) unless
+ * GQ_PERF_INSTRUMENT is also defined: GQ_PERF_ENTER_RUNS/_EXIT_RUNS are
+ * defined below, inside the `#ifdef GQ_PERF_INSTRUMENT` block, precisely so
+ * that "RUNS but not INSTRUMENT" degrades to the same zero-cost no-op as
+ * plain "neither defined", rather than needing its own separate guard at
+ * every call site in oled.c.
+ *
+ * Two independent measurement configurations this enables, matching the
+ * build system's two flags:
+ *   GQ_PERF_INSTRUMENT only          -- sections 0-4 active, 5/6 compiled
+ *                                       out of the run loop entirely (no
+ *                                       HAL_perf_now() calls at all in the
+ *                                       hot loop). CLEAN draw_oled_stack /
+ *                                       draw_animation_stack timings, free
+ *                                       of per-run instrumentation
+ *                                       overhead.
+ *   GQ_PERF_INSTRUMENT +
+ *   GQ_PERF_INSTRUMENT_RUNS          -- all 7 sections active (today's
+ *                                       behavior prior to this flag's
+ *                                       introduction). Comparing this
+ *                                       configuration's sections 0/1
+ *                                       against the RUNS-off configuration's
+ *                                       sections 0/1, on the same fixture,
+ *                                       quantifies the per-run
+ *                                       instrumentation's contamination of
+ *                                       the enclosing per-draw timings.
+ * ---------------------------------------------------------------------- */
+
+#ifdef GQ_PERF_INSTRUMENT_RUNS
+#define GQ_PERF_ENTER_RUNS(SEC) GQ_PERF_ENTER(SEC)
+#define GQ_PERF_EXIT_RUNS(SEC)  GQ_PERF_EXIT(SEC)
+#else /* !GQ_PERF_INSTRUMENT_RUNS */
+#define GQ_PERF_ENTER_RUNS(SEC) ((void) 0)
+#define GQ_PERF_EXIT_RUNS(SEC)  ((void) 0)
+#endif /* GQ_PERF_INSTRUMENT_RUNS */
+
 #else /* !GQ_PERF_INSTRUMENT */
 
 /* Zero-cost: no declarations, no symbols, no stack slots. */
-#define GQ_PERF_ENTER(SEC) ((void) 0)
-#define GQ_PERF_EXIT(SEC)  ((void) 0)
+#define GQ_PERF_ENTER(SEC)      ((void) 0)
+#define GQ_PERF_EXIT(SEC)       ((void) 0)
+
+/* Same zero-cost no-op regardless of GQ_PERF_INSTRUMENT_RUNS: that flag is
+ * only meaningful nested inside GQ_PERF_INSTRUMENT (see above). */
+#define GQ_PERF_ENTER_RUNS(SEC) ((void) 0)
+#define GQ_PERF_EXIT_RUNS(SEC)  ((void) 0)
 
 #endif /* GQ_PERF_INSTRUMENT */
 

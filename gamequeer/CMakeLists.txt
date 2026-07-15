@@ -27,6 +27,19 @@ option(GQ_HEADLESS "Build without X11 display (headless mode)" OFF)
 # gq_perf.h for why that matters for the zero-cost claim.
 option(GQ_PERF_INSTRUMENT "Build with GQ_PERF_INSTRUMENT performance stats (see include/gq_perf.h)" OFF)
 
+# Measurement-methodology option: gates ONLY the per-run DRAW_DECODE/
+# DRAW_WRITE sections (5/6) inside oled.c's run loops, independently of
+# GQ_PERF_INSTRUMENT's other five per-draw/per-tick sections -- see
+# GQ_PERF_INSTRUMENT_RUNS's doc block in include/gq_perf.h. Meaningless (and
+# silently a no-op) unless GQ_PERF_INSTRUMENT is also ON -- warn rather than
+# error, since a no-op is harmless and matches gq_perf.h's own degrade
+# behavior.
+option(GQ_PERF_INSTRUMENT_RUNS "Also instrument the per-run DRAW_DECODE/DRAW_WRITE sections (requires GQ_PERF_INSTRUMENT; see include/gq_perf.h)" OFF)
+
+if(GQ_PERF_INSTRUMENT_RUNS AND NOT GQ_PERF_INSTRUMENT)
+    message(WARNING "GQ_PERF_INSTRUMENT_RUNS=ON has no effect without GQ_PERF_INSTRUMENT=ON")
+endif()
+
 if(GQ_HEADLESS)
     message(STATUS "GQ_HEADLESS=ON: building without X11")
     set(GFX_SOURCE src/gfx/gfx_headless.c)
@@ -80,6 +93,11 @@ if(GQ_PERF_INSTRUMENT)
     message(STATUS "GQ_PERF_INSTRUMENT=ON: building with performance instrumentation (see include/gq_perf.h)")
     target_sources(${PROJECT_NAME} PRIVATE src/gq_perf.c)
     target_compile_definitions(${PROJECT_NAME} PRIVATE GQ_PERF_INSTRUMENT)
+
+    if(GQ_PERF_INSTRUMENT_RUNS)
+        message(STATUS "GQ_PERF_INSTRUMENT_RUNS=ON: also instrumenting per-run DRAW_DECODE/DRAW_WRITE sections")
+        target_compile_definitions(${PROJECT_NAME} PRIVATE GQ_PERF_INSTRUMENT_RUNS)
+    endif()
 endif()
 
 # Link math:
