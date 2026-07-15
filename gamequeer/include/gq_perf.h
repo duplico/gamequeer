@@ -100,6 +100,16 @@
  * correctness issue: failure paths are rare (cart read failure) and are
  * not the hot path this instrumentation targets.
  *
+ * NOTE (implausible-sample clamp): gq_perf_record() drops, rather than
+ * clamps the value of, any single duration_us sample exceeding
+ * GQ_PERF_MAX_PLAUSIBLE_US (defined just above gq_perf_time_t below) --
+ * count/total_us/min_us/max_us are all left untouched for that call, same
+ * as the early-return-failure-path case just above. This guards against a
+ * garbage HAL_perf_now() delta (root-caused to a firmware timing-source
+ * race, fixed separately) silently poisoning total_us/max_us with a
+ * ~2^32 us outlier; the resulting under-report of that one call is the same
+ * accepted limitation as the failure-path case, not a correctness issue.
+ *
  * -------------------------------------------------------------------------
  * Struct layout (GQ_PERF_INSTRUMENT defined):
  * -------------------------------------------------------------------------
@@ -280,6 +290,18 @@ typedef enum {
 /* Microseconds; see the timer-width design note above for why uint32_t. */
 typedef uint32_t gq_perf_time_t;
 
+/* Plausibility ceiling for a single gq_perf_record() sample, in
+ * microseconds. Defense-in-depth against a garbage HAL_perf_now() delta
+ * (e.g. a firmware timing-source race producing a near-2^32 us reading,
+ * ~4.2e9 us) silently poisoning a section's total_us/max_us forever -- see
+ * gq_perf_record()'s comment for how samples above this ceiling are
+ * handled. 1 second is ~20x the largest plausible *real* interval (a
+ * HANDLE_EVENTS section containing a full DRAW_OLED_STACK pass with a
+ * masked-sprite redraw, per the ~50 ms upper end in the timer-width note
+ * above) and ~4000x below a garbage ~2^32 us reading, leaving a wide,
+ * unambiguous margin between the two. */
+#define GQ_PERF_MAX_PLAUSIBLE_US 1000000u
+
 typedef struct {
     uint32_t count;
     uint32_t total_us;
@@ -311,7 +333,13 @@ gq_perf_time_t HAL_perf_now(void);
  * wrap on an extremely long-running instrumented session (e.g. billions of
  * microseconds -- over an hour of continuous max-rate section entries);
  * this is a development/measurement build, not a production counter, so
- * that is treated as an accepted limitation rather than guarded against. */
+ * that is treated as an accepted limitation rather than guarded against.
+ *
+ * duration_us above GQ_PERF_MAX_PLAUSIBLE_US is dropped, not clamped: the
+ * sample is discarded and count/total_us/min_us/max_us are all left
+ * unchanged, rather than folding an implausible value into the
+ * accumulators at the ceiling. See the implausible-sample-clamp NOTE above
+ * for the rationale and threshold. */
 void gq_perf_record(gq_perf_section_id_t sec, gq_perf_time_t duration_us);
 
 /* GQ_PERF_ENTER(SEC)/GQ_PERF_EXIT(SEC) must appear as a matched pair in the
