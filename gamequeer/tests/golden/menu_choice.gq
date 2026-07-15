@@ -1,0 +1,89 @@
+/*
+ * menu_choice.gq — Golden-test fixture pre-authoring pixel-identity
+ * baseline for the choice-menu render path (draw_menu_choice(), menu.c)
+ * ahead of the Stage 2 render rework (epic duplico/qc2024#47, which
+ * touches menu chrome as well as text). This path is near-zero-covered by
+ * existing golden fixtures -- none opens a menu at all before this one.
+ *
+ * Adapted from examples/games/perf/perf_menu_choice.gq
+ * (duplico/gamequeer#298), which documents the full authoring rationale
+ * (see gqc/docs/authoring-and-perf-carts.md §3) -- this fixture keeps the
+ * same content, re-headered for the golden-test convention.
+ *
+ * Six options (GQ_MENU_MAX_OPTIONS, the max allowed) with a prompt, so both
+ * the option-count boundary and the vertical layout (prompt + 6 rows) are
+ * exercised. Option labels deliberately vary in length: a 1-char label, a
+ * few normal ones, and a full 21-char (max) label positioned to run off the
+ * right edge of the display (menu.c draws option labels starting at x=15,
+ * so 15 + 21*6 = 141 >> 128) -- the same off-canvas-clipping regression
+ * shape as label_text.gq's label3, but inside menu chrome instead of a
+ * plain label.
+ *
+ * Navigation exercises the *internal* menu input hijack in
+ * handle_events()/handle_event_menu_choice() (menu.c) -- input(L)/input(R)
+ * move the selection cursor, input(A) confirms -- entirely outside this
+ * stage's own `event input(...)` handlers (bypassed while a choice menu is
+ * active; only input(A)/(L)/(R) are hijacked). On confirm, `event menu`
+ * fires with GQI_MENU_VALUE set to the selected option's value; label1 is
+ * updated to show it, proving the menu-close -> label redraw sequence too.
+ *
+ * Two ctest cases share this one compiled cart (see tests/CMakeLists.txt):
+ *   golden_framebuffer_menu_choice_pristine  (TICKS=1) -- initial menu
+ *     render: prompt, all 6 options including the edge-clipped one, cursor
+ *     arrow on option 1, hint bar/icons.
+ *   golden_framebuffer_menu_choice_confirmed (TICKS=3, INPUT=R,R,A) --
+ *     navigate down twice (to option 3, "A Normal Option") then confirm;
+ *     the menu closes and label1 reads "Selected: 3". Internal menu-button
+ *     handling (no `gostage`) applies within the same tick it's polled, so
+ *     TICKS=3 for 3 scripted button presses (unlike a `gostage`-driven
+ *     stage transition, which needs one extra tick per hop -- see
+ *     label_text.gq).
+ *
+ * Emulator-confirmed (headless --dump + scripted --input): both captures
+ * render exactly as expected -- see the PR body for the validation
+ * transcript.
+ *
+ * How to reproduce the compiled fixture (menu_choice.gqgame):
+ *
+ *   From the gamequeer repo root, using the builder container:
+ *     docker run --rm -v $(pwd):/workspaces/gamequeer --workdir /workspaces/gamequeer \
+ *         --user $(id -u):$(id -g) gamequeer-builder:latest \
+ *         /bin/bash -c "PYTHONPATH=gqc/src python -m gqc compile --no-mem-map \
+ *             -o gamequeer/tests/golden gamequeer/tests/golden/menu_choice.gq"
+ *
+ *   Or via the Makefile target:
+ *     make golden-fixture
+ */
+
+game {
+    id = 1;
+    title := "MenuChoice";
+    author := "test";
+    starting_stage = start;
+}
+
+volatile {
+    str sel_str := "";
+}
+
+menus {
+    choices {
+        1: "1";
+        2: "Short";
+        3: "A Normal Option";
+        4: "EdgeRight21charsLong!";
+        5: "Another One";
+        6: "Last Option Six";
+    }
+}
+
+stage start {
+    menu choices prompt "Pick one:";
+
+    event menu {
+        GQI_LABEL1_X = 0;
+        GQI_LABEL1_Y = 0;
+        sel_str := str(GQI_MENU_VALUE);
+        GQS_LABEL1 := "Selected: " + sel_str;
+    }
+}

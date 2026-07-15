@@ -32,8 +32,13 @@ set(GOLDEN_TICKS 5)
 #                   PGM (same GOLDEN_SUFFIX, different TICKS) to assert
 #                   byte-identical output at two different tick counts --
 #                   e.g. "many ticks of no-op writes changed nothing".
+#   INPUT         — (optional) filename, relative to GOLDEN_DIR, of a
+#                   scripted button-input file (one of A/B/L/R/CLICK per
+#                   line; see HAL.c's HAL_input_load()) replayed one event
+#                   per tick via --input. Omit for fixtures that don't need
+#                   scripted navigation.
 function(add_golden_test NAME FIXTURE)
-    cmake_parse_arguments(GT "" "TICKS;GOLDEN_SUFFIX" "" ${ARGN})
+    cmake_parse_arguments(GT "" "TICKS;GOLDEN_SUFFIX;INPUT" "" ${ARGN})
     if(NOT GT_TICKS)
         set(GT_TICKS ${GOLDEN_TICKS})
     endif()
@@ -45,6 +50,15 @@ function(add_golden_test NAME FIXTURE)
     set(golden_pgm   "${GOLDEN_DIR}/${GT_GOLDEN_SUFFIX}_golden.pgm")
     set(actual_pgm   "${CMAKE_CURRENT_BINARY_DIR}/${NAME}_actual.pgm")
 
+    if(GT_INPUT)
+        set(input_script "${GOLDEN_DIR}/${GT_INPUT}")
+        set(_test_input_arg -DINPUT=${input_script})
+        set(_regen_input_arg --input "${input_script}")
+    else()
+        set(_test_input_arg "")
+        set(_regen_input_arg "")
+    endif()
+
     add_test(
         NAME ${NAME}
         COMMAND
@@ -54,6 +68,7 @@ function(add_golden_test NAME FIXTURE)
             -DACTUAL=${actual_pgm}
             -DGOLDEN=${golden_pgm}
             -DTICKS=${GT_TICKS}
+            ${_test_input_arg}
             -P "${CMAKE_CURRENT_SOURCE_DIR}/run_golden_test.cmake"
     )
 
@@ -73,6 +88,7 @@ function(add_golden_test NAME FIXTURE)
             COMMAND
                 $<TARGET_FILE:gamequeer>
                 --ticks ${GT_TICKS}
+                ${_regen_input_arg}
                 --dump  "${golden_pgm}"
                 "${fixture_cart}"
             DEPENDS gamequeer
@@ -241,6 +257,56 @@ add_golden_test(golden_framebuffer_anim_advance_frame2 anim_advance
 # full expected-pixel derivation.
 
 add_golden_test(golden_framebuffer_edge_coverage edge_coverage)
+
+# ---- golden_framebuffer_label_text_{start,start_scored,glyphs1,glyphs2}:
+# label/text render-path (draw_label_stack() -> Graphics_drawString(),
+# gamequeer.c/grlib) pixel-identity baseline, authored ahead of the Stage 2
+# render rework (duplico/qc2024#47, grlib row-major rewrite) so Stage 2 can
+# be asserted pixel-for-pixel identical to today's known-correct rendering.
+# No prior golden fixture exercises the label path at all. See
+# label_text.gq's header comment for the full per-stage content derivation
+# and why `start_scored`/`glyphs1`/`glyphs2` need the TICKS they do (a
+# `gostage` inside a later-processed event handler defers the new stage's
+# `enter` code to the *next* tick -- see gqc/docs/authoring-and-perf-carts.md
+# §3's "Driving menu navigation headlessly").
+
+add_golden_test(golden_framebuffer_label_text_start label_text
+    TICKS 1 GOLDEN_SUFFIX label_text_start)
+add_golden_test(golden_framebuffer_label_text_start_scored label_text
+    TICKS 3 INPUT label_text_score_bump.txt GOLDEN_SUFFIX label_text_start_scored)
+add_golden_test(golden_framebuffer_label_text_glyphs1 label_text
+    TICKS 2 INPUT label_text_to_glyphs1.txt GOLDEN_SUFFIX label_text_glyphs1)
+add_golden_test(golden_framebuffer_label_text_glyphs2 label_text
+    TICKS 3 INPUT label_text_to_glyphs2.txt GOLDEN_SUFFIX label_text_glyphs2)
+
+# ---- golden_framebuffer_menu_choice_{pristine,confirmed}: choice-menu
+# render path (draw_menu_choice(), menu.c) pixel-identity baseline, same
+# Stage-2 motivation as label_text.gq above. No prior golden fixture opens
+# a menu at all. See menu_choice.gq's header comment for the full content
+# derivation; internal menu-button handling (no `gostage` involved) applies
+# within the same tick it's polled, so `confirmed`'s TICKS matches its
+# INPUT script's line count exactly (unlike label_text's gostage-driven
+# transitions).
+
+add_golden_test(golden_framebuffer_menu_choice_pristine menu_choice
+    TICKS 1 GOLDEN_SUFFIX menu_choice_pristine)
+add_golden_test(golden_framebuffer_menu_choice_confirmed menu_choice
+    TICKS 3 INPUT menu_choice_nav.txt GOLDEN_SUFFIX menu_choice_confirmed)
+
+# ---- golden_framebuffer_menu_text_{pristine,mid}: text-entry menu render
+# path (draw_menu_text(), menu.c) pixel-identity baseline, same Stage-2
+# motivation as label_text.gq above. No prior golden fixture opens a
+# text-entry menu at all. `mid` lands in position-select mode specifically
+# to cover the alternate cursor-hint icon set
+# (draw_hint_dial_leftright()/draw_hint_click_updown() vs the CHAR-mode
+# icons) -- see menu_text.gq's header comment for the full derivation and
+# why a `confirmed` golden isn't also wired here (menu_choice.gq's
+# `confirmed` already covers the menu-close -> label-redraw sequence).
+
+add_golden_test(golden_framebuffer_menu_text_pristine menu_text
+    TICKS 1 GOLDEN_SUFFIX menu_text_pristine)
+add_golden_test(golden_framebuffer_menu_text_mid menu_text
+    TICKS 4 INPUT menu_text_mid.txt GOLDEN_SUFFIX menu_text_mid)
 
 # ---- perf_draw_count_cross_check: GQ_PERF_INSTRUMENT-only ----------------
 # Only registered when this build is ALSO configured with
