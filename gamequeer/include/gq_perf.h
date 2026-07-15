@@ -19,18 +19,21 @@
  * before/after .map for a non-instrumented build (see the PR body for the
  * comparison).
  *
- * Defined: adds a small RAM stats struct (gq_perf_stats, currently 88 B --
- * an 8 B header plus 5 sections * 16 B each; see layout below) with
+ * Defined: adds a small RAM stats struct (gq_perf_stats, currently 120 B --
+ * an 8 B header plus 7 sections * 16 B each; see layout below) with
  * per-section count / accumulated-duration / min / max, in microseconds,
  * updated by GQ_PERF_ENTER(SECTION) / GQ_PERF_EXIT(SECTION) pairs placed
- * around hot-path code in gamequeer.c.
+ * around hot-path code in gamequeer.c and oled.c.
  *
  * Sections instrumented so far (see GQ_PERF_SECTION_LIST below to add
- * more):
- *   - DRAW_OLED_STACK      draw_oled_stack() total (clear + animations +
+ * more; indices below match GQ_PERF_SECTION_LIST's declaration order,
+ * which is also each section's position in gq_perf_stats.sections[] --
+ * see the struct layout note below for the byte-offset math a raw-memory
+ * reader needs):
+ *   0 DRAW_OLED_STACK      draw_oled_stack() total (clear + animations +
  *                          labels + menu + flush)
- *   - DRAW_ANIMATION_STACK draw_animation_stack() (subset of the above)
- *   - HANDLE_EVENTS        handle_events(): the full event-dispatch pass,
+ *   1 DRAW_ANIMATION_STACK draw_animation_stack() (subset of the above)
+ *   2 HANDLE_EVENTS        handle_events(): the full event-dispatch pass,
  *                          which includes any run_code() calls it triggers
  *                          and (if GQ_EVENT_REFRESH fires) the nested
  *                          DRAW_OLED_STACK section. This is the
@@ -39,20 +42,48 @@
  *                          because run_code() has no single entry/exit
  *                          point of its own outside of handle_events()'s
  *                          per-event dispatch loop.
- *   - SYSTEM_TICK          system_tick() total (animation/timer bookkeeping
+ *   3 SYSTEM_TICK          system_tick() total (animation/timer bookkeeping
  *                          + led_tick(), unless GQ_SUPPRESS_LED_TICK)
- *   - OLED_FLUSH           the Graphics_flushBuffer() call inside
+ *   4 OLED_FLUSH           the Graphics_flushBuffer() call inside
  *                          draw_oled_stack() -- see the flush-hook design
  *                          note further down for why this is measured at
  *                          the shared-code call site rather than via a new
  *                          HAL primitive.
+ *   5 DRAW_DECODE          issue #261's run-aware RLE decode: each call to
+ *                          gq_image_peek_run()/gq_image_advance_run() (the
+ *                          pair, together -- one section covers both) in
+ *                          oled.c's gq_draw_image()/gq_draw_image_with_mask()
+ *                          run loops. Includes any interleaved
+ *                          gq_image_load_byte() cart reads triggered by a
+ *                          run/buffer boundary. Per-RUN granularity, not
+ *                          per-pixel -- see the observer-effect note below.
+ *   6 DRAW_WRITE           issue #261's HAL_oled_fill_run() call, wrapped
+ *                          at the same per-run granularity as DRAW_DECODE.
+ *                          Only entered when a run actually reaches the
+ *                          framebuffer write (a fully clipped or fully
+ *                          transparent-masked run skips it, same as before
+ *                          this instrumentation existed) -- so DRAW_WRITE's
+ *                          count can be lower than DRAW_DECODE's count for
+ *                          the same frame.
+ *
+ * NOTE (observer effect, DRAW_DECODE/DRAW_WRITE specifically): these two
+ * sections are timed per RLE *run*, not per pixel -- that's the whole
+ * point of issue #261's fix (few runs = cheap redraw), and it's also what
+ * keeps the two extra HAL_perf_now() calls per run cheap relative to the
+ * work being measured. Timing per *pixel* the way the old code drew them
+ * would have made the measurement overhead comparable to (or larger than)
+ * the thing being measured, especially for long runs where the batched
+ * write is now very fast. Per-run timing avoids that trap by construction.
  *
  * NOTE: sections nest (DRAW_ANIMATION_STACK and OLED_FLUSH are both
  * sub-intervals of DRAW_OLED_STACK; HANDLE_EVENTS can contain a full
- * DRAW_OLED_STACK pass). Each section's numbers are self-contained -- there
- * is no double-counting *within* a section's own count/total -- but a
- * reader comparing sections should remember the containment relationship
- * rather than expecting them to sum to an unrelated "everything" total.
+ * DRAW_OLED_STACK pass; DRAW_DECODE and DRAW_WRITE are both sub-intervals
+ * of DRAW_ANIMATION_STACK, entered many times per DRAW_ANIMATION_STACK
+ * call -- once per RLE run rather than once per call). Each section's
+ * numbers are self-contained -- there is no double-counting *within* a
+ * section's own count/total -- but a reader comparing sections should
+ * remember the containment relationship rather than expecting them to sum
+ * to an unrelated "everything" total.
  *
  * NOTE: GQ_PERF_ENTER/EXIT are matched pairs around straight-line code.
  * Functions with an early-return failure path between ENTER and EXIT (e.g.
@@ -65,7 +96,7 @@
  * -------------------------------------------------------------------------
  * Struct layout (GQ_PERF_INSTRUMENT defined):
  * -------------------------------------------------------------------------
- *   gq_perf_stats_t (8 B header + N * 16 B sections; N=5 today -> 88 B):
+ *   gq_perf_stats_t (8 B header + N * 16 B sections; N=7 today -> 120 B):
  *     uint32_t magic;    -- GQ_PERF_MAGIC; sanity-check when read over SBW
  *                           at a known/discoverable symbol address (via the
  *                           .map file -- gq_perf_stats is a plain global,
@@ -80,8 +111,20 @@
  *       each: uint32_t count, total_us, min_us, max_us (16 B).
  *
  * Adding a new section costs 16 B. The ~150 B RAM target in the design
- * discussion allows roughly 4 more sections beyond the 5 defined here
- * before that budget is exhausted.
+ * discussion allowed roughly 4 more sections beyond the original 5; this
+ * pass (issue #261's DRAW_DECODE/DRAW_WRITE) uses 2 of those, leaving
+ * headroom for about 2 more before that budget is exhausted (120 B used of
+ * ~150 B; each further section costs another 16 B).
+ *
+ * Byte-offset math for a raw-memory SBW reader (no source access to this
+ * header): sections[i] starts at offset 8 + i*16 within gq_perf_stats
+ * (8 B header, then 16 B per section in GQ_PERF_SECTION_LIST's declared
+ * order -- see the section index list above for what each i is). With
+ * N=7: DRAW_DECODE (index 5) is at byte offset 8 + 5*16 = 88; DRAW_WRITE
+ * (index 6) is at byte offset 8 + 6*16 = 104. Each section's own layout is
+ * count (offset +0), total_us (+4), min_us (+8), max_us (+12), all
+ * uint32_t, all four bytes wide -- e.g. DRAW_DECODE's total_us is at
+ * absolute offset 88 + 4 = 92 within gq_perf_stats.
  *
  * -------------------------------------------------------------------------
  * Timer width decision: gq_perf_time_t is uint32_t, holding microseconds.
@@ -209,7 +252,9 @@
     X(DRAW_ANIMATION_STACK, "draw_animation_stack") \
     X(HANDLE_EVENTS, "handle_events")               \
     X(SYSTEM_TICK, "system_tick")                   \
-    X(OLED_FLUSH, "oled_flush")
+    X(OLED_FLUSH, "oled_flush")                     \
+    X(DRAW_DECODE, "draw_decode")                   \
+    X(DRAW_WRITE, "draw_write")
 
 typedef enum {
 #define GQ_PERF_ENUM_ENTRY(NAME, STR) GQ_PERF_SEC_##NAME,

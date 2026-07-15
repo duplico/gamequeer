@@ -311,6 +311,40 @@ void led_tick();
 void led_play_cue(t_gq_pointer cue_ptr, uint8_t background);
 void led_stop();
 void handle_events();
+
+/*
+ * HAL_oled_fill_run() -- per-platform display primitive (issue #261).
+ *
+ * Fills `length` consecutive horizontal pixels, starting at (x, y), to
+ * `value` (0 or 1). This is the batched replacement for calling
+ * Graphics_drawPixelOnDisplay() once per pixel: oled.c's RLE decoder
+ * (gq_image_peek_run() / gq_image_advance_run()) walks the image in
+ * same-value runs and calls this once per run instead of once per pixel.
+ *
+ * Contract with callers (oled.c):
+ *   - The caller has already clipped [x, x + length - 1] against the
+ *     active clip region's X bounds, and 0 <= y (per the pre-existing
+ *     per-pixel clip semantics this replaces -- see gq_draw_image()).
+ *     Implementations still bounds-check defensively (matching the
+ *     pre-existing qc12_oledPixelDraw()/gfx_driver_pixelDraw() pattern of
+ *     rejecting negative coordinates) since this is a raw framebuffer
+ *     write with no further indirection between it and the hardware/emu
+ *     buffer.
+ *   - `length` is always >= 1 when called; a run never crosses a display
+ *     row, so a single call never needs to wrap.
+ *   - The whole run shares one pixel value (0 or 1) by construction --
+ *     see gq_image_peek_run()'s doc comment in oled.c.
+ *
+ * Per-platform implementations: sh1107.c (badge, packed 1bpp page-major
+ * frame_buffer) and grlib_gfx_driver.c (emulator,
+ * uint8_t[OLED_HORIZONTAL_MAX][OLED_VERTICAL_MAX] frame_buffer, currently
+ * [127][127]). The badge implementation precomputes the page index and
+ * bit mask once per call (both are constant across a horizontal run,
+ * since page = y / 8 and the bit position is y % 8) instead of recomputing
+ * them per pixel the way qc12_oledPixelDraw() did.
+ */
+void HAL_oled_fill_run(int16_t x, int16_t y, uint16_t length, uint8_t value);
+
 void gq_draw_image(
     const Graphics_Context *context,
     t_gq_pointer image_bytes,
