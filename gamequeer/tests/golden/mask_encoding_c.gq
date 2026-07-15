@@ -1,0 +1,94 @@
+/*
+ * mask_encoding_c.gq — Golden-test fixture locking in
+ * gq_draw_image_with_mask()'s byte-aligned masked fast path from the
+ * render rework (duplico/qc2024#45 Stage 1 / duplico/gamequeer#295):
+ * the byte-parallel image+mask composite (HAL_oled_blit_byte_masked()),
+ * new work not present in mask_encoding_{a,b}.gq (which predate masks
+ * having any fast path at all -- see gq_draw_image_with_mask()'s own
+ * comment for why the row-major prototype deferred this).
+ *
+ * mask_encoding_a.gq / mask_encoding_b.gq already cover all four
+ * (image encoding x mask encoding) combinations at a single, fully
+ * on-screen, byte-aligned position (x=8, 32 wide) -- mask_encoding_b's
+ * fganim(2)/fgmask(2) pair (checker.png masked by checker.png, both
+ * UNCOMPRESSED) is in fact the exact byte-parallel fast-path shape, and
+ * its golden is unchanged by this rework, which is itself strong evidence
+ * the byte-parallel merge is pixel-identical to the old per-pixel path for
+ * a maximally bit-adversarial pattern (checker.png alternates every bit).
+ *
+ * This fixture adds the alignment/clip edge cases mask_encoding_{a,b}
+ * don't reach, using the same UNCOMPRESSED+UNCOMPRESSED (checker.png /
+ * checker.png) pairing so every placement below is eligible for the fast
+ * path whenever its position allows:
+ *
+ *   fganim(1) / fgmask(1): checker.png / checker.png at (5, 8) -- x=5 is
+ *     NOT byte-aligned in screen coordinates (the *source* streams are
+ *     still byte-aligned at the start of each row, so the fast path DOES
+ *     activate; HAL_oled_blit_byte_masked() must split its masked
+ *     read-modify-write across two destination bytes on the badge).
+ *
+ *   fganim(2) / fgmask(2): checker.png / checker.png at (100, 72) -- same
+ *     right-edge clip shape as rowmajor_byte_blit.gq's fganim(2): the last
+ *     several columns of every row fall back to the generic per-run merge
+ *     loop mid-row. Exercises the masked fast-path/slow-path boundary
+ *     within a single row, which the unmasked fixture can't -- the mask
+ *     stream's clip/alignment state is independent of the image stream's.
+ *
+ * See rowmajor_byte_blit.gq's header for why the emulator can validate
+ * fast-path *activation* and merge correctness but not the badge's packed-
+ * byte split arithmetic (firmware-only, qc2024#46).
+ *
+ * How to reproduce the compiled fixture (mask_encoding_c.gqgame):
+ *
+ *   From the gamequeer repo root, using the builder container:
+ *     docker run --rm -v $(pwd):/workspaces/gamequeer --workdir /workspaces/gamequeer \
+ *         --user $(id -u):$(id -g) gamequeer-builder:latest \
+ *         /bin/bash -c "cd gamequeer/tests/golden && PYTHONPATH=/workspaces/gamequeer/gqc/src \
+ *             python -m gqc compile --no-mem-map -o . mask_encoding_c.gq"
+ *
+ *   Or via the Makefile target:
+ *     make golden-fixture
+ */
+
+game {
+    id = 1;
+    title := "MaskEncC";
+    author := "test";
+    starting_stage = mask_test;
+}
+
+animations {
+    sprite1 <- "checker.png" {
+        w = 32;
+        h = 32;
+    }
+
+    mask1 <- "checker.png" {
+        w = 32;
+        h = 32;
+    }
+
+    sprite2 <- "checker.png" {
+        w = 32;
+        h = 32;
+    }
+
+    mask2 <- "checker.png" {
+        w = 32;
+        h = 32;
+    }
+}
+
+stage mask_test {
+    event enter {
+        GQI_FGANIM1_X = 5;
+        GQI_FGANIM1_Y = 8;
+        play fganim(1) sprite1;
+        play fgmask(1) mask1;
+
+        GQI_FGANIM2_X = 100;
+        GQI_FGANIM2_Y = 72;
+        play fganim(2) sprite2;
+        play fgmask(2) mask2;
+    }
+}

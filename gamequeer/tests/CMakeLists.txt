@@ -101,6 +101,32 @@ add_golden_test(golden_framebuffer hello)
 add_golden_test(golden_framebuffer_mask_encoding_a mask_encoding_a)
 add_golden_test(golden_framebuffer_mask_encoding_b mask_encoding_b)
 
+# ---- golden_framebuffer_rowmajor_byte_blit: unmasked byte-aligned
+# uncompressed fast path (duplico/qc2024#45 Stage 1 / duplico/gamequeer#295,
+# row-major framebuffer render rework). gq_draw_image()'s new byte-blit fast
+# path (HAL_oled_blit_byte()) is incidentally reachable via anim_advance.gq's
+# bwcircles.gif frames (confirmed by negative-control: deliberately breaking
+# HAL_oled_blit_byte()'s bit order fails anim_advance's goldens too, not just
+# this one) but that coverage is opportunistic and undocumented; this fixture
+# is the dedicated, purpose-built case. mask_encoding_a/b above only ever
+# reach the *masked* draw function. See rowmajor_byte_blit.gq's header for
+# the three placements (byte-aligned, dest-unaligned, right-edge-clipped)
+# this locks in.
+
+add_golden_test(golden_framebuffer_rowmajor_byte_blit rowmajor_byte_blit)
+
+# ---- golden_framebuffer_mask_encoding_c: masked byte-parallel fast path
+# alignment/clip edge cases (duplico/qc2024#45 Stage 1 / duplico/gamequeer#295).
+# Companion to mask_encoding_a/b: those already cover all four (image x mask)
+# encoding combinations at one fully on-screen, byte-aligned position, which
+# also happens to be the new byte-parallel masked fast path's easy case (see
+# mask_encoding_c.gq's header -- mask_encoding_b's checker.png/checker.png
+# pair is unchanged by this rework, itself strong pixel-identity evidence).
+# This fixture adds the dest-unaligned and right-edge-clip-mid-row cases
+# mask_encoding_a/b don't reach.
+
+add_golden_test(golden_framebuffer_mask_encoding_c mask_encoding_c)
+
 # ---- golden_framebuffer_redundant_write_{initial,phase_a,phase_b}: SETVAR
 # redundant-refresh regression coverage for gamequeer#265/PR#274 (GQ_OP_SETVAR
 # now only raises GQ_EVENT_REFRESH when a write to a visual builtin var
