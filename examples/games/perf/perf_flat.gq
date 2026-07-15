@@ -1,0 +1,44 @@
+/*
+ * perf_flat.gq -- flat-content (fast-path) rendering perf test cart.
+ *
+ * Full-screen background animation whose every frame is large solid regions
+ * (a moving 32px-tall white bar on black). Solid runs compress well, so gqc's
+ * Frame cooker picks IMAGE_FMT_1BPP_COMP_RLE7 for every frame: the fast
+ * run-length decode path in the renderer. Pair with perf_dither.gq (same
+ * shape, worst-case content) to profile rendering's content-dependence.
+ *
+ * The animation loops via the bgdone event, so the full-screen RLE7 decode
+ * runs continuously.
+ *
+ * Encoding control: flat/large-solid content + `dithering := "none"` keeps
+ * the quantized frames flat, so RLE7 always beats UNCOMPRESSED.
+ *
+ * Confirmed frame encodings (from map.txt .frame section):
+ *   every frame -> IMAGE_FMT_1BPP_COMP_RLE7
+ */
+
+game {
+    id = 102;
+    title := "PerfFlat";
+    author := "perf";
+    starting_stage = start;
+}
+
+animations {
+    flat <- "perf_flat.gif" {
+        frame_rate = 5;
+        dithering := "none";
+    }
+}
+
+stage start {
+    bganim flat;
+
+    event enter {
+        play bganim flat;
+    }
+
+    event bgdone {
+        play bganim flat;
+    }
+}

@@ -1,0 +1,45 @@
+/*
+ * perf_dither.gq -- heavily-dithered (slow-path) rendering perf test cart.
+ *
+ * Full-screen background animation whose every frame is a shifting grayscale
+ * gradient. Floyd-Steinberg dithering at compile time turns the mid-tones
+ * into dense per-pixel black/white noise: run-length encoding is worthless
+ * on that (RLE7 would be far larger than the raw bitmap), so gqc's Frame
+ * cooker picks IMAGE_FMT_1BPP_UNCOMP for every frame -- the slow,
+ * byte-per-8-pixels decode path in the renderer. Pair with perf_flat.gq
+ * (same shape, best-case content) to profile rendering's content-dependence.
+ *
+ * Encoding control: continuous-tone gradient content + `dithering :=
+ * "floyd_steinberg"` maximizes pixel transitions, so UNCOMPRESSED always
+ * beats RLE7. (bayer / sierra2 / sierra2_4a would work equally well; "none"
+ * would instead threshold into flat bands and collapse back to RLE7.)
+ *
+ * Confirmed frame encodings (from map.txt .frame section):
+ *   every frame -> IMAGE_FMT_1BPP_UNCOMP
+ */
+
+game {
+    id = 103;
+    title := "PerfDither";
+    author := "perf";
+    starting_stage = start;
+}
+
+animations {
+    dither <- "perf_dither.gif" {
+        frame_rate = 5;
+        dithering := "floyd_steinberg";
+    }
+}
+
+stage start {
+    bganim dither;
+
+    event enter {
+        play bganim dither;
+    }
+
+    event bgdone {
+        play bganim dither;
+    }
+}
