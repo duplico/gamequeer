@@ -158,6 +158,34 @@ static void gq_image_advance_run(gq_image_frame_on_screen *frame, uint16_t count
     }
 }
 
+/*
+ * gq_image_advance_byte() -- PROTOTYPE (row-major-framebuffer feasibility
+ * spike, not for merge). Fast-path advance for gq_draw_image()'s
+ * uncompressed byte-blit case below: consumes exactly 8 pixels (one full
+ * decoded source byte) in one call, equivalent to calling
+ * gq_image_advance_run(frame, 1) eight times in a row for an
+ * rle_type == 1 frame that starts byte-aligned (frame->x_bit_offset == 0
+ * on entry, which the caller's guard already ensures). Skips the
+ * per-pixel x_bit_offset increment/compare loop that eight individual
+ * gq_image_advance_run() calls would otherwise pay.
+ */
+static void gq_image_advance_byte(gq_image_frame_on_screen *frame) {
+    frame->byte_index++;
+    frame->x_pixel_offset = (uint16_t) (frame->x_pixel_offset + 8);
+
+    if (frame->x_pixel_offset >= (uint16_t) frame->width) {
+        frame->y_curr++;
+        frame->x_pixel_offset = 0;
+    }
+
+    // A full source byte was just consumed -- always load the next one
+    // (mirrors gq_image_advance_run()'s need_to_read_byte == 1 case for
+    // rle_type == 1, which is unconditional there too).
+    if (!gq_image_done(frame)) {
+        gq_image_load_byte(frame);
+    }
+}
+
 void gq_load_image(
     t_gq_pointer image_bytes,
     int16_t bPP,
@@ -229,6 +257,36 @@ void gq_draw_image(
         int16_t draw_x = x + frame.x_pixel_offset;
         int16_t draw_y = y + frame.y_curr;
 
+        // PROTOTYPE fast path (row-major framebuffer spike, not for
+        // merge): an uncompressed source byte that is (a) currently
+        // byte-aligned in the decode stream, (b) entirely within the
+        // current image row, and (c) entirely within the clip region
+        // can be forwarded straight from the decoded cart byte to the
+        // framebuffer in one call, skipping the generic one-pixel-at-a-
+        // time peek/advance/write path below entirely. This is the
+        // "near-memcpy" draw path uncompressed/dithered content needs to
+        // reach uniform cost with RLE/flat content -- see
+        // HAL_oled_blit_byte()'s doc comment (gamequeer.h) for why this
+        // is only a real win once the destination framebuffer is
+        // row-major. Falls through to the general per-run path for RLE
+        // content and any row/clip edge that doesn't satisfy all three
+        // conditions -- correctness for those cases is unchanged from
+        // before this prototype.
+        if (frame.rle_type == 1 && frame.x_bit_offset == 0 &&
+            (uint16_t) (frame.x_pixel_offset + 8) <= (uint16_t) frame.width && draw_y >= context->clipRegion.yMin &&
+            draw_y <= context->clipRegion.yMax && draw_x >= context->clipRegion.xMin &&
+            (draw_x + 7) <= context->clipRegion.xMax) {
+            GQ_PERF_ENTER(DRAW_DECODE);
+            uint8_t src_byte = frame.render_byte;
+            gq_image_advance_byte(&frame);
+            GQ_PERF_EXIT(DRAW_DECODE);
+
+            GQ_PERF_ENTER(DRAW_WRITE);
+            HAL_oled_blit_byte(draw_x, draw_y, src_byte, 8);
+            GQ_PERF_EXIT(DRAW_WRITE);
+            continue;
+        }
+
         uint16_t run_avail;
         GQ_PERF_ENTER(DRAW_DECODE);
         uint8_t draw_pixel = gq_image_peek_run(&frame, &run_avail);
@@ -264,6 +322,23 @@ void gq_draw_image(
     }
 }
 
+/*
+ * PROTOTYPE scope note (row-major-framebuffer feasibility spike, not for
+ * merge): unlike gq_draw_image() above, this function does NOT get the
+ * uncompressed byte-blit fast path. The image and mask streams are
+ * independently RLE-encoded and can fall out of byte-alignment with each
+ * other even when both happen to be uncompressed (e.g. a mid-row clip or
+ * a mismatched run boundary), and merging two full source bytes through
+ * the mask correctly needs its own bitwise-AND/OR merge primitive that
+ * isn't implemented here. Masked draws still benefit from the row-major
+ * HAL_oled_fill_run() below being whole-byte-fast for RLE runs; they just
+ * don't get the near-memcpy path for uncompressed/dithered masked
+ * sprites. Flagged as a deferred follow-up, not attempted in this
+ * prototype -- the primary measurement target (uniformity across
+ * flat/dithered content) is the unmasked animation background path,
+ * which is what draw_animation_stack() actually exercises for
+ * tutorial_1.gq's dithered "pop" animation.
+ */
 void gq_draw_image_with_mask(
     const Graphics_Context *context,
     t_gq_pointer image_bytes,

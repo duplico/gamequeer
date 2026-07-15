@@ -64,6 +64,30 @@ void HAL_oled_fill_run(int16_t x, int16_t y, uint16_t length, uint8_t value) {
     }
 }
 
+/*
+ * HAL_oled_blit_byte() -- emulator implementation (PROTOTYPE; see the doc
+ * comment on its declaration in gamequeer.h). The emulator's frame_buffer
+ * is one byte per pixel (not bit-packed), so there is no row/page-major
+ * mismatch to exploit here -- this is a plain per-bit unpack-and-store
+ * loop, same cost as 8 HAL_oled_fill_run(x+i, y, 1, ...) calls. Provided
+ * only so shared oled.c code compiles and renders correctly on the
+ * emulator for a correctness sanity check; not a perf target on this
+ * platform (see HAL_oled_fill_run()'s matching note above).
+ */
+void HAL_oled_blit_byte(int16_t x, int16_t y, uint8_t src_byte, uint8_t bit_count) {
+    if (y < 0 || y >= OLED_VERTICAL_MAX || bit_count == 0 || bit_count > 8) {
+        return;
+    }
+    for (uint8_t i = 0; i < bit_count; i++) {
+        int16_t px = x + i;
+        if (px < 0 || px >= OLED_HORIZONTAL_MAX) {
+            continue;
+        }
+        uint8_t pixel       = (src_byte >> (7 - i)) & 0x01;
+        frame_buffer[px][y] = pixel;
+    }
+}
+
 static void gfx_driver_pixelDrawMultiple(
     void *displayData,
     int16_t x,

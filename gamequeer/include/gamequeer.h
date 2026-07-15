@@ -345,6 +345,39 @@ void handle_events();
  */
 void HAL_oled_fill_run(int16_t x, int16_t y, uint16_t length, uint8_t value);
 
+/*
+ * HAL_oled_blit_byte() -- PROTOTYPE (row-major-framebuffer feasibility
+ * spike, not for merge). See docs/ or the PR description this ships with
+ * for the full row-major + transpose-on-flush design.
+ *
+ * Writes `bit_count` (1-8) consecutive horizontal pixels starting at
+ * (x, y) directly from one source byte's bits, MSB-first (bit 7 of
+ * `src_byte` is the pixel at x, bit 6 is x+1, ... bit (8-bit_count) is the
+ * last pixel written) -- this is the exact bit order gqc's uncompressed
+ * frame encoder uses (Frame.uncompressed_bytes(), `0b10000000 >> run`),
+ * so a fully-aligned, fully-visible 8-pixel span can be forwarded from the
+ * decoded cart byte straight into this call with NO per-pixel unpacking,
+ * unlike HAL_oled_fill_run() (which still costs one RMW per pixel/column
+ * on a page-major destination and gains nothing extra from 8 pixels
+ * sharing a source byte). This primitive exists specifically to give
+ * uncompressed (typically dithered) image content a near-memcpy draw path
+ * symmetric with RLE content's whole-byte-run fill, once the destination
+ * framebuffer is stored row-major (see sh1107.c's ROW_BUFFER()) -- on a
+ * page-major destination this call has no fast path available (still one
+ * RMW per bit) and is not meaningfully better than 8 calls to
+ * HAL_oled_fill_run(x+i, y, 1, bit_i).
+ *
+ * Contract with callers (oled.c):
+ *   - 1 <= bit_count <= 8.
+ *   - The caller has already verified [x, x + bit_count - 1] lies fully
+ *     within the active clip region and 0 <= y -- this primitive does NOT
+ *     clip or split a partially-visible span; callers fall back to
+ *     per-pixel HAL_oled_fill_run() calls for any span that needs
+ *     clipping. (Prototype scope: full clip-aware blit deferred; see PR
+ *     description.)
+ */
+void HAL_oled_blit_byte(int16_t x, int16_t y, uint8_t src_byte, uint8_t bit_count);
+
 void gq_draw_image(
     const Graphics_Context *context,
     t_gq_pointer image_bytes,
