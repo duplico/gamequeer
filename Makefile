@@ -85,9 +85,16 @@ DOCKER_CMD_NIT := docker run --rm --workdir /workspaces/gamequeer -v $(PWD):/wor
 #  - edge_coverage.gq: true display-edge (x=127, y=127) coverage fixture
 #    (#297), reusing checker.png the same way, so compiled from
 #    gamequeer/tests/golden too.
-golden-fixture: builder-build gamequeer/tests/golden/hello.gq gamequeer/tests/golden/mask_encoding_a.gq gamequeer/tests/golden/mask_encoding_b.gq gamequeer/tests/golden/mask_encoding_c.gq gamequeer/tests/golden/redundant_write.gq gamequeer/tests/golden/anim_advance.gq gamequeer/tests/golden/rowmajor_byte_blit.gq gamequeer/tests/golden/edge_coverage.gq
+#  - label_text.gq / menu_choice.gq / menu_text.gq: Stage-2 (#47, grlib
+#    row-major rewrite) text/menu pixel-identity baselines -- no
+#    animations, no ffmpeg/image assets needed, so compiled the same way as
+#    hello.gq/redundant_write.gq.
+golden-fixture: builder-build gamequeer/tests/golden/hello.gq gamequeer/tests/golden/mask_encoding_a.gq gamequeer/tests/golden/mask_encoding_b.gq gamequeer/tests/golden/mask_encoding_c.gq gamequeer/tests/golden/redundant_write.gq gamequeer/tests/golden/anim_advance.gq gamequeer/tests/golden/rowmajor_byte_blit.gq gamequeer/tests/golden/edge_coverage.gq gamequeer/tests/golden/label_text.gq gamequeer/tests/golden/menu_choice.gq gamequeer/tests/golden/menu_text.gq
 	$(DOCKER_CMD_NIT) /bin/bash -c "PYTHONPATH=gqc/src python -m gqc compile --no-mem-map -o gamequeer/tests/golden gamequeer/tests/golden/hello.gq && \
 		PYTHONPATH=gqc/src python -m gqc compile --no-mem-map -o gamequeer/tests/golden gamequeer/tests/golden/redundant_write.gq && \
+		PYTHONPATH=gqc/src python -m gqc compile --no-mem-map -o gamequeer/tests/golden gamequeer/tests/golden/label_text.gq && \
+		PYTHONPATH=gqc/src python -m gqc compile --no-mem-map -o gamequeer/tests/golden gamequeer/tests/golden/menu_choice.gq && \
+		PYTHONPATH=gqc/src python -m gqc compile --no-mem-map -o gamequeer/tests/golden gamequeer/tests/golden/menu_text.gq && \
 		cd gamequeer/tests/golden && \
 		PYTHONPATH=/workspaces/gamequeer/gqc/src python -m gqc compile --no-mem-map -o . mask_encoding_a.gq && \
 		PYTHONPATH=/workspaces/gamequeer/gqc/src python -m gqc compile --no-mem-map -o . mask_encoding_b.gq && \

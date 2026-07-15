@@ -6,6 +6,11 @@
 #   ACTUAL   — path where the actual PGM will be written
 #   GOLDEN   — path to the committed golden PGM
 #   TICKS    — number of system_tick iterations to run
+#   INPUT    — (optional) path to a scripted button-input file (one of
+#              A/B/L/R/CLICK per line; see HAL.c's HAL_input_load()),
+#              replayed one event per tick via --input. Omit for fixtures
+#              that don't need scripted navigation (the default/empty
+#              string skips passing --input at all).
 #
 # Exits with FATAL_ERROR if the emulator fails or the PGMs differ.
 
@@ -13,8 +18,14 @@ cmake_minimum_required(VERSION 3.18)
 
 # ---- 1. Run the headless emulator ----------------------------------------
 
+if(INPUT)
+    set(_input_args --input "${INPUT}")
+else()
+    set(_input_args "")
+endif()
+
 execute_process(
-    COMMAND "${EXE}" --ticks "${TICKS}" --dump "${ACTUAL}" "${FIXTURE}"
+    COMMAND "${EXE}" --ticks "${TICKS}" ${_input_args} --dump "${ACTUAL}" "${FIXTURE}"
     RESULT_VARIABLE run_result
     OUTPUT_VARIABLE run_stdout
     ERROR_VARIABLE  run_stderr

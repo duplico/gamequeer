@@ -1,0 +1,84 @@
+/*
+ * menu_text.gq — Golden-test fixture pre-authoring pixel-identity baseline
+ * for the text-entry menu render path (draw_menu_text(), menu.c) ahead of
+ * the Stage 2 render rework (epic duplico/qc2024#47, which touches menu
+ * chrome as well as text). This path is near-zero-covered by existing
+ * golden fixtures -- none opens a text-entry menu at all before this one.
+ *
+ * Adapted from examples/games/perf/perf_menu_text.gq
+ * (duplico/gamequeer#298), which documents the full authoring rationale
+ * (see gqc/docs/authoring-and-perf-carts.md §3) -- this fixture keeps the
+ * same content, re-headered for the golden-test convention.
+ *
+ * `textmenu` binds this stage's menu as text entry (the special
+ * GQ_PTR_BUILTIN_MENU_FLAGS sentinel pointer), which menu_text_load()
+ * (menu.c) seeds with a single 'A' at position 0. All navigation below
+ * happens through the *internal* menu input hijack in
+ * handle_events()/handle_event_menu_text() (menu.c) -- entirely outside
+ * this stage's own `event input(...)` handlers -- exercising:
+ *   input(R)/(L)  -- cycle the character at the cursor through its symbol
+ *                    class (A-Z / a-z / 0-9 / space+specials)
+ *   input(B)      -- change symbol class (CAPS -> lower -> NUM -> SPECIAL)
+ *   input(CLICK)  -- toggle between per-character edit mode and
+ *                    cursor-position select mode (draws a different cursor
+ *                    hint -- up/down arrows vs left/right)
+ *   input(A)      -- confirm, closing the menu and writing the finished
+ *                    string into GQS_TEXTMENU_RESULT
+ * On confirm, `event menu` fires; label1 is updated from
+ * GQS_TEXTMENU_RESULT, proving the menu-close -> label redraw sequence.
+ *
+ * Two ctest cases share this one compiled cart (see tests/CMakeLists.txt):
+ *   golden_framebuffer_menu_text_pristine (TICKS=1) -- initial text-entry
+ *     render: prompt, single seeded 'A' at position 0, cursor box, CHAR-mode
+ *     hint icons (up/down dial, left/right click, "AZ"/"OK" hints).
+ *   golden_framebuffer_menu_text_mid (TICKS=4, INPUT=R,R,CLICK,R) --
+ *     cycles position 0's char twice ('A'->'B'->'C'), toggles to
+ *     position-select mode, then moves the cursor to position 1 --
+ *     exercising the position-select mode's *alternate* cursor-hint icon
+ *     set (draw_hint_dial_leftright()/draw_hint_click_updown() vs the
+ *     CHAR-mode icons), a visually distinct render path most other content
+ *     never reaches. Internal menu-button handling applies within the same
+ *     tick it's polled (no `gostage` involved), so TICKS=4 for 4 scripted
+ *     button presses.
+ *
+ * (A third, `confirmed` state exists in the source cart -- 8 presses
+ * ending in input(A), landing on GQS_TEXTMENU_RESULT="CB" -- but is not
+ * wired as a golden here; `pristine` + `mid` already cover both the default
+ * chrome and the alternate position-select cursor-hint icons, the two
+ * distinct render states. Add a `confirmed` golden too if Stage 2 work
+ * wants explicit coverage of the label-update-after-menu-close sequence in
+ * *this* fixture -- menu_choice.gq's `confirmed` golden already covers that
+ * sequence via the choice-menu path.)
+ *
+ * Emulator-confirmed (headless --dump + scripted --input): both captures
+ * render exactly as expected -- see the PR body for the validation
+ * transcript.
+ *
+ * How to reproduce the compiled fixture (menu_text.gqgame):
+ *
+ *   From the gamequeer repo root, using the builder container:
+ *     docker run --rm -v $(pwd):/workspaces/gamequeer --workdir /workspaces/gamequeer \
+ *         --user $(id -u):$(id -g) gamequeer-builder:latest \
+ *         /bin/bash -c "PYTHONPATH=gqc/src python -m gqc compile --no-mem-map \
+ *             -o gamequeer/tests/golden gamequeer/tests/golden/menu_text.gq"
+ *
+ *   Or via the Makefile target:
+ *     make golden-fixture
+ */
+
+game {
+    id = 1;
+    title := "MenuText";
+    author := "test";
+    starting_stage = start;
+}
+
+stage start {
+    textmenu prompt "Enter your name:";
+
+    event menu {
+        GQI_LABEL1_X = 0;
+        GQI_LABEL1_Y = 0;
+        GQS_LABEL1 := "You entered: " + GQS_TEXTMENU_RESULT;
+    }
+}
