@@ -70,38 +70,79 @@ void gq_image_load_byte(gq_image_frame_on_screen *frame) {
     } // TODO: Otherwise is an error.
 }
 
-uint8_t gq_image_get_pixel(gq_image_frame_on_screen *frame) {
-    // NB: gate this function call on gq_image_done() to avoid undefined behavior
-    // Also, you need to bootstrap it by calling a read_byte
-    uint8_t need_to_read_byte = 0;
-    uint8_t current_pixel_value;
+/*
+ * gq_image_peek_run() / gq_image_advance_run() -- run-aware decode (issue
+ * #261), replacing the old one-pixel-at-a-time gq_image_get_pixel().
+ *
+ * These two are split (rather than one combined "get next N pixels" call)
+ * so that gq_draw_image_with_mask() can peek both the image and mask
+ * streams' available run lengths *before* deciding how far to advance
+ * either one -- the image and mask are independently RLE-encoded, so their
+ * run boundaries don't generally line up even though their dimensions
+ * match. See gq_draw_image_with_mask() for that combine loop.
+ *
+ * gq_image_peek_run() does NOT mutate frame state (other than the implicit
+ * read of the already-decoded frame->pixel_value / frame->pixel_repeat /
+ * frame->render_byte -- it consumes nothing new from the image stream).
+ * It reports the value of the pixel at the current position, and how many
+ * consecutive pixels starting there (including the current one) are
+ * guaranteed to share that value *and* stay within the current image row
+ * (a run is never split across rows by this call -- gq_draw_image() and
+ * gq_draw_image_with_mask() only ever need same-row spans, since a single
+ * HAL_oled_fill_run() call only fills one display row).
+ *
+ * gq_image_advance_run() commits `count` pixels (1 <= count <=
+ * the avail value returned by the immediately preceding
+ * gq_image_peek_run() call on the same frame) and updates decode state
+ * exactly as if gq_image_get_pixel() (the old per-pixel function) had been
+ * called `count` times in a row -- byte/run-boundary prefetch and row-wrap
+ * happen at the same point in the stream either way, so output is
+ * pixel-identical to the old code for any valid `count`.
+ */
+uint8_t gq_image_peek_run(gq_image_frame_on_screen *frame, uint16_t *out_avail) {
+    // NB: gate this function call on gq_image_done() to avoid undefined behavior.
+    // Also, you need to bootstrap it by calling gq_image_load_byte() (done by
+    // gq_load_image()).
+    uint16_t row_remaining = (uint16_t) frame->width - frame->x_pixel_offset;
 
-    // Get the current pixel.
     if (frame->rle_type == 1) {
-        frame->pixel_value = (frame->render_byte >> (7 - frame->x_bit_offset)) & 0x01;
+        // Uncompressed images carry no run-length information -- expose
+        // one pixel at a time, same as the old per-pixel path.
+        *out_avail = 1;
+        return (frame->render_byte >> (7 - frame->x_bit_offset)) & 0x01;
+    }
+
+    uint16_t avail = frame->pixel_repeat;
+    if (avail > row_remaining) {
+        avail = row_remaining;
+    }
+    *out_avail = avail;
+    return frame->pixel_value;
+}
+
+void gq_image_advance_run(gq_image_frame_on_screen *frame, uint16_t count) {
+    uint8_t need_to_read_byte = 0;
+
+    if (frame->rle_type == 1) {
+        // count is always 1 here (see gq_image_peek_run() above).
         frame->x_bit_offset++;
         if (frame->x_bit_offset == 8) {
             frame->byte_index++;
             frame->x_bit_offset = 0;
             need_to_read_byte   = 1;
         }
-        current_pixel_value = frame->pixel_value;
     } else {
-        // Capture the current run's value before a possible run-boundary
-        // prefetch (below) overwrites frame->pixel_value with the *next*
-        // run's value.
-        current_pixel_value = frame->pixel_value;
-        frame->pixel_repeat--;
+        frame->pixel_repeat -= count;
         if (frame->pixel_repeat == 0) {
             need_to_read_byte = 1;
             frame->byte_index++;
         }
     }
 
-    // Next pixel.
-    frame->x_pixel_offset++;
+    // Advance to the pixel(s) after this run segment.
+    frame->x_pixel_offset += count;
 
-    // Check to see if the next pixel sends us to the next row.
+    // Check to see if we've reached the end of the row.
     if (frame->x_pixel_offset >= frame->width) {
         // We need to start a new row.
         frame->y_curr++;
@@ -112,11 +153,6 @@ uint8_t gq_image_get_pixel(gq_image_frame_on_screen *frame) {
     if (need_to_read_byte && !gq_image_done(frame)) {
         gq_image_load_byte(frame);
     }
-
-    // Return the current pixel's value (captured above; must not be the
-    // next run's value, which may have just been prefetched into
-    // frame->pixel_value).
-    return current_pixel_value;
 }
 
 void gq_load_image(
@@ -183,14 +219,40 @@ void gq_draw_image(
     gq_load_image(image_bytes, bPP, width, height, img_frame_data_size, x, y, &frame);
 
     while (!(gq_image_done(&frame))) {
-        // Draw the pixel.
-        int16_t draw_x     = x + frame.x_pixel_offset;
-        int16_t draw_y     = y + frame.y_curr;
-        uint8_t draw_pixel = gq_image_get_pixel(&frame);
+        // Decode the next run (same procedure regardless of clipping --
+        // see gq_image_peek_run()'s doc comment: the RLE stream must be
+        // walked in order, so a clipped row/column still costs a decode,
+        // just not a framebuffer write).
+        int16_t draw_x = x + frame.x_pixel_offset;
+        int16_t draw_y = y + frame.y_curr;
 
-        if (draw_x >= context->clipRegion.xMin && draw_x <= context->clipRegion.xMax &&
-            draw_y >= context->clipRegion.yMin) {
-            Graphics_drawPixelOnDisplay(context->display, draw_x, draw_y, palette[draw_pixel]);
+        uint16_t run_avail;
+        uint8_t draw_pixel = gq_image_peek_run(&frame, &run_avail);
+        gq_image_advance_run(&frame, run_avail);
+
+        // Vertical clip: matches the original per-pixel check, which only
+        // ever tested draw_y >= yMin -- the upper bound is already enforced
+        // structurally by frame.y_end (see gq_load_image()).
+        if (draw_y < context->clipRegion.yMin) {
+            continue;
+        }
+
+        // Horizontal clip: intersect the run [draw_x, draw_x + run_avail)
+        // with [xMin, xMax]. Equivalent to clipping each pixel of the run
+        // individually (the original behavior) because both the run and
+        // the clip bound are contiguous intervals.
+        int16_t seg_x0  = draw_x;
+        int16_t seg_len = (int16_t) run_avail;
+        if (seg_x0 < context->clipRegion.xMin) {
+            int16_t trim = context->clipRegion.xMin - seg_x0;
+            seg_x0 += trim;
+            seg_len -= trim;
+        }
+        if (seg_x0 + seg_len - 1 > context->clipRegion.xMax) {
+            seg_len = context->clipRegion.xMax - seg_x0 + 1;
+        }
+        if (seg_len > 0) {
+            HAL_oled_fill_run(seg_x0, draw_y, (uint16_t) seg_len, (uint8_t) palette[draw_pixel]);
         }
     }
 }
@@ -221,16 +283,50 @@ void gq_draw_image_with_mask(
     gq_load_image(mask_bytes, mask_bPP, width, height, mask_frame_data_size, x, y, &mask_frame);
 
     while (!gq_image_done(&image_frame) && !gq_image_done(&mask_frame)) {
-        // Draw the pixel.
         int16_t draw_x = x + image_frame.x_pixel_offset;
         int16_t draw_y = y + image_frame.y_curr;
 
-        uint8_t image_pixel = gq_image_get_pixel(&image_frame);
-        uint8_t mask_pixel  = gq_image_get_pixel(&mask_frame);
+        // Peek both streams' available run lengths at the current position
+        // without committing either one -- the image and mask are
+        // independently RLE-encoded, so one may offer a longer run than
+        // the other even though both share the same width/height (enforced
+        // by draw_animation_stack()'s caller-side dimension check). The
+        // batch we can safely commit is bounded by whichever stream's run
+        // (or row) ends first; within that shared run, both the image
+        // value and the mask value are constant.
+        uint16_t image_avail, mask_avail;
+        uint8_t image_pixel = gq_image_peek_run(&image_frame, &image_avail);
+        uint8_t mask_pixel  = gq_image_peek_run(&mask_frame, &mask_avail);
+        uint16_t run_avail  = image_avail < mask_avail ? image_avail : mask_avail;
 
-        if (mask_pixel && draw_x >= context->clipRegion.xMin && draw_x <= context->clipRegion.xMax &&
-            draw_y >= context->clipRegion.yMin) {
-            Graphics_drawPixelOnDisplay(context->display, draw_x, draw_y, palette[image_pixel]);
+        gq_image_advance_run(&image_frame, run_avail);
+        gq_image_advance_run(&mask_frame, run_avail);
+
+        // Transparent (mask=0) run: nothing to draw, same as the original
+        // per-pixel path which never called Graphics_drawPixelOnDisplay()
+        // for mask_pixel == 0.
+        if (!mask_pixel) {
+            continue;
+        }
+
+        // Vertical clip -- see gq_draw_image()'s matching comment.
+        if (draw_y < context->clipRegion.yMin) {
+            continue;
+        }
+
+        // Horizontal clip -- see gq_draw_image()'s matching comment.
+        int16_t seg_x0  = draw_x;
+        int16_t seg_len = (int16_t) run_avail;
+        if (seg_x0 < context->clipRegion.xMin) {
+            int16_t trim = context->clipRegion.xMin - seg_x0;
+            seg_x0 += trim;
+            seg_len -= trim;
+        }
+        if (seg_x0 + seg_len - 1 > context->clipRegion.xMax) {
+            seg_len = context->clipRegion.xMax - seg_x0 + 1;
+        }
+        if (seg_len > 0) {
+            HAL_oled_fill_run(seg_x0, draw_y, (uint16_t) seg_len, (uint8_t) palette[image_pixel]);
         }
     }
 }

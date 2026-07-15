@@ -1,5 +1,6 @@
 #include <string.h>
 
+#include "gamequeer.h"
 #include "gfx.h"
 #include "grlib.h"
 #include "grlib_gfx.h"
@@ -17,6 +18,43 @@ static void gfx_driver_pixelDraw(void *displayData, int16_t x, int16_t y, uint16
         return;
     }
     frame_buffer[x][y] = value ? 1 : 0;
+}
+
+/*
+ * HAL_oled_fill_run() -- emulator implementation (see the doc comment on
+ * its declaration in gamequeer.h for the full contract).
+ *
+ * frame_buffer here is uint8_t[x][y] (one byte per pixel), so unlike the
+ * badge's packed 1bpp framebuffer (sh1107.c) there's no bit-packing to do
+ * -- this is a plain per-column store loop. The bounds check mirrors
+ * gfx_driver_pixelDraw()'s existing defensive check (rather than trusting
+ * the caller's clip) since this is, like that function, a raw framebuffer
+ * write with no further indirection between it and the display buffer.
+ * Performance here is not the point (see issue #261 / docs/perf-
+ * investigation.md's "Emulator measurability" note) -- pixel-identical
+ * output vs. the old per-pixel path is.
+ */
+void HAL_oled_fill_run(int16_t x, int16_t y, uint16_t length, uint8_t value) {
+    if (y < 0 || y >= OLED_VERTICAL_MAX || length == 0) {
+        return;
+    }
+    if (x < 0) {
+        // Defensive only -- oled.c's callers already clip x to
+        // [clipRegion.xMin, clipRegion.xMax], both non-negative.
+        if ((uint16_t) -x >= length) {
+            return;
+        }
+        length = (uint16_t) (length + x);
+        x      = 0;
+    }
+    if (x + length > OLED_HORIZONTAL_MAX) {
+        length = (uint16_t) (OLED_HORIZONTAL_MAX - x);
+    }
+
+    uint8_t pixel = value ? 1 : 0;
+    for (uint16_t i = 0; i < length; i++) {
+        frame_buffer[x + i][y] = pixel;
+    }
 }
 
 static void gfx_driver_pixelDrawMultiple(
