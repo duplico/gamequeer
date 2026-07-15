@@ -100,15 +100,16 @@
  * correctness issue: failure paths are rare (cart read failure) and are
  * not the hot path this instrumentation targets.
  *
- * NOTE (implausible-sample clamp): gq_perf_record() drops, rather than
+ * NOTE (implausible-sample drop): gq_perf_record() drops, rather than
  * clamps the value of, any single duration_us sample exceeding
- * GQ_PERF_MAX_PLAUSIBLE_US (defined just above gq_perf_time_t below) --
- * count/total_us/min_us/max_us are all left untouched for that call, same
- * as the early-return-failure-path case just above. This guards against a
- * garbage HAL_perf_now() delta (root-caused to a firmware timing-source
- * race, fixed separately) silently poisoning total_us/max_us with a
- * ~2^32 us outlier; the resulting under-report of that one call is the same
- * accepted limitation as the failure-path case, not a correctness issue.
+ * GQ_PERF_MAX_PLAUSIBLE_US (defined just below the gq_perf_time_t typedef,
+ * further down in this header) -- count/total_us/min_us/max_us are all left
+ * untouched for that call, same as the early-return-failure-path case just
+ * above. This guards against a garbage HAL_perf_now() delta (root-caused
+ * to a firmware timing-source race, fixed separately) silently poisoning
+ * total_us/max_us with a ~2^32 us outlier; the resulting under-report of
+ * that one call is the same accepted limitation as the failure-path case,
+ * not a correctness issue.
  *
  * -------------------------------------------------------------------------
  * Struct layout (GQ_PERF_INSTRUMENT defined):
@@ -338,7 +339,7 @@ gq_perf_time_t HAL_perf_now(void);
  * duration_us above GQ_PERF_MAX_PLAUSIBLE_US is dropped, not clamped: the
  * sample is discarded and count/total_us/min_us/max_us are all left
  * unchanged, rather than folding an implausible value into the
- * accumulators at the ceiling. See the implausible-sample-clamp NOTE above
+ * accumulators at the ceiling. See the implausible-sample-drop NOTE above
  * for the rationale and threshold. */
 void gq_perf_record(gq_perf_section_id_t sec, gq_perf_time_t duration_us);
 
