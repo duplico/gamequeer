@@ -16,9 +16,12 @@
  * checkerboard so every edge pixel's expected value can be hand-verified
  * (not just "non-garbage") -- see the PR body for the derivation.
  *
- * NB: bganim has no GQI_BGANIM_X/Y -- it is always drawn at (0, 0) (see
- * gq_draw_animation_stack()'s anim_index==0 case, gamequeer.c) -- so both
- * placements below use the two positionable foreground slots instead.
+ * NB: bganim (anim slot 0) is positionable too, via GQI_BGANIM_X/Y (see
+ * draw_animation_stack()'s anim_index==0 case, gamequeer.c) -- this fixture
+ * simply doesn't use it. Both placements below use the two foreground
+ * slots (fganim(1)/fganim(2)) instead, since exercising the fast-path/
+ * generic-clip overlap at the corner needs two independently movable
+ * sprites layered in a known draw order.
  *
  *   fganim(1), no fgmask: checker.png at (96, 96) -- byte-aligned
  *     (96 = 12*8) exact fit: the sprite's bottom-right corner lands

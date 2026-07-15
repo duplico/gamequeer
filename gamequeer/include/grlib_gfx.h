@@ -8,8 +8,10 @@
  * OLED_VERTICAL_MAX / OLED_HORIZONTAL_MAX -- the emulator's display
  * dimensions (height/width), used as an EXCLUSIVE bound: valid coordinates
  * run 0..MAX-1 (frame_buffer[][] is sized [HORIZONTAL_MAX][VERTICAL_MAX],
- * and every bounds check in grlib_gfx_driver.c/main.c is `>= MAX`). This
- * is the emulator's counterpart to the badge's LCD_X_SIZE/LCD_Y_SIZE
+ * and every coordinate bounds check in grlib_gfx_driver.c is `>= MAX`;
+ * main.c only iterates 0..MAX-1 over frame_buffer's dimensions when
+ * writing out the PGM, so it has no separate bounds check of its own).
+ * This is the emulator's counterpart to the badge's LCD_X_SIZE/LCD_Y_SIZE
  * (ccs_workspace/qc2024/sh1107.h), which are 128 and used exactly the same
  * way. Both values are also fed as `width`/`height` into a Graphics_Display
  * (g_gfx here, g_oled on the badge); Graphics_initContext() (context.c)

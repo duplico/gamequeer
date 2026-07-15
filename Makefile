@@ -68,17 +68,23 @@ DOCKER_CMD_NIT := docker run --rm --workdir /workspaces/gamequeer -v $(PWD):/wor
 # Compile the golden-test fixtures. The output .gqgame carts under
 # gamequeer/tests/golden/ are committed to the repo.
 #  - hello.gq: no ffmpeg needed; no GIF/image assets.
-#  - mask_encoding_a.gq / mask_encoding_b.gq: masked-sprite (fganim/fgmask)
-#    fixtures with PNG assets under gamequeer/tests/golden/assets/animations/;
-#    gqc resolves animation sources relative to CWD, so these must be
-#    compiled from gamequeer/tests/golden itself (see #262/#272 golden-test
-#    follow-up).
+#  - mask_encoding_a.gq / mask_encoding_b.gq / mask_encoding_c.gq:
+#    masked-sprite (fganim/fgmask) fixtures with PNG assets under
+#    gamequeer/tests/golden/assets/animations/; gqc resolves animation
+#    sources relative to CWD, so these must be compiled from
+#    gamequeer/tests/golden itself (see #262/#272 golden-test follow-up).
 #  - redundant_write.gq: SETVAR redundant-refresh regression fixture (#265/
 #    PR#274); no ffmpeg/image assets needed either.
 #  - anim_advance.gq: multi-frame animation cache-invalidation regression
 #    fixture (#264/PR#282), using bwcircles.gif under
 #    gamequeer/tests/golden/assets/animations/ (same ffmpeg/GIF pipeline as
-#    mask_encoding_{a,b}.gq, so compiled from gamequeer/tests/golden too).
+#    mask_encoding_{a,b,c}.gq, so compiled from gamequeer/tests/golden too).
+#  - rowmajor_byte_blit.gq: row-major byte-blit fast/generic-path coverage
+#    (#295), also using checker.png under gamequeer/tests/golden/assets/
+#    animations/, so compiled from gamequeer/tests/golden too.
+#  - edge_coverage.gq: true display-edge (x=127, y=127) coverage fixture
+#    (#297), reusing checker.png the same way, so compiled from
+#    gamequeer/tests/golden too.
 golden-fixture: builder-build gamequeer/tests/golden/hello.gq gamequeer/tests/golden/mask_encoding_a.gq gamequeer/tests/golden/mask_encoding_b.gq gamequeer/tests/golden/mask_encoding_c.gq gamequeer/tests/golden/redundant_write.gq gamequeer/tests/golden/anim_advance.gq gamequeer/tests/golden/rowmajor_byte_blit.gq gamequeer/tests/golden/edge_coverage.gq
 	$(DOCKER_CMD_NIT) /bin/bash -c "PYTHONPATH=gqc/src python -m gqc compile --no-mem-map -o gamequeer/tests/golden gamequeer/tests/golden/hello.gq && \
 		PYTHONPATH=gqc/src python -m gqc compile --no-mem-map -o gamequeer/tests/golden gamequeer/tests/golden/redundant_write.gq && \
