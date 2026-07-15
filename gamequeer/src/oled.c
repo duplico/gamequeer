@@ -101,9 +101,11 @@ void gq_image_load_byte(gq_image_frame_on_screen *frame) {
  * pixel-identical to the old code for any valid `count`.
  */
 uint8_t gq_image_peek_run(gq_image_frame_on_screen *frame, uint16_t *out_avail) {
-    // NB: gate this function call on gq_image_done() to avoid undefined behavior.
-    // Also, you need to bootstrap it by calling gq_image_load_byte() (done by
-    // gq_load_image()).
+    // NB: only call this function while !gq_image_done(frame) -- calling it
+    // once the frame is done is undefined behavior (see the while
+    // (!gq_image_done(...)) loops in gq_draw_image() and
+    // gq_draw_image_with_mask() below). Also, you need to bootstrap it by
+    // calling gq_image_load_byte() (done by gq_load_image()).
     uint16_t row_remaining = (uint16_t) frame->width - frame->x_pixel_offset;
 
     if (frame->rle_type == 1) {
