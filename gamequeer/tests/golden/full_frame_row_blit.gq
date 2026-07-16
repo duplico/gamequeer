@@ -35,18 +35,29 @@
  * 1's.
  *
  * Why the y = 64 phase flip specifically (not just plain (x + y) % 2):
- * without it, this fixture initially passed even with that
+ * without it, this fixture initially passed even with the
  * read-before-decode ordering *reversed* -- a plain checkerboard has period
  * 2 in y, and 64 (the chunk boundary) is a multiple of 2, so chunk 1's row
  * 63 and chunk 2's row 63 (i.e. overall row 127) render pixel-identically,
  * making the corruption invisible. The half-image phase flip breaks that
  * accidental symmetry: reading the wrong chunk at the boundary now produces
- * a visibly different (phase-inverted) pattern. Confirmed via negative
- * control: temporarily reversing oled.c's HAL_oled_blit_row()/
- * gq_image_advance_byte() call order reproducibly fails this test (and only
- * this test, among the row-path-covering fixtures) with this asset, and
- * passes with the plain (x + y) % 2 asset -- i.e. this is deliberately the
- * minimal asset that catches the ordering hazard.
+ * a visibly different (phase-inverted) pattern.
+ *
+ * Ground truth from actually running the negative control (temporarily
+ * reversing oled.c's HAL_oled_blit_row()/gq_image_advance_byte() call
+ * order): this fixture fails, as designed -- but so do
+ * golden_framebuffer_anim_advance_frame{0,1,2}. That's not a flaw in this
+ * fixture's design; anim_advance.gq's bwcircles.gif frames turn out to
+ * *also* be 128x128 uncompressed images (confirmed via --perf-dump:
+ * draw_write count=128 for anim_advance.gqgame too), so they hit the exact
+ * same buffer-straddle boundary at row 64 -- and unlike a plain checkerboard,
+ * dithered circle content has no accidental period-2-in-y symmetry, so it
+ * was already an incidental (if undocumented, pre-#303) negative control for
+ * this ordering hazard. This fixture remains the dedicated, deliberately-
+ * designed case (built specifically to guarantee -- not coincidentally
+ * benefit from -- both the buffer-straddle boundary and the broken
+ * y-shift symmetry, and to document why both are needed), not the only one
+ * that catches it.
  *
  * How to reproduce the compiled fixture (full_frame_row_blit.gqgame):
  *

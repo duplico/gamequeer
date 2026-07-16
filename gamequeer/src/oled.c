@@ -272,8 +272,15 @@ void gq_draw_image(
         // generic per-run path) for any row that doesn't qualify --
         // narrower images, a row straddling the clip region's left/right
         // edge, or (defensively) a row whose bytes straddle an
-        // image_buffer reload boundary.
-        if (frame.rle_type == 1 && frame.x_bit_offset == 0 && frame.x_pixel_offset == 0 &&
+        // image_buffer reload boundary. The frame.width > 0 check matters
+        // even though gqc can't emit a zero-width image today: without it,
+        // width == 0 satisfies width % 8 == 0 trivially, nbytes would be 0,
+        // the gq_image_advance_byte() loop below would run zero times (so
+        // frame.x_pixel_offset/y_curr never advance), and the outer while
+        // loop would spin on this same branch forever -- HAL_oled_blit_row()
+        // itself is documented to require nbytes >= 1, and this is the only
+        // caller, so the guard belongs here.
+        if (frame.rle_type == 1 && frame.x_bit_offset == 0 && frame.x_pixel_offset == 0 && frame.width > 0 &&
             ((uint16_t) frame.width % 8) == 0 && draw_y >= context->clipRegion.yMin &&
             draw_y <= context->clipRegion.yMax && draw_x >= context->clipRegion.xMin &&
             (draw_x + frame.width - 1) <= context->clipRegion.xMax) {
