@@ -26,6 +26,16 @@ const char *const gq_perf_section_names[GQ_PERF_SEC_COUNT] = {
 };
 
 void gq_perf_record(gq_perf_section_id_t sec, gq_perf_time_t duration_us) {
+    /* Defense-in-depth: drop implausible samples (e.g. a garbage
+     * HAL_perf_now() delta from a firmware timing-source race) before they
+     * can poison this section's accumulators. See gq_perf.h's
+     * implausible-sample-drop NOTE and GQ_PERF_MAX_PLAUSIBLE_US for the
+     * threshold and rationale. Dropped, not clamped: count/total_us/min_us/
+     * max_us are all left untouched for this call. */
+    if (duration_us > GQ_PERF_MAX_PLAUSIBLE_US) {
+        return;
+    }
+
     gq_perf_section_t *s = &gq_perf_stats.sections[sec];
     s->count++;
     s->total_us += duration_us;
