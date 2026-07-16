@@ -258,6 +258,62 @@ void gq_draw_image(
         int16_t draw_x = x + frame.x_pixel_offset;
         int16_t draw_y = y + frame.y_curr;
 
+        // Row-level uncompressed fast path (issue #303): at the very start
+        // of an uncompressed image row (x_bit_offset == 0, x_pixel_offset
+        // == 0), if the row's byte count divides its width evenly (width %
+        // 8 == 0 -- gqc's uncompressed encoder pads every row to a whole
+        // number of bytes, so a non-multiple-of-8 width would otherwise
+        // have don't-care padding bits in the last byte that must NOT be
+        // drawn past the image's right edge) and the *entire* row lies
+        // within the clip region, forward the whole row in one
+        // HAL_oled_blit_row() call instead of nbytes individual
+        // HAL_oled_blit_byte() calls (the fast path just below this one).
+        // Falls through to that byte-level fast path (and ultimately the
+        // generic per-run path) for any row that doesn't qualify --
+        // narrower images, a row straddling the clip region's left/right
+        // edge, or (defensively) a row whose bytes straddle an
+        // image_buffer reload boundary. The frame.width > 0 check matters
+        // even though gqc can't emit a zero-width image today: without it,
+        // width == 0 satisfies width % 8 == 0 trivially, nbytes would be 0,
+        // the gq_image_advance_byte() loop below would run zero times (so
+        // frame.x_pixel_offset/y_curr never advance), and the outer while
+        // loop would spin on this same branch forever -- HAL_oled_blit_row()
+        // itself is documented to require nbytes >= 1, and this is the only
+        // caller, so the guard belongs here.
+        if (frame.rle_type == 1 && frame.x_bit_offset == 0 && frame.x_pixel_offset == 0 && frame.width > 0 &&
+            ((uint16_t) frame.width % 8) == 0 && draw_y >= context->clipRegion.yMin &&
+            draw_y <= context->clipRegion.yMax && draw_x >= context->clipRegion.xMin &&
+            (draw_x + frame.width - 1) <= context->clipRegion.xMax) {
+            uint16_t nbytes    = (uint16_t) (frame.width / 8);
+            uint16_t row_index = frame.byte_index;
+
+            // Buffer-straddle guard: HAL_oled_blit_row() needs the whole
+            // row's source bytes to already be resident in image_buffer as
+            // one contiguous span. IMAGE_BUFFER_SIZE is a multiple of every
+            // row size the badge's cart images actually use (e.g. 1024 / 16
+            // bytes for a full 128px row), so this should never trip in
+            // practice -- checked rather than assumed, per this fast
+            // path's guard comment above.
+            if ((uint32_t) row_index + nbytes <= IMAGE_BUFFER_SIZE) {
+                // Read the row's bytes out of image_buffer (via the HAL
+                // call) BEFORE decode-advancing: the last
+                // gq_image_advance_byte() call below may trigger
+                // gq_image_load_buffer(), which overwrites image_buffer in
+                // place with the next cart chunk -- so the source bytes
+                // must be consumed first.
+                GQ_PERF_ENTER_RUNS(DRAW_WRITE);
+                HAL_oled_blit_row(draw_x, draw_y, &frame.image_buffer[row_index], nbytes);
+                GQ_PERF_EXIT_RUNS(DRAW_WRITE);
+
+                GQ_PERF_ENTER_RUNS(DRAW_DECODE);
+                for (uint16_t i = 0; i < nbytes; i++) {
+                    gq_image_advance_byte(&frame);
+                }
+                GQ_PERF_EXIT_RUNS(DRAW_DECODE);
+                continue;
+            }
+        }
+
         // Byte-aligned uncompressed fast path (row-major framebuffer,
         // duplico/qc2024#45 Stage 1 / duplico/gamequeer#295): an
         // uncompressed source byte that is (a) currently byte-aligned in

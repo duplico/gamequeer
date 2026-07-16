@@ -143,6 +143,20 @@ add_golden_test(golden_framebuffer_rowmajor_byte_blit rowmajor_byte_blit)
 
 add_golden_test(golden_framebuffer_mask_encoding_c mask_encoding_c)
 
+# ---- golden_framebuffer_full_frame_row_blit: row-level uncompressed blit
+# fast path (duplico/gamequeer#303, HAL_oled_blit_row()) -- the batched
+# replacement for #295's per-byte HAL_oled_blit_byte() fast path.
+# rowmajor_byte_blit.gq's bgsprite placement (32x32, byte-aligned, fully
+# on-screen) already incidentally exercises the row path, but this fixture
+# is the dedicated, purpose-built case: a genuinely full-screen 128x128
+# uncompressed image, chosen specifically so its 2048 bytes span exactly two
+# IMAGE_BUFFER_SIZE (1024-byte) cart-read chunks -- the row loop crosses an
+# image_buffer reload boundary exactly once (between row 63 and row 64),
+# regression-locking the fast path's read-before-decode-advance ordering.
+# See full_frame_row_blit.gq's header for the full rationale.
+
+add_golden_test(golden_framebuffer_full_frame_row_blit full_frame_row_blit)
+
 # ---- golden_framebuffer_redundant_write_{initial,phase_a,phase_b}: SETVAR
 # redundant-refresh regression coverage for gamequeer#265/PR#274 (GQ_OP_SETVAR
 # now only raises GQ_EVENT_REFRESH when a write to a visual builtin var
@@ -342,4 +356,38 @@ if(GQ_PERF_INSTRUMENT)
             -DEXPECT_RUNS_INSTRUMENTED=${_expect_runs_instrumented}
             -P "${CMAKE_CURRENT_SOURCE_DIR}/run_perf_draw_count_cross_check.cmake"
     )
+
+    # ---- perf_row_blit_draw_write_count: GQ_PERF_INSTRUMENT_RUNS-only -----
+    # Only registered when GQ_PERF_INSTRUMENT_RUNS is ALSO ON (see above --
+    # DRAW_WRITE's count is always 0 otherwise, which would make this
+    # assertion meaningless). A pixel-level golden (golden_framebuffer_
+    # full_frame_row_blit above) proves gamequeer#303's row-level blit fast
+    # path produces byte-identical output to the pre-#303 per-byte path, but
+    # cannot distinguish "the fast path engaged" from "it silently fell back
+    # to the byte-level path and happened to draw the same pixels" -- e.g. a
+    # regression that defeats the fast path's guard condition (frame.width %
+    # 8 == 0, full row in clip, etc.) would still pass every golden test with
+    # zero signal. full_frame_row_blit.gqgame's 128x128 image draws via
+    # exactly 128 HAL_oled_blit_row() calls (one per row) when the fast path
+    # engages, or 2048 HAL_oled_blit_byte() calls if it doesn't -- both wrap
+    # GQ_PERF_ENTER_RUNS(DRAW_WRITE)/EXIT_RUNS(DRAW_WRITE), so the DRAW_WRITE
+    # section's count directly distinguishes the two. TICKS matches
+    # GOLDEN_TICKS (the fixture draws once on enter and never again -- see
+    # golden_framebuffer_redundant_write_draw_count_* above for the same
+    # "no further SETVAR/frame-advance activity" pattern -- so the count is
+    # stable across any TICKS >= 1).
+    if(GQ_PERF_INSTRUMENT_RUNS)
+        add_test(
+            NAME perf_row_blit_draw_write_count
+            COMMAND
+                ${CMAKE_COMMAND}
+                -DEXE=$<TARGET_FILE:gamequeer>
+                -DFIXTURE=${GOLDEN_DIR}/full_frame_row_blit.gqgame
+                -DPERF_DUMP=${CMAKE_CURRENT_BINARY_DIR}/perf_row_blit_draw_write_count_perfdump.txt
+                -DTICKS=${GOLDEN_TICKS}
+                -DSECTION=draw_write
+                -DEXPECTED=128
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/run_perf_section_count_test.cmake"
+        )
+    endif()
 endif()

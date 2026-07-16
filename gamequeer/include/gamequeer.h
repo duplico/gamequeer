@@ -379,6 +379,39 @@ void HAL_oled_fill_run(int16_t x, int16_t y, uint16_t length, uint8_t value);
 void HAL_oled_blit_byte(int16_t x, int16_t y, uint8_t src_byte, uint8_t bit_count);
 
 /*
+ * HAL_oled_blit_row() -- per-platform display primitive (issue #303,
+ * row-level blit fast path for uncompressed image rows).
+ *
+ * Writes `nbytes` whole source bytes -- `8 * nbytes` consecutive horizontal
+ * pixels starting at (x, y) -- from `src`, MSB-first within each byte (same
+ * bit order as HAL_oled_blit_byte(): bit 7 of src[0] is the pixel at x, bit
+ * 6 is x+1, ..., bit 0 of src[0] is x+7, bit 7 of src[1] is x+8, and so on).
+ * Semantically equivalent to calling HAL_oled_blit_byte(x + 8*i, y, src[i],
+ * 8) once for each i in [0, nbytes), just batched into one call so a
+ * per-platform implementation can do the whole row in one pass instead of
+ * paying nbytes separate call/guard overheads -- this is the batched
+ * replacement for gq_draw_image()'s uncompressed fast path calling
+ * HAL_oled_blit_byte() once per source byte (~26 us/byte measured on the
+ * badge; see docs/perf-investigation.md and duplico/gamequeer#303).
+ *
+ * Contract with callers (oled.c):
+ *   - nbytes >= 1.
+ *   - The caller has already verified [x, x + 8*nbytes - 1] lies fully
+ *     within the active clip region and 0 <= y -- this primitive does NOT
+ *     clip or split a partially-visible span; callers fall back to
+ *     HAL_oled_blit_byte()/HAL_oled_fill_run() for any row that needs
+ *     clipping.
+ *   - `x` is NOT guaranteed to be byte-aligned in the destination
+ *     framebuffer (only the *source* decode stream is guaranteed
+ *     byte-aligned at the start of a row) -- same as HAL_oled_blit_byte(),
+ *     a per-platform packed-framebuffer implementation (e.g. sh1107.c) may
+ *     need to shift each source byte across a destination byte boundary.
+ *     `src` itself is always exactly `nbytes` whole, contiguous bytes with
+ *     no partial leading/trailing byte on the source side.
+ */
+void HAL_oled_blit_row(int16_t x, int16_t y, const uint8_t *src, uint16_t nbytes);
+
+/*
  * HAL_oled_blit_byte_masked() -- per-platform display primitive (masked
  * counterpart of HAL_oled_blit_byte(), for gq_draw_image_with_mask() --
  * duplico/qc2024#45 Stage 1 / duplico/gamequeer#295).

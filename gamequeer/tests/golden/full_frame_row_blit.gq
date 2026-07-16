@@ -1,0 +1,92 @@
+/*
+ * full_frame_row_blit.gq — Golden-test fixture locking in gq_draw_image()'s
+ * new row-level uncompressed fast path (duplico/gamequeer#303,
+ * HAL_oled_blit_row()) -- the batched replacement for #295's per-byte
+ * HAL_oled_blit_byte() fast path.
+ *
+ * checker128.png is a purpose-built 128x128 asset (freshly generated, not
+ * reused from checker.png -- see below for why size *and* content matter
+ * here): bit (x + y + half) % 2, where half = 1 for y >= 64 and 0 otherwise
+ * -- the same per-pixel-alternating adversarial density as checker.png
+ * (every pixel differs from its horizontal/vertical neighbor, for the same
+ * reason mask_encoding_a.gq's header gives: no "all-same-value run" slack
+ * for a bit-order or byte-offset bug to hide in), *plus* a deliberate phase
+ * flip at y = 64 (see below for why the flip matters, not just the size).
+ *
+ * Placed via bganim at the default (0, 0), full 128x128 -- i.e. exactly the
+ * motivating case from issue #303 (a full-screen uncompressed frame): every
+ * one of the image's 128 rows is byte-aligned, 16 bytes wide (128 / 8), and
+ * entirely within the clip region, so every row takes the new
+ * HAL_oled_blit_row() fast path from the very first pixel to the very last.
+ *
+ * Why 128x128 specifically (not reusing checker.png's 32x32, which
+ * rowmajor_byte_blit.gq's bgsprite placement already incidentally exercises
+ * the row path through): the image is 128 * 128 / 8 = 2048 bytes, exactly
+ * two whole IMAGE_BUFFER_SIZE (1024-byte) cart-read chunks -- so the row
+ * loop crosses an image_buffer reload boundary exactly once, between row 63
+ * (the last row of chunk 1) and row 64 (the first row of chunk 2), landing
+ * precisely on gq_draw_image()'s buffer-straddle guard's boundary
+ * (IMAGE_BUFFER_SIZE / 16 bytes-per-row = 64 whole rows per chunk, so the
+ * guard should never fall back to the byte-level path here). This
+ * regression-locks the fast path's read-before-decode-advance ordering
+ * (oled.c's comment on why HAL_oled_blit_row() is called *before*
+ * gq_image_advance_byte() for a row): if that ordering were reversed, row
+ * 63's write would read chunk 2's (already-reloaded) data instead of chunk
+ * 1's.
+ *
+ * Why the y = 64 phase flip specifically (not just plain (x + y) % 2):
+ * without it, this fixture initially passed even with the
+ * read-before-decode ordering *reversed* -- a plain checkerboard has period
+ * 2 in y, and 64 (the chunk boundary) is a multiple of 2, so chunk 1's row
+ * 63 and chunk 2's row 63 (i.e. overall row 127) render pixel-identically,
+ * making the corruption invisible. The half-image phase flip breaks that
+ * accidental symmetry: reading the wrong chunk at the boundary now produces
+ * a visibly different (phase-inverted) pattern.
+ *
+ * Ground truth from actually running the negative control (temporarily
+ * reversing oled.c's HAL_oled_blit_row()/gq_image_advance_byte() call
+ * order): this fixture fails, as designed -- but so do
+ * golden_framebuffer_anim_advance_frame{0,1,2}. That's not a flaw in this
+ * fixture's design; anim_advance.gq's bwcircles.gif frames turn out to
+ * *also* be 128x128 uncompressed images (confirmed via --perf-dump:
+ * draw_write count=128 for anim_advance.gqgame too), so they hit the exact
+ * same buffer-straddle boundary at row 64 -- and unlike a plain checkerboard,
+ * dithered circle content has no accidental period-2-in-y symmetry, so it
+ * was already an incidental (if undocumented, pre-#303) negative control for
+ * this ordering hazard. This fixture remains the dedicated, deliberately-
+ * designed case (built specifically to guarantee -- not coincidentally
+ * benefit from -- both the buffer-straddle boundary and the broken
+ * y-shift symmetry, and to document why both are needed), not the only one
+ * that catches it.
+ *
+ * How to reproduce the compiled fixture (full_frame_row_blit.gqgame):
+ *
+ *   From the gamequeer repo root, using the builder container:
+ *     docker run --rm -v $(pwd):/workspaces/gamequeer --workdir /workspaces/gamequeer \
+ *         --user $(id -u):$(id -g) gamequeer-builder:latest \
+ *         /bin/bash -c "cd gamequeer/tests/golden && PYTHONPATH=/workspaces/gamequeer/gqc/src \
+ *             python -m gqc compile --no-mem-map -o . full_frame_row_blit.gq"
+ *
+ *   Or via the Makefile target:
+ *     make golden-fixture
+ */
+
+game {
+    id = 1;
+    title := "FullFrameRow";
+    author := "test";
+    starting_stage = blit_test;
+}
+
+animations {
+    bgsprite <- "checker128.png" {
+        w = 128;
+        h = 128;
+    }
+}
+
+stage blit_test {
+    event enter {
+        play bganim bgsprite;
+    }
+}
