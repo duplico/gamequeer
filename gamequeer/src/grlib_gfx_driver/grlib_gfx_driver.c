@@ -90,6 +90,23 @@ void HAL_oled_blit_byte(int16_t x, int16_t y, uint8_t src_byte, uint8_t bit_coun
 }
 
 /*
+ * HAL_oled_blit_row() -- emulator implementation (see the doc comment on
+ * its declaration in gamequeer.h for the full contract).
+ *
+ * frame_buffer here is one byte per pixel, so -- same as HAL_oled_blit_byte()
+ * above -- there's no packed-framebuffer shifting to do; this is exactly
+ * `nbytes` calls to HAL_oled_blit_byte(), one per source byte, which is
+ * sufficient to be a faithful pixel-level oracle for the badge's packed
+ * math. Performance here is not the point (see HAL_oled_fill_run()'s doc
+ * comment above) -- pixel-identical output vs. the byte-at-a-time path is.
+ */
+void HAL_oled_blit_row(int16_t x, int16_t y, const uint8_t *src, uint16_t nbytes) {
+    for (uint16_t i = 0; i < nbytes; i++) {
+        HAL_oled_blit_byte((int16_t) (x + 8 * i), y, src[i], 8);
+    }
+}
+
+/*
  * HAL_oled_blit_byte_masked() -- emulator implementation (see the doc
  * comment on its declaration in gamequeer.h for the full contract).
  *

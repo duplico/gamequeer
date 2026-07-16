@@ -143,6 +143,20 @@ add_golden_test(golden_framebuffer_rowmajor_byte_blit rowmajor_byte_blit)
 
 add_golden_test(golden_framebuffer_mask_encoding_c mask_encoding_c)
 
+# ---- golden_framebuffer_full_frame_row_blit: row-level uncompressed blit
+# fast path (duplico/gamequeer#303, HAL_oled_blit_row()) -- the batched
+# replacement for #295's per-byte HAL_oled_blit_byte() fast path.
+# rowmajor_byte_blit.gq's bgsprite placement (32x32, byte-aligned, fully
+# on-screen) already incidentally exercises the row path, but this fixture
+# is the dedicated, purpose-built case: a genuinely full-screen 128x128
+# uncompressed image, chosen specifically so its 2048 bytes span exactly two
+# IMAGE_BUFFER_SIZE (1024-byte) cart-read chunks -- the row loop crosses an
+# image_buffer reload boundary exactly once (between row 63 and row 64),
+# regression-locking the fast path's read-before-decode-advance ordering.
+# See full_frame_row_blit.gq's header for the full rationale.
+
+add_golden_test(golden_framebuffer_full_frame_row_blit full_frame_row_blit)
+
 # ---- golden_framebuffer_redundant_write_{initial,phase_a,phase_b}: SETVAR
 # redundant-refresh regression coverage for gamequeer#265/PR#274 (GQ_OP_SETVAR
 # now only raises GQ_EVENT_REFRESH when a write to a visual builtin var
