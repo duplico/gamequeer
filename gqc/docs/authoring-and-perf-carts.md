@@ -263,6 +263,65 @@ build-headless/gamequeer --ticks <N> --dump out.pgm <cart>.gqgame
 (This is exactly what the `tests/` golden-framebuffer harness does;
 `make test-headless` runs the whole ctest suite in the container.)
 
+### From `.gqgame` to a physical cartridge
+
+A badge boots a game from a **cartridge** carrying a W25Q128JV 16 MB SPI
+flash. The `.gqgame` that `compile` emits is **already the raw cart image** —
+byte-for-byte what belongs at flash address 0, no transformation:
+
+- The linker lays the cart out from `cart_ptr_start = 0`, header first
+  (`linker.py`), then animations, stages, frames, frame-data, cues, menus,
+  variables, startup code, and events. Sections that the hardware must be
+  able to sector-erase independently are padded with `0xFF` to the next
+  4 KB boundary (`linker.py` — matches the W25Q128JV's 4 KB sector
+  granularity). `compile` writes the linker's byte buffer verbatim to the
+  file (`gqc.py`).
+- Offset 0 holds `gq_header`: magic `GQ_MAGIC = "GQ01"`, id, 22-byte title,
+  `starting_stage`, `startup_code`, `persistent_vars`, `persistent_crc16`,
+  color, flags, CRC16 (`gamequeer/include/gamequeer.h`).
+- On-cart pointers are 32-bit with the namespace in the top byte
+  (`GQ_PTR_NS_CART = 0x01`, address in the low 24 bits — `gamequeer.h`). The
+  VM's `load_game()` reads the header from cart address 0 under the CART
+  namespace and then follows the cart-namespaced pointers baked in by the
+  linker (`gamequeer/src/gamequeer.c`). The `persistent_vars` block is
+  4 KB-aligned and padded to a full 4 KB sector (`linker.py`) so a running
+  game can rewrite just that sector.
+
+The emulator consumes the identical layout: it `fread`s the `.gqgame` straight
+into a `CART_FLASH_SIZE_MBYTES` (16 MB) `flash_cart[]` buffer at index 0 and
+resolves CART reads as `flash_cart[GQ_PTR_ADDR(ptr)]` (`gamequeer/src/HAL.c`).
+So a headless-emulator run at `flash[0]` is byte-equivalent to a real cart
+programmed at flash address 0 — which is why the emulator validation above is
+a faithful proxy for on-badge behavior.
+
+**The gap — burning the image onto the chip.** Neither repo contains a tool,
+subcommand, Makefile target, or documented procedure that writes a `.gqgame`
+onto the physical cartridge flash:
+
+- `gqc` has no `flash`/`burn`/`write` subcommand — it stops at emitting the
+  `.gqgame` file.
+- The badge firmware (`qc2024` repo, `ccs_workspace/qc2024/flash.c`,
+  `HAL_badge.c`) is a **cart reader**, not a cart programmer. Its W25Q128JV
+  driver implements page-program/erase, but the only write path wired to the
+  cartridge bus rewrites the game's own 4 KB `persistent_vars` save sector
+  (via a cache-sector + CRC16 copy-back); a direct full-cart write is
+  explicitly refused (`HAL_badge.c`: `GQ_PTR_NS_CART` write returns 0). There
+  is no host-to-cart bulk-load mode.
+- `qc2024`'s `flashing/flash.py` provisions a **2-byte badge ID** into the
+  MSP430 FRAM at `0x1800` over the eZ-FET/SBW probe — it does not touch the
+  cart flash. `qc2024`'s `docs/perf-hardware-runbook.md` covers **MCU
+  firmware** flashing (DSLite / MSP430Flasher over SBW) — related but a
+  distinct target from the cartridge SPI flash.
+
+So the missing step is an **external SPI-flash programming procedure** — e.g.
+an SPI programmer / SOIC clip writing the `.gqgame` to cart flash offset 0, or
+a cart-slot fixture that does the same. The repos pin down exactly *what*
+bytes go *where* (flat image, `GQ01` at offset 0, 4 KB-aligned, 16 MB target);
+the mechanism that transfers them onto the W25Q128JV is not in either repo and
+must be supplied out-of-band (the badge owner maintains a bench cart-slot
+programmer fixture for this). Document the exact programmer invocation here
+once that fixture's procedure is settled.
+
 ## 8. Gotchas found
 
 - **Asset paths are CWD-relative** (`assets/animations/<file>`). Compile from
@@ -298,12 +357,9 @@ build-headless/gamequeer --ticks <N> --dump out.pgm <cart>.gqgame
   `--ticks`/`--input` planning, not just menus.
 - **Non-opaque + color-inverted label text can render invisible** on an
   untouched black canvas (black-on-black) — see "Labels" above.
-- The OLED framebuffer is **127×127**, not 128×128 (`OLED_HORIZONTAL_MAX` /
-  `OLED_VERTICAL_MAX` in `gamequeer.h`), even though animation `w`/`h` cap at
-  128 and the golden-test harness's `--dump` PGM header reads `P5\n127
-  127\n255\n`. This is being fixed by duplico/gamequeer#297 (emulator-canvas
-  fix) to 128×128 — **do not commit golden PGMs against the carts in this
-  doc until #297 lands**, or they'll be 127×127 and need regenerating.
+- The OLED framebuffer is **128×128** (`OLED_HORIZONTAL_MAX` /
+  `OLED_VERTICAL_MAX` in `gamequeer.h`), matching the animation `w`/`h` cap;
+  the golden-test harness's `--dump` PGM header reads `P5\n128 128\n255\n`.
 
 ## 9. The committed perf / regression-content test carts
 
@@ -325,47 +381,37 @@ regenerable with `games/perf/gen_perf_assets.py`). All six compiled with
 `perf_flat` and `perf_dither` are the same shape (full-screen looping bganim)
 with opposite content, so the pair isolates rendering's content-dependence.
 
-### Recommendation: Stage-2 golden fixtures (post duplico/gamequeer#297)
+### Stage-2 golden fixtures
 
-Once the emulator canvas fix (duplico/gamequeer#297) lands and goldens can
-be committed at the corrected 128×128, wire these as `tests/golden/`
-fixtures (following the `mask_encoding_{a,b}.gq` / `anim_advance.gq`
-pattern: compiled `.gqgame` + committed golden PGM(s) + `add_golden_test()`
-entries in `tests/CMakeLists.txt`) to protect Stage 2 (grlib row-major
-rewrite, epic duplico/qc2024#47):
+The text/menu render paths these carts exercise are now covered by committed
+`tests/golden/` pixel-identity fixtures at 128×128, protecting Stage 2 (grlib
+row-major rewrite, epic duplico/qc2024#47). The golden fixtures live under
+`gamequeer/tests/golden/` and are self-contained (they do not depend on this
+`examples/` content); they were adapted from the carts here:
 
-1. **`perf_text.gq`'s `start` stage is the single highest-value fixture.**
-   It packs the two regression shapes a row-major rewrite is most likely to
-   get subtly wrong into one frame: label3's off-canvas opaque/inverted box
-   (background-fill clipping *and* glyph clipping together, at both the
-   right *and* bottom edges simultaneously) and label1's top-left
-   zero-origin max-length string (the opposite corner). Recommend a golden
-   at `--ticks 1` (pristine `enter`) and a second at the post-`input(A)`
-   state (proves dynamic `str(x)`+concat content, not just static text).
-2. **`perf_text.gq`'s `glyphs1`/`glyphs2` stages** for full glyph-shape
-   coverage — a row-major rewrite could plausibly corrupt only specific
-   glyph bit patterns (e.g. glyphs with lone pixels in the last column/row
-   of their 6×8 cell), which a small hand-picked string would likely miss.
-   Recommend goldens at `--ticks 2` (glyphs1) and `--ticks 3` (glyphs2) —
-   see "Driving menu navigation headlessly" above for why the tick counts
-   aren't 1/2 (the `gostage` one-tick defer).
-3. **`perf_menu_choice.gq`'s pristine render** (`--ticks 1`) — full menu
-   chrome (prompt, 6 options at the max-option boundary, the clipped
-   21-char option, cursor arrow, hint bar/icons) in one frame; a second
-   golden after 2×`R` + `A` (`--ticks 3`, script above) to also cover the
-   confirm → label-redraw transition.
-4. **`perf_menu_text.gq`'s pristine render** (`--ticks 1`) — prompt, seeded
-   char, cursor box, mode hint icons; a second golden mid-edit in
-   position-select mode (`--ticks 4`, `menu_text_mid.txt`-style script
-   above) to cover the alternate cursor-hint icon set
-   (`draw_hint_dial_leftright`/`draw_hint_click_updown` vs the CHAR-mode
-   icons), since that's a visually distinct render path most other content
-   never reaches.
-5. `perf_mask.gq` is primarily a **perf** fixture (Stage 1 already has
-   dedicated golden coverage for the masked-blit path via
-   `mask_encoding_{a,b}.gq`), but its animated multi-frame form could be
-   added as a golden too if Stage 2 perf work wants continuous-redraw
-   masked-blit coverage in the same harness — lower priority than 1-4 above.
+- **`label_text.gq`** ← `perf_text.gq`. Four goldens
+  (`add_golden_test(golden_framebuffer_label_text_{start,start_scored,glyphs1,glyphs2} …)`
+  in `tests/CMakeLists.txt`): pristine `start` (zero-origin max-length label
+  + off-canvas-clipped opaque/inverted box — the highest-value clipping case,
+  both right and bottom edges at once), post-`input(A)` `start_scored`
+  (dynamic `str(x)`+concat content), and `glyphs1`/`glyphs2` (full
+  printable-ASCII glyph sweep). Tick counts account for the `gostage`
+  one-tick defer (see "Driving menu navigation headlessly").
+- **`menu_choice.gq`** ← `perf_menu_choice.gq`. Pristine (6 options at the
+  max, one edge-clipped, cursor arrow, hint bar) plus confirmed (after
+  scripted `2×R + A`, covering the menu-close → label-redraw transition).
+- **`menu_text.gq`** ← `perf_menu_text.gq`. Pristine plus a mid-edit
+  position-select state, which covers the alternate cursor-hint icon set
+  (`draw_hint_dial_leftright`/`draw_hint_click_updown` vs the CHAR-mode
+  icons) — a visually distinct path most other content never reaches.
 
-`perf_flat.gq`/`perf_dither.gq` are pure perf fixtures (no text/menu
+The golden harness gained an optional `INPUT` parameter to `add_golden_test()`
+(a scripted button-input file replayed via `--input`) so button-driven states
+can be captured, not just fixed tick counts.
+
+The carts under `examples/games/perf/` remain the **perf** fixtures (animated,
+full-screen, run continuously). `perf_mask.gq` in particular has no golden
+counterpart — Stage 1's masked-blit path is golden-covered by
+`mask_encoding_{a,b,c}.gq`, but the animated full-screen masked-blit form
+here is perf-only. `perf_flat.gq`/`perf_dither.gq` are pure perf fixtures (no text/menu
 surface) and are not Stage-2-relevant.
