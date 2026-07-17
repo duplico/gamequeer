@@ -444,6 +444,49 @@ void HAL_oled_blit_row(int16_t x, int16_t y, const uint8_t *src, uint16_t nbytes
  */
 void HAL_oled_blit_byte_masked(int16_t x, int16_t y, uint8_t src_byte, uint8_t mask_byte, uint8_t bit_count);
 
+/*
+ * HAL_oled_blit_row_masked() -- per-platform display primitive (issue
+ * #311, row-level blit fast path for masked uncompressed image rows;
+ * masked counterpart of HAL_oled_blit_row(), the same way
+ * HAL_oled_blit_byte_masked() is the masked counterpart of
+ * HAL_oled_blit_byte()).
+ *
+ * Writes `nbytes` whole source bytes -- `8 * nbytes` consecutive horizontal
+ * pixels starting at (x, y) -- each pixel taken from the corresponding bit
+ * of `src` (same MSB-first bit order as HAL_oled_blit_row(): bit 7 of
+ * src[0] is the pixel at x, ..., bit 0 of src[0] is x+7, bit 7 of src[1] is
+ * x+8, and so on) but ONLY where the corresponding bit of `mask` (same
+ * indexing) is 1 -- pixels whose mask bit is 0 are left completely
+ * untouched (existing framebuffer content shows through), matching
+ * HAL_oled_blit_byte_masked()'s mask=0-is-transparent semantics exactly.
+ * Semantically equivalent to calling HAL_oled_blit_byte_masked(x + 8*i, y,
+ * src[i], mask[i], 8) once for each i in [0, nbytes), just batched into one
+ * call so a per-platform implementation can do the whole row in one pass
+ * instead of paying nbytes separate call/guard overheads -- this is the
+ * batched replacement for gq_draw_image_with_mask()'s uncompressed+
+ * uncompressed fast path calling HAL_oled_blit_byte_masked() once per
+ * source byte pair.
+ *
+ * Contract with callers (oled.c):
+ *   - nbytes >= 1.
+ *   - The caller has already verified [x, x + 8*nbytes - 1] lies fully
+ *     within the active clip region and 0 <= y -- this primitive does NOT
+ *     clip or split a partially-visible span; callers fall back to
+ *     HAL_oled_blit_byte_masked()/HAL_oled_fill_run() for any row that
+ *     needs clipping.
+ *   - `x` is NOT guaranteed to be byte-aligned in the destination
+ *     framebuffer (only the *source* decode streams are guaranteed
+ *     byte-aligned at the start of a row) -- same as HAL_oled_blit_row(),
+ *     a per-platform packed-framebuffer implementation (e.g. sh1107.c) may
+ *     need to shift each source byte across a destination byte boundary.
+ *   - `src` and `mask` are each exactly `nbytes` whole, contiguous bytes,
+ *     from two independent buffers -- gq_draw_image_with_mask() decodes
+ *     the image and mask streams into separate image_buffer_main /
+ *     image_buffer_mask arrays (oled.c), so `src` and `mask` are never the
+ *     same memory and never overlap.
+ */
+void HAL_oled_blit_row_masked(int16_t x, int16_t y, const uint8_t *src, const uint8_t *mask, uint16_t nbytes);
+
 void gq_draw_image(
     const Graphics_Context *context,
     t_gq_pointer image_bytes,

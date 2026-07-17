@@ -157,6 +157,23 @@ add_golden_test(golden_framebuffer_mask_encoding_c mask_encoding_c)
 
 add_golden_test(golden_framebuffer_full_frame_row_blit full_frame_row_blit)
 
+# ---- golden_framebuffer_full_frame_mask_row_blit: masked row-level
+# uncompressed blit fast path (duplico/gamequeer#311,
+# HAL_oled_blit_row_masked()) -- the masked counterpart of
+# full_frame_row_blit above, applying #303/#308's row blit + row-level
+# decode advance to BOTH the image and mask streams of
+# gq_draw_image_with_mask() simultaneously. Genuinely full-screen 128x128
+# image+mask pair, each exactly 2048 bytes uncompressed (two
+# IMAGE_BUFFER_SIZE chunks), so EACH stream (image_frame's
+# image_buffer_main and mask_frame's image_buffer_mask -- two independent
+# buffers) crosses its own reload boundary once, between row 63 and row
+# 64. See full_frame_mask_row_blit.gq's header for the full rationale,
+# including why mask128.png is asymmetric (not a 50/50 checkerboard) and
+# how it independently catches a reload-ordering violation on the mask
+# stream specifically.
+
+add_golden_test(golden_framebuffer_full_frame_mask_row_blit full_frame_mask_row_blit)
+
 # ---- golden_framebuffer_redundant_write_{initial,phase_a,phase_b}: SETVAR
 # redundant-refresh regression coverage for gamequeer#265/PR#274 (GQ_OP_SETVAR
 # now only raises GQ_EVENT_REFRESH when a write to a visual builtin var
@@ -414,6 +431,49 @@ if(GQ_PERF_INSTRUMENT)
                 -DEXE=$<TARGET_FILE:gamequeer>
                 -DFIXTURE=${GOLDEN_DIR}/full_frame_row_blit.gqgame
                 -DPERF_DUMP=${CMAKE_CURRENT_BINARY_DIR}/perf_row_blit_draw_decode_count_perfdump.txt
+                -DTICKS=${GOLDEN_TICKS}
+                -DSECTION=draw_decode
+                -DEXPECTED=128
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/run_perf_section_count_test.cmake"
+        )
+
+        # ---- perf_mask_row_blit_draw_{write,decode}_count: same idea, for
+        # gq_draw_image_with_mask()'s masked row fast path (gamequeer#311).
+        # full_frame_mask_row_blit.gqgame's 128x128 image+mask pair takes
+        # the masked row path (HAL_oled_blit_row_masked() +
+        # gq_image_advance_row() x2) once per row when it engages -- 128
+        # DRAW_WRITE/DRAW_DECODE section entries, one each per row, same
+        # single-ENTER/EXIT-wraps-the-whole-row-iteration shape as the
+        # unmasked perf_row_blit_* tests above. If the row path's guard
+        # ever regresses (either stream failing to qualify), every row
+        # falls back to the byte-aligned masked fast path just below it
+        # (gamequeer#295), which wraps DRAW_WRITE/DRAW_DECODE once per BYTE
+        # instead -- 128 rows * 16 bytes/row = 2048 -- so EXPECTED=128 is a
+        # real discriminator between "masked row path engaged" and
+        # "silently fell back to the byte-level masked path", exactly like
+        # the unmasked case. A pixel golden alone (golden_framebuffer_
+        # full_frame_mask_row_blit above) cannot tell those two apart,
+        # since both paths are pixel-identical by construction.
+        add_test(
+            NAME perf_mask_row_blit_draw_write_count
+            COMMAND
+                ${CMAKE_COMMAND}
+                -DEXE=$<TARGET_FILE:gamequeer>
+                -DFIXTURE=${GOLDEN_DIR}/full_frame_mask_row_blit.gqgame
+                -DPERF_DUMP=${CMAKE_CURRENT_BINARY_DIR}/perf_mask_row_blit_draw_write_count_perfdump.txt
+                -DTICKS=${GOLDEN_TICKS}
+                -DSECTION=draw_write
+                -DEXPECTED=128
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/run_perf_section_count_test.cmake"
+        )
+
+        add_test(
+            NAME perf_mask_row_blit_draw_decode_count
+            COMMAND
+                ${CMAKE_COMMAND}
+                -DEXE=$<TARGET_FILE:gamequeer>
+                -DFIXTURE=${GOLDEN_DIR}/full_frame_mask_row_blit.gqgame
+                -DPERF_DUMP=${CMAKE_CURRENT_BINARY_DIR}/perf_mask_row_blit_draw_decode_count_perfdump.txt
                 -DTICKS=${GOLDEN_TICKS}
                 -DSECTION=draw_decode
                 -DEXPECTED=128

@@ -1,0 +1,107 @@
+/*
+ * full_frame_mask_row_blit.gq — Golden-test fixture locking in
+ * gq_draw_image_with_mask()'s new row-level uncompressed fast path
+ * (duplico/gamequeer#311, HAL_oled_blit_row_masked()) -- the masked
+ * counterpart of #303/#308's unmasked row blit + row-level decode advance
+ * (full_frame_row_blit.gq), now applied to BOTH the image and mask
+ * streams simultaneously.
+ *
+ * Placed via fganim(1)/fgmask(1) at the default (0, 0), full 128x128 --
+ * every one of the image's 128 rows is byte-aligned, 16 bytes wide
+ * (128 / 8), and entirely within the clip region, and the SAME is true of
+ * the mask stream (same width/height, required by
+ * draw_animation_stack()'s dimension check), so every row takes the new
+ * HAL_oled_blit_row_masked() fast path in gq_draw_image_with_mask() from
+ * the very first pixel to the very last.
+ *
+ * Two independent 128x128 assets, each exactly 2048 bytes uncompressed --
+ * two whole IMAGE_BUFFER_SIZE (1024-byte) cart-read chunks -- so BOTH the
+ * image_frame (image_buffer_main) and mask_frame (image_buffer_mask)
+ * streams cross their OWN chunk-reload boundary exactly once, between row
+ * 63 (the last row of chunk 1) and row 64 (the first row of chunk 2).
+ * Since image_frame and mask_frame each own a separate image_buffer (see
+ * gq_image_advance_row()'s doc comment in oled.c), a reload triggered for
+ * one stream can never clobber the other's buffer -- but the row fast
+ * path still has to read BOTH streams' row bytes out of their respective
+ * buffers before EITHER gq_image_advance_row() call, since either call
+ * may reload that same frame's own buffer in place. This fixture is
+ * designed to make a violation of that per-stream ordering rule visible
+ * for either stream independently (see below).
+ *
+ * checker128.png (already committed for full_frame_row_blit.gq) is reused
+ * as the image asset: bit (x + y + half) % 2, half = 1 for y >= 64 -- see
+ * that fixture's header for why the y=64 phase flip matters (row 63's
+ * checkerboard phase is made to differ from row 127's, which a plain
+ * (x+y)%2 checkerboard would NOT do, since 64 is even and a period-2
+ * pattern is invariant under an even row shift).
+ *
+ * mask128.png is a NEW asset, purpose-built for the masked path's own two
+ * requirements the unmasked fixture doesn't need to cover:
+ *
+ *   1. Reload-ordering hazard on the MASK stream specifically, independent
+ *      of the image stream's own coverage above. Left half (x < 64): the
+ *      same (x + y + half) % 2 checkerboard as checker128.png, so row 63's
+ *      phase differs from row 127's for the same reason. Right half
+ *      (x >= 64): every byte is opaque (mask=1) except a single
+ *      transparent column -- x%8==7 (the source stream's last/least-
+ *      significant pixel in each byte) for y < 64, x%8==0 (the first/most-
+ *      significant pixel) for y >= 64. So if a reload-ordering bug ever
+ *      substituted row 127's chunk-2 mask data for row 63's chunk-1 mask
+ *      data (or vice versa), the visibly transparent column in the right
+ *      half would shift from one edge of each byte to the other -- a
+ *      clearly visible corruption, not a coincidental match. (Verified:
+ *      row 63 and row 127 differ in 80 of 128 mask pixels; row 63 and row
+ *      64 -- adjacent, NOT the swapped pair -- are unaffected by this
+ *      fixture's ordering hazard and are not the assertion here.)
+ *
+ *   2. Mask semantics (transparent vs. opaque), asymmetric by construction
+ *      -- NOT a 50/50 checkerboard globally. The left half is a 50/50
+ *      checkerboard (dense per-pixel bit variety, for bit-order
+ *      coverage), but the right half is ~87.5% opaque (7 of every 8
+ *      pixels), giving the whole mask a 68.75% opaque / 31.25%
+ *      transparent split. A full-mask inversion (or any bug that swaps
+ *      the mask=0/mask=1 semantics) turns the right half from
+ *      mostly-opaque into mostly-transparent -- a clearly different
+ *      silhouette, not just a phase-shifted checkerboard (which a plain
+ *      50/50 checkerboard's own inversion would produce, indistinguishable
+ *      in aggregate shape from the original).
+ *
+ * How to reproduce the compiled fixture (full_frame_mask_row_blit.gqgame):
+ *
+ *   From the gamequeer repo root, using the builder container:
+ *     docker run --rm -v $(pwd):/workspaces/gamequeer --workdir /workspaces/gamequeer \
+ *         --user $(id -u):$(id -g) gamequeer-builder:latest \
+ *         /bin/bash -c "cd gamequeer/tests/golden && PYTHONPATH=/workspaces/gamequeer/gqc/src \
+ *             python -m gqc compile --no-mem-map -o . full_frame_mask_row_blit.gq"
+ *
+ *   Or via the Makefile target:
+ *     make golden-fixture
+ */
+
+game {
+    id = 1;
+    title := "FullFrameMaskRow";
+    author := "test";
+    starting_stage = mask_row_test;
+}
+
+animations {
+    sprite1 <- "checker128.png" {
+        w = 128;
+        h = 128;
+    }
+
+    mask1 <- "mask128.png" {
+        w = 128;
+        h = 128;
+    }
+}
+
+stage mask_row_test {
+    event enter {
+        GQI_FGANIM1_X = 0;
+        GQI_FGANIM1_Y = 0;
+        play fganim(1) sprite1;
+        play fgmask(1) mask1;
+    }
+}

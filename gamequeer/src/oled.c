@@ -188,30 +188,42 @@ static void gq_image_advance_byte(gq_image_frame_on_screen *frame) {
 }
 
 /*
- * gq_image_advance_row() -- row-level advance for gq_draw_image()'s
- * row-level uncompressed fast path (issue #308, finishing what #303's row
- * blit started): produces exactly the frame state that calling
+ * gq_image_advance_row() -- row-level advance for the row-level
+ * uncompressed fast paths in both gq_draw_image() (issue #308, finishing
+ * what #303's row blit started) and gq_draw_image_with_mask() (issue #311,
+ * applying the same pattern to each of the image/mask streams
+ * independently): produces exactly the frame state that calling
  * gq_image_advance_byte() `nbytes` times in a row would produce, in one
  * bookkeeping update instead of a per-byte loop.
  *
- * Only valid under the same preconditions as the row fast path's own guard
- * (gq_draw_image()): frame->x_bit_offset == 0 and frame->x_pixel_offset ==
- * 0 on entry, frame->rle_type == 1, `nbytes` == frame->width / 8 (i.e. the
- * call covers one *entire* row), and the row's bytes don't straddle an
- * image_buffer reload boundary (frame->byte_index + nbytes <=
- * IMAGE_BUFFER_SIZE, checked by the caller). Given those, only the very
- * LAST of the nbytes individual gq_image_advance_byte() calls can ever (a)
- * push x_pixel_offset to width (every earlier call adds 8 short of that,
- * since nbytes * 8 == width) or (b) push byte_index to a multiple of
- * IMAGE_BUFFER_SIZE and trigger gq_image_load_buffer() (every earlier
- * call's byte_index is strictly between the row's starting byte_index and
- * that boundary, per the caller's guard) -- so row-end and any chunk
- * reload happen at exactly the same point in the stream as the per-byte
- * loop, just computed directly instead of discovered one byte at a time.
- * The intermediate calls' only other effect -- re-reading (and discarding)
- * frame->render_byte from image_buffer -- is unobservable here, since
- * nothing reads render_byte until the next decode step after this row
- * finishes, so those calls are skipped entirely.
+ * Only valid under the same preconditions as the row fast path's own guard:
+ * frame->x_bit_offset == 0 and frame->x_pixel_offset == 0 on entry,
+ * frame->rle_type == 1, `nbytes` == frame->width / 8 (i.e. the call covers
+ * one *entire* row), and the row's bytes don't straddle an image_buffer
+ * reload boundary (frame->byte_index + nbytes <= IMAGE_BUFFER_SIZE, checked
+ * by the caller). Given those, only the very LAST of the nbytes individual
+ * gq_image_advance_byte() calls can ever (a) push x_pixel_offset to width
+ * (every earlier call adds 8 short of that, since nbytes * 8 == width) or
+ * (b) push byte_index to a multiple of IMAGE_BUFFER_SIZE and trigger
+ * gq_image_load_buffer() (every earlier call's byte_index is strictly
+ * between the row's starting byte_index and that boundary, per the
+ * caller's guard) -- so row-end and any chunk reload happen at exactly the
+ * same point in the stream as the per-byte loop, just computed directly
+ * instead of discovered one byte at a time. The intermediate calls' only
+ * other effect -- re-reading (and discarding) frame->render_byte from
+ * image_buffer -- is unobservable here, since nothing reads render_byte
+ * until the next decode step after this row finishes, so those calls are
+ * skipped entirely.
+ *
+ * gq_draw_image_with_mask()'s image_frame and mask_frame each have their
+ * own dedicated image_buffer (image_buffer_main / image_buffer_mask
+ * respectively -- see their declarations below), so calling this once per
+ * frame (image, then mask, or either order) is safe: a reload triggered
+ * for one frame can never overwrite the other frame's buffer, only its
+ * own. The only ordering rule that matters is the general one every row
+ * fast path already follows -- read a frame's row bytes out of its buffer
+ * before calling gq_image_advance_row() on THAT SAME frame, since that
+ * call may reload that frame's buffer in place.
  */
 static void gq_image_advance_row(gq_image_frame_on_screen *frame, uint16_t nbytes) {
     frame->byte_index     = (uint16_t) (frame->byte_index + nbytes);
@@ -440,6 +452,70 @@ void gq_draw_image_with_mask(
     while (!gq_image_done(&image_frame) && !gq_image_done(&mask_frame)) {
         int16_t draw_x = x + image_frame.x_pixel_offset;
         int16_t draw_y = y + image_frame.y_curr;
+
+        // Row-level masked uncompressed fast path (issue #311, applying
+        // gq_draw_image()'s row blit (#303) and row-level decode advance
+        // (#308) to the masked path): at the very start of an image row
+        // (x_pixel_offset == 0 -- checked once via image_frame, since
+        // image_frame.x_pixel_offset == mask_frame.x_pixel_offset always
+        // holds here, same invariant the byte-aligned masked fast path
+        // below relies on), if BOTH streams are uncompressed and
+        // byte-aligned in their own decode stream (x_bit_offset == 0,
+        // checked independently per stream -- the image and mask are
+        // independently RLE/byte-position-tracked even though they share
+        // width/height), the row's byte count divides its width evenly,
+        // and the *entire* row lies within the clip region, forward the
+        // whole row's image+mask bytes in one HAL_oled_blit_row_masked()
+        // call instead of nbytes individual HAL_oled_blit_byte_masked()
+        // calls, and decode-advance BOTH streams a whole row at a time via
+        // gq_image_advance_row() (issue #308) instead of nbytes individual
+        // gq_image_advance_byte() calls each. image_frame and mask_frame
+        // each own a separate image_buffer (image_buffer_main /
+        // image_buffer_mask), so a reload triggered by advancing one
+        // stream can never clobber the other stream's buffer -- see
+        // gq_image_advance_row()'s doc comment above. Both streams' row
+        // bytes are read out of their buffers (via the HAL call) BEFORE
+        // either gq_image_advance_row() call, since each frame's own
+        // advance may reload that SAME frame's buffer in place. Falls
+        // through to the byte-aligned fast path just below (and
+        // ultimately the generic per-run merge loop) for any row that
+        // doesn't qualify -- narrower images, RLE content on either
+        // stream, a row straddling the clip region's edge, or
+        // (defensively) either stream's row bytes straddling ITS OWN
+        // image_buffer reload boundary.
+        if (image_frame.rle_type == 1 && mask_frame.rle_type == 1 && image_frame.x_bit_offset == 0 &&
+            mask_frame.x_bit_offset == 0 && image_frame.x_pixel_offset == 0 && width > 0 &&
+            ((uint16_t) width % 8) == 0 && draw_y >= context->clipRegion.yMin && draw_y <= context->clipRegion.yMax &&
+            draw_x >= context->clipRegion.xMin && (draw_x + width - 1) <= context->clipRegion.xMax) {
+            uint16_t nbytes          = (uint16_t) (width / 8);
+            uint16_t image_row_index = image_frame.byte_index;
+            uint16_t mask_row_index  = mask_frame.byte_index;
+
+            // Buffer-straddle guard, checked independently per stream --
+            // see gq_draw_image()'s matching comment. image_buffer_main
+            // and image_buffer_mask are each IMAGE_BUFFER_SIZE bytes, but
+            // the image and mask streams reload on independent schedules
+            // (their own bytes_remaining_to_load / chunk cadence), so
+            // either one -- not necessarily both -- could in principle be
+            // mid-chunk at a row boundary.
+            if ((uint32_t) image_row_index + nbytes <= IMAGE_BUFFER_SIZE &&
+                (uint32_t) mask_row_index + nbytes <= IMAGE_BUFFER_SIZE) {
+                GQ_PERF_ENTER_RUNS(DRAW_WRITE);
+                HAL_oled_blit_row_masked(
+                    draw_x,
+                    draw_y,
+                    &image_frame.image_buffer[image_row_index],
+                    &mask_frame.image_buffer[mask_row_index],
+                    nbytes);
+                GQ_PERF_EXIT_RUNS(DRAW_WRITE);
+
+                GQ_PERF_ENTER_RUNS(DRAW_DECODE);
+                gq_image_advance_row(&image_frame, nbytes);
+                gq_image_advance_row(&mask_frame, nbytes);
+                GQ_PERF_EXIT_RUNS(DRAW_DECODE);
+                continue;
+            }
+        }
 
         // Byte-aligned masked fast path (row-major framebuffer,
         // duplico/qc2024#45 Stage 1 / duplico/gamequeer#295): when BOTH
