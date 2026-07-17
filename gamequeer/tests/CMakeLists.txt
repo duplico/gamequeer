@@ -389,5 +389,35 @@ if(GQ_PERF_INSTRUMENT)
                 -DEXPECTED=128
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/run_perf_section_count_test.cmake"
         )
+
+        # ---- perf_row_blit_draw_decode_count: same idea, DRAW_DECODE ------
+        # gamequeer#308 replaced the row fast path's per-byte
+        # gq_image_advance_byte() loop with a single gq_image_advance_row()
+        # call, but GQ_PERF_ENTER_RUNS(DRAW_DECODE)/EXIT_RUNS(DRAW_DECODE)
+        # already wrapped that whole loop (once per row, not once per byte)
+        # even before #308 -- so DRAW_DECODE's *count* doesn't drop from
+        # this change (only its accumulated total_us does, since there's
+        # much less to do inside each row's single ENTER/EXIT interval).
+        # What EXPECTED=128 (matching DRAW_WRITE, not 2048) still proves is
+        # engagement of the row path at all: if the row path's guard ever
+        # regresses and every row silently falls back to the byte-aligned
+        # fast path just below it (gamequeer#295), THAT path wraps
+        # GQ_PERF_ENTER_RUNS(DRAW_DECODE)/EXIT_RUNS(DRAW_DECODE) once per
+        # BYTE, so full_frame_row_blit.gqgame's 128x128 image (16 bytes/row)
+        # would drive the count to 2048 instead of 128 -- the same
+        # row-vs-byte-granularity signal DRAW_WRITE already gives, just
+        # from the decode side instead of the write side.
+        add_test(
+            NAME perf_row_blit_draw_decode_count
+            COMMAND
+                ${CMAKE_COMMAND}
+                -DEXE=$<TARGET_FILE:gamequeer>
+                -DFIXTURE=${GOLDEN_DIR}/full_frame_row_blit.gqgame
+                -DPERF_DUMP=${CMAKE_CURRENT_BINARY_DIR}/perf_row_blit_draw_decode_count_perfdump.txt
+                -DTICKS=${GOLDEN_TICKS}
+                -DSECTION=draw_decode
+                -DEXPECTED=128
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/run_perf_section_count_test.cmake"
+        )
     endif()
 endif()
