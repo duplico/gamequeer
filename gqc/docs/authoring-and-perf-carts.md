@@ -294,33 +294,82 @@ So a headless-emulator run at `flash[0]` is byte-equivalent to a real cart
 programmed at flash address 0 — which is why the emulator validation above is
 a faithful proxy for on-badge behavior.
 
-**The gap — burning the image onto the chip.** Neither repo contains a tool,
-subcommand, Makefile target, or documented procedure that writes a `.gqgame`
-onto the physical cartridge flash:
+Nothing in either repo burns the image onto the cart: `gqc` has no
+`flash`/`burn`/`write` subcommand (it stops at emitting the `.gqgame`); the
+badge firmware (`qc2024` repo, `ccs_workspace/qc2024/flash.c`, `HAL_badge.c`)
+is a cart **reader** whose only cart write path rewrites the game's own 4 KB
+`persistent_vars` save sector (a direct full-cart write is refused —
+`HAL_badge.c`: `GQ_PTR_NS_CART` write returns 0); and `qc2024`'s
+`flashing/flash.py` provisions the 2-byte badge ID into MSP430 FRAM at
+`0x1800`, not the cart. The image is programmed onto the cartridge flash
+out-of-band with an external SPI programmer, as follows.
 
-- `gqc` has no `flash`/`burn`/`write` subcommand — it stops at emitting the
-  `.gqgame` file.
-- The badge firmware (`qc2024` repo, `ccs_workspace/qc2024/flash.c`,
-  `HAL_badge.c`) is a **cart reader**, not a cart programmer. Its W25Q128JV
-  driver implements page-program/erase, but the only write path wired to the
-  cartridge bus rewrites the game's own 4 KB `persistent_vars` save sector
-  (via a cache-sector + CRC16 copy-back); a direct full-cart write is
-  explicitly refused (`HAL_badge.c`: `GQ_PTR_NS_CART` write returns 0). There
-  is no host-to-cart bulk-load mode.
-- `qc2024`'s `flashing/flash.py` provisions a **2-byte badge ID** into the
-  MSP430 FRAM at `0x1800` over the eZ-FET/SBW probe — it does not touch the
-  cart flash. `qc2024`'s `docs/perf-hardware-runbook.md` covers **MCU
-  firmware** flashing (DSLite / MSP430Flasher over SBW) — related but a
-  distinct target from the cartridge SPI flash.
+**Burning a `.gqgame` onto a cartridge (external SPI programmer).**
 
-So the missing step is an **external SPI-flash programming procedure** — e.g.
-an SPI programmer / SOIC clip writing the `.gqgame` to cart flash offset 0, or
-a cart-slot fixture that does the same. The repos pin down exactly *what*
-bytes go *where* (flat image, `GQ01` at offset 0, 4 KB-aligned, 16 MB target);
-the mechanism that transfers them onto the W25Q128JV is not in either repo and
-must be supplied out-of-band (the badge owner maintains a bench cart-slot
-programmer fixture for this). Document the exact programmer invocation here
-once that fixture's procedure is settled.
+Hardware: a CH341A USB SPI programmer plus the cart-slot fixture. The
+W25Q128JV is a **3.3 V** part — the CH341A board must be 3.3 V-safe on its
+data lines. flashrom detects the chip as `W25Q128.V` (16384 kB).
+
+Software: distro `flashrom` (v1.3.0) and `usbutils`; run `flashrom` with
+`sudo`.
+
+On WSL2 the CH341A enumerates Windows-side and is attached into the distro
+with [usbipd-win](https://github.com/dorssel/usbipd-win). From an elevated
+Windows shell, `usbipd bind --busid <id>` once, then
+`usbipd attach --wsl --busid <id>`; it then appears in the distro as USB ID
+`1a86:5512` (verify with `lsusb`).
+
+1. **Probe** the programmer and chip:
+
+   ```bash
+   sudo flashrom -p ch341a_spi
+   ```
+
+   It must print `Found Winbond flash chip "W25Q128.V" (16384 kB, SPI)`. A
+   no-chip-found or all-`0xFF` probe with a known-good programmer means the
+   cartridge is bad or unseated (a factory-blank chip still answers RDID with
+   its JEDEC ID), so reseat or swap the cart.
+
+2. **Pad** the `.gqgame` to the full 16 MiB chip size with `0xFF` — flashrom
+   requires a chip-sized image, and `0xFF` bytes over already-erased flash
+   are skipped rather than written:
+
+   ```bash
+   cp <name>.gqgame cart_padded.bin
+   truncate -s 16M cart_padded.bin
+   ```
+
+3. **Write a layout file** confining the operation to the image's extent,
+   its end rounded up to a 4 KiB sector boundary. For a 12288-byte image
+   (`perf_flat.gqgame`), the extent `0x0..0x2fff` is already sector-aligned:
+
+   ```
+   00000000:00002fff game
+   ```
+
+4. **Program** (region-limited erase + program + verify, completes in
+   seconds):
+
+   ```bash
+   sudo flashrom -p ch341a_spi --layout cart.layout --include game -w cart_padded.bin
+   ```
+
+5. Optionally **read back** the same region and byte-compare the image
+   extent for an independent verification:
+
+   ```bash
+   sudo flashrom -p ch341a_spi --layout cart.layout --include game -r cart_readback.bin
+   ```
+
+The burned cart boots and renders on a physical badge. A region-limited write
+leaves any data past the new image's end intact — harmless, since the VM
+follows the header's cart pointers and never reads past them, but if the cart
+previously held a larger game and you want the tail scrubbed, drop
+`--layout`/`--include` and write the full 16 MiB `cart_padded.bin`.
+
+A user-friendly wrapper that automates padding, layout generation, and the
+flashrom invocation is tracked as
+[duplico/qc2024#62](https://github.com/duplico/qc2024/issues/62).
 
 ## 8. Gotchas found
 
