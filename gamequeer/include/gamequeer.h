@@ -4,8 +4,14 @@
 #include <grlib.h>
 #include <stdint.h>
 
+// Floor on every animation frame's on-screen duration, in 100 Hz system
+// ticks (gq_clamp_frame_duration(), gamequeer.c) -- a `frame_rate` faster
+// than this many ticks/frame authors no differently than exactly this many.
+// 5 ticks (50 ms/frame, 20 FPS) fits the render pipeline's measured
+// worst-case delivered frame cost (~41 ms, all content) with margin to
+// spare.
 #ifndef GQ_MIN_FRAME_DURATION
-#define GQ_MIN_FRAME_DURATION 20
+#define GQ_MIN_FRAME_DURATION 5
 #endif
 
 #define GQ_MAGIC_SIZE 4

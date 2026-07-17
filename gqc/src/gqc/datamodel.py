@@ -421,8 +421,8 @@ class Animation:
                 print(f"[red][bold]WARNING[/bold][/red]: [blue][italic]{self.name}[/italic][/blue] frame rate {frame_rate} not a factor of 100; setting to {100 / self.ticks_per_frame}")
                 frame_rate = 100 / self.ticks_per_frame
 
-            if frame_rate > 5:
-                print(f"[red][bold]WARNING[/bold][/red]: [blue][italic]{self.name}[/italic][/blue] frame rate {frame_rate} exceeds 5 FPS; every frame will be clamped to a minimum on-screen duration of 20 ticks (5 FPS) on the badge.")
+            if frame_rate > 20:
+                print(f"[red][bold]WARNING[/bold][/red]: [blue][italic]{self.name}[/italic][/blue] frame rate {frame_rate} exceeds 20 FPS; every frame will be clamped to a minimum on-screen duration of 5 ticks (20 FPS) on the badge.")
 
             make_animation_kwargs = dict()
             if dithering:
