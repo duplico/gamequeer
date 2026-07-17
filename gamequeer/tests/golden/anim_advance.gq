@@ -19,47 +19,49 @@
  * collapse to a single extracted frame) as a plain bganim, started from the
  * `enter` event.
  *
- * Timing -- empirically verified by dumping every tick from 1..45 and
+ * Timing -- empirically verified by dumping every tick from 1..25 and
  * diffing the PGMs, rather than trusted from the frame_rate arithmetic
  * alone (gqc's Animation.__init__ computes ticks_per_frame = 100/frame_rate
- * = 100/10 = 10, but gamequeer.c clamps every frame's `ticks` up to
- * `GQ_MIN_FRAME_DURATION` (20, include/gamequeer.h) since 10 < 20 -- see
- * gq_clamp_frame_duration(), shared by both load_animation() and
- * system_tick()'s per-advance reset as of gamequeer#288. With the clamp
- * applied uniformly, every frame of this animation is authored to be shown
- * for 20 ticks, and system_tick()'s decrement-then-check ordering
- * (gamequeer#315) delivers exactly that -- no extra tick per frame):
+ * = 100/10 = 10; gamequeer.c's gq_clamp_frame_duration() -- shared by both
+ * load_animation() and system_tick()'s per-advance reset as of
+ * gamequeer#288 -- only raises a frame's `ticks` up to
+ * `GQ_MIN_FRAME_DURATION` (5, include/gamequeer.h) when it's below that
+ * floor; 10 is already above 5, so this animation's frames run at their
+ * authored 10-tick duration, unclamped. system_tick()'s decrement-then-check
+ * ordering (gamequeer#315) delivers exactly that -- no extra tick per
+ * frame):
  *
  *   tick 1:  `enter` fires (first handle_events() pass), runs `play bganim
- *            pop`, which calls load_animation() (frame=0, ticks clamped to
- *            20, unconditional REFRESH) -- frame 0 is drawn.
- *   ticks 2..20: system_tick() decrements the per-frame counter to 0; no
+ *            pop`, which calls load_animation() (frame=0, ticks=10,
+ *            unconditional REFRESH) -- frame 0 is drawn.
+ *   ticks 2..10: system_tick() decrements the per-frame counter to 0; no
  *            REFRESH fires in this window, so the framebuffer is untouched
  *            (still frame 0's pixels) -- confirmed identical for every
- *            tick count in [1, 20].
- *   tick 21: the counter hits 0 -> frame advances to 1, the cache is
+ *            tick count in [1, 10].
+ *   tick 11: the counter hits 0 -> frame advances to 1, the cache is
  *            invalidated (frame_meta.data_pointer zeroed), a fresh cart
  *            read repopulates it, and REFRESH fires -- frame 1 is drawn.
- *   ticks 22..40: same idle window (clamped ticks_per_frame=20 again);
- *            still frame 1's pixels -- confirmed identical for every
- *            tick count in [21, 40].
- *   tick 41: frame advances to 2 and is drawn, by the same mechanism.
+ *   ticks 12..20: same idle window (ticks_per_frame=10 again); still
+ *            frame 1's pixels -- confirmed identical for every tick count
+ *            in [11, 20].
+ *   tick 21: frame advances to 2 and is drawn, by the same mechanism.
  *
  * Three ctest cases share this one compiled cart (see tests/CMakeLists.txt):
  *   golden_framebuffer_anim_advance_frame0 (TICKS=1)  -- frame 0.
- *   golden_framebuffer_anim_advance_frame1 (TICKS=21) -- frame 1: proves the
+ *   golden_framebuffer_anim_advance_frame1 (TICKS=11) -- frame 1: proves the
  *     cache invalidates and the *new* frame's metadata is actually read
  *     (a stale/frozen cache would still show frame 0's pixels here).
- *   golden_framebuffer_anim_advance_frame2 (TICKS=41) -- frame 2: proves
+ *   golden_framebuffer_anim_advance_frame2 (TICKS=21) -- frame 2: proves
  *     invalidation isn't a one-shot fluke and keeps working on the *second*
  *     advance too (guards against a fix that only clears the cache once).
  * Each of the three goldens differs pixel-for-pixel from the other two
  * (confirmed via md5sum of the dumped PGMs when this fixture was authored:
- * three distinct hashes across the [1,20]/[21,40]/41+ tick ranges). The
- * committed golden PGMs' *pixel content* is unaffected by #315's retiming
- * (each frame's drawn bytes are identical to before, only the tick offset
- * at which that content first appears moved), confirmed by byte-for-byte
- * `cmp` against dumps taken at the new TICKS values before/after the fix.
+ * three distinct hashes across the [1,10]/[11,20]/21+ tick ranges). The
+ * committed golden PGMs' *pixel content* is unaffected by lowering
+ * GQ_MIN_FRAME_DURATION (each frame's drawn bytes are identical to before,
+ * only the tick offset at which that content first appears moved),
+ * confirmed by byte-for-byte `cmp` against dumps taken at the new TICKS
+ * values before/after the change (gamequeer#304).
  *
  * Negative-control validation performed when authoring this fixture (per
  * the PR body): with the `frame_meta.data_pointer = 0` invalidation lines
@@ -68,7 +70,7 @@
  * FAIL, because draw_animation_stack() keeps re-drawing the cached frame 0
  * metadata forever (the frame index itself still advances -- only the
  * *cache* goes stale) -- the emulator output was frozen at frame 0's pixels
- * at TICKS=22 and TICKS=33 instead of showing frame 1/frame 2. Restored
+ * at TICKS=11 and TICKS=21 instead of showing frame 1/frame 2. Restored
  * before committing.
  *
  * How to reproduce the compiled fixture (anim_advance.gqgame):

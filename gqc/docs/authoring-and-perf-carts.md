@@ -188,8 +188,8 @@ An `animations{}` entry (`Animation` in `datamodel.py`) takes options:
   `w×h`. Max 128 each (they're `uint8_t` on-cart).
 - **`frame_rate`** must be a factor of 100 (`ticks_per_frame = 100/rate`);
   non-factors are rounded with a warning. On the badge every frame is clamped
-  to a **minimum 20 ticks (5 FPS)** duration (`GQ_MIN_FRAME_DURATION`), so
-  `frame_rate` above 5 buys nothing on hardware.
+  to a **minimum 5 ticks (20 FPS)** duration (`GQ_MIN_FRAME_DURATION`), so
+  `frame_rate` above 20 buys nothing on hardware.
 - A single-frame source uses `duration` (default 100) as its tick count.
 
 ### Frame encoding is chosen automatically by size
@@ -381,7 +381,7 @@ flashrom invocation is tracked as
   internal ffmpeg `fps` resample. Always confirm the frame count in `map.txt`.
   (Our 8-frame source GIFs land as 7 frames after resampling at 5 FPS — still
   multi-frame, but don't assume 1:1.)
-- **Frame duration is clamped to 20 ticks (5 FPS)** on the badge regardless of
+- **Frame duration is clamped to 5 ticks (20 FPS)** on the badge regardless of
   `frame_rate`.
 - **A masked fg/mask pair must resample to the *same* frame count.**
   `gq_draw_image_with_mask()` only composites while both the sprite slot and
