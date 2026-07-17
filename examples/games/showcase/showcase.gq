@@ -1,0 +1,154 @@
+/*
+ * showcase.gq -- 20 FPS content-class tour.
+ *
+ * A four-stage tour showing frame_rate 20 (5 ticks/frame, 50 ms budget)
+ * across every animation content class the renderer has, with A cycling
+ * through the stages:
+ *
+ *   flat   -> dither -> masked -> oldway -> flat -> ...
+ *
+ * Requires GQ_MIN_FRAME_DURATION <= 5 (gamequeer#304); on a firmware with a
+ * larger clamp the first three stages play at the clamped rate instead.
+ *
+ * Per-stage frame budget (draw costs on current firmware, which flushes
+ * uniformly in 10.93 ms -- duplico/qc2024#75; masked figure rig-measured
+ * at 40.67 ms, flat/dither derived from their rig-measured values by the
+ * flush delta; labels are ~1.2 ms/char, duplico/qc2024#67):
+ *
+ *   flat    ~17.8 ms draw + "FLAT"(4.8) + "A: NEXT"(8.4) = ~31 ms < 50
+ *           -> both labels persistent.
+ *   dither  ~26.3 ms draw + "DITHER"(7.2) + "A: NEXT"(8.4) = ~42 ms < 50
+ *           -> both labels persistent.
+ *   masked  40.67 ms draw (both streams UNCOMPRESSED -- the animation-p100
+ *           class) + "MASK"(4.8) = ~45.5 ms < 50 -> stage label
+ *           persistent; the "A: NEXT" hint (8.4 ms) would total ~53.9 ms,
+ *           so this stage carries no hint.
+ *   oldway  the dither scene at frame_rate 4 (25 ticks, 250 ms budget) --
+ *           the before/after contrast stage; labels trivially affordable.
+ *
+ * Each stage sets its own labels on enter (load_stage clears labels on
+ * every gostage).
+ */
+
+game {
+    id = 111;
+    title := "Showcase20";
+    author := "gamequeer";
+    starting_stage = flat;
+}
+
+animations {
+    anim_flat <- "showcase_flat.gif" {
+        frame_rate = 20;
+        dithering := "none";
+    }
+    anim_dither <- "showcase_dither.gif" {
+        frame_rate = 20;
+        dithering := "floyd_steinberg";
+    }
+    anim_mask_fg <- "showcase_mask_fg.gif" {
+        frame_rate = 20;
+        dithering := "floyd_steinberg";
+    }
+    anim_mask_mask <- "showcase_mask_mask.gif" {
+        frame_rate = 20;
+        dithering := "floyd_steinberg";
+    }
+    anim_oldway <- "showcase_dither.gif" {
+        frame_rate = 4;
+        dithering := "floyd_steinberg";
+    }
+}
+
+stage flat {
+    bganim anim_flat;
+
+    event enter {
+        GQI_LABEL1_X = 4;
+        GQI_LABEL1_Y = 2;
+        GQI_LABEL2_X = 4;
+        GQI_LABEL2_Y = 118;
+        GQI_LABEL_FLAGS = 514; // labels 1+2 opaque
+        GQS_LABEL1 := "FLAT";
+        GQS_LABEL2 := "A: NEXT";
+        play bganim anim_flat;
+    }
+
+    event bgdone {
+        play bganim anim_flat;
+    }
+
+    event input(A) {
+        gostage dither;
+    }
+}
+
+stage dither {
+    bganim anim_dither;
+
+    event enter {
+        GQI_LABEL1_X = 4;
+        GQI_LABEL1_Y = 2;
+        GQI_LABEL2_X = 4;
+        GQI_LABEL2_Y = 118;
+        GQI_LABEL_FLAGS = 514; // labels 1+2 opaque
+        GQS_LABEL1 := "DITHER";
+        GQS_LABEL2 := "A: NEXT";
+        play bganim anim_dither;
+    }
+
+    event bgdone {
+        play bganim anim_dither;
+    }
+
+    event input(A) {
+        gostage masked;
+    }
+}
+
+stage masked {
+    event enter {
+        GQI_FGANIM1_X = 0;
+        GQI_FGANIM1_Y = 0;
+        GQI_FGMASK1_X = 0;
+        GQI_FGMASK1_Y = 0;
+        GQI_LABEL1_X = 4;
+        GQI_LABEL1_Y = 2;
+        GQI_LABEL_FLAGS = 2; // label 1 opaque
+        GQS_LABEL1 := "MASK"; // no "A: NEXT": the hint would exceed the budget
+        play fganim(1) anim_mask_fg;
+        play fgmask(1) anim_mask_mask;
+    }
+
+    event fgdone(1) {
+        play fganim(1) anim_mask_fg;
+        play fgmask(1) anim_mask_mask;
+    }
+
+    event input(A) {
+        gostage oldway;
+    }
+}
+
+stage oldway {
+    bganim anim_oldway;
+
+    event enter {
+        GQI_LABEL1_X = 4;
+        GQI_LABEL1_Y = 2;
+        GQI_LABEL2_X = 4;
+        GQI_LABEL2_Y = 118;
+        GQI_LABEL_FLAGS = 514; // labels 1+2 opaque
+        GQS_LABEL1 := "OLD: 4 FPS";
+        GQS_LABEL2 := "A: NEXT";
+        play bganim anim_oldway;
+    }
+
+    event bgdone {
+        play bganim anim_oldway;
+    }
+
+    event input(A) {
+        gostage flat;
+    }
+}
