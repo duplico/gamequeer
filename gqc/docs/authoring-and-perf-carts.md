@@ -413,7 +413,7 @@ flashrom invocation is tracked as
 ## 9. The committed perf / regression-content test carts
 
 Under `examples/games/perf/` (assets under `examples/assets/animations/`,
-regenerable with `games/perf/gen_perf_assets.py`). All six compiled with
+regenerable with `games/perf/gen_perf_assets.py`). All compiled with
 `gqc` and confirmed rendering correctly in the headless emulator
 (`--dump`/`--input`); image-cart frame encodings additionally confirmed via
 `map.txt`.
@@ -421,14 +421,18 @@ regenerable with `games/perf/gen_perf_assets.py`). All six compiled with
 | Cart | Path drives | Notes |
 |------|-------------|-------|
 | `perf_mask.gq` | Full-screen **masked** fg blit (`gq_draw_image_with_mask`), animated | pulsing circle + marching band mask, 5 frames each (post-resample), all RLE7; loops via `fgdone(1)` replay so it redraws continuously — perf-usable, not a one-shot static draw |
+| `perf_mask_dither.gq` | Full-screen **masked + UNCOMPRESSED** fg blit — per-byte cost on **two** image streams | dithered-gradient sprite + dithered-gradient mask, 5 frames each (post-resample), all UNCOMPRESSED; same `fgdone(1)` replay pairing as `perf_mask.gq`; the steady-state animation worst-case probe for duplico/gamequeer#309 |
 | `perf_flat.gq` | Full-screen **flat / RLE7 fast** decode | 7 frames, all RLE7 |
 | `perf_dither.gq` | Full-screen **dithered / UNCOMPRESSED slow** decode | 7 frames, all UNCOMPRESSED (cart ~2× larger) |
+| `perf_save.gq` | **Persistent-var save during active animation** (4 KB sector erase + CRC copy-back on the badge) | flat/RLE7 bganim baseline + a self-re-arming 5 s `timer` that assigns to a `persistent` int; on-screen `saves=N` label proves the timer/SETVAR plumbing headlessly; fully unattended on hardware (duplico/gamequeer#309 save-hitch probe) |
 | `perf_text.gq` | Label path (`Graphics_drawString`), 3 stages | `start`: 4 labels — top-left max-length string, `str(x)`-cast+concat+persistent-str-var content, an off-canvas-clipped opaque/inverted box (edge case), a negative `str(x)` cast. `glyphs1`/`glyphs2`: full printable-ASCII glyph sweep (0x20-0x7E minus `"`/`\`, an authoring-format limitation not a font one) |
 | `perf_menu_choice.gq` | Choice-menu chrome (`draw_menu_choice`) | 6 options (the max), varying label lengths incl. one 21-char label clipped off the right edge; navigate + confirm updates a label from `GQI_MENU_VALUE` |
 | `perf_menu_text.gq` | Text-entry menu chrome (`draw_menu_text`) | full navigation surface: char cycle, symbol-class cycle, position-select toggle, confirm; confirmed text lands in `GQS_TEXTMENU_RESULT` and updates a label |
 
 `perf_flat` and `perf_dither` are the same shape (full-screen looping bganim)
-with opposite content, so the pair isolates rendering's content-dependence.
+with opposite content, so the pair isolates rendering's content-dependence;
+`perf_mask` and `perf_mask_dither` mirror the same pairing on the masked-blit
+path.
 
 ### Stage-2 golden fixtures
 

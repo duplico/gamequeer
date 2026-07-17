@@ -1,0 +1,56 @@
+/*
+ * perf_mask_dither.gq -- dithered/UNCOMPRESSED masked-rendering perf cart.
+ *
+ * The masked counterpart of perf_dither.gq, and the candidate worst case for
+ * steady-state animation playback (duplico/gamequeer#309): the row blit from
+ * duplico/gamequeer#306 deliberately skipped gq_draw_image_with_mask, so a
+ * masked draw still pays per-byte costs -- and with UNCOMPRESSED encoding it
+ * pays them on TWO image streams (sprite + mask) across the full 128x128
+ * screen every frame.
+ *
+ * Same shape as perf_mask.gq (full-screen fganim(1)/fgmask(1) pair, kept in
+ * lockstep and replayed via fgdone(1) so the masked blit re-runs forever),
+ * but with opposite content: both the sprite and the mask are shifting
+ * continuous-tone gradients that Floyd-Steinberg dithering turns into dense
+ * per-pixel noise, so gqc's Frame cooker picks IMAGE_FMT_1BPP_UNCOMP for
+ * every frame of both streams (the encoding-forcing recipe from
+ * gqc/docs/authoring-and-perf-carts.md section 5).
+ *
+ * Confirmed frame encodings (from map.txt .frame section): every frame of
+ * both fg and mask -> IMAGE_FMT_1BPP_UNCOMP, with equal frame counts.
+ * Confirmed multi-frame masked advance in the headless emulator.
+ */
+
+game {
+    id = 107;
+    title := "PerfMaskDith";
+    author := "perf";
+    starting_stage = start;
+}
+
+animations {
+    fg <- "perf_mask_dither_fg.gif" {
+        frame_rate = 5;
+        dithering := "floyd_steinberg";
+    }
+    mask <- "perf_mask_dither_mask.gif" {
+        frame_rate = 5;
+        dithering := "floyd_steinberg";
+    }
+}
+
+stage start {
+    event enter {
+        GQI_FGANIM1_X = 0;
+        GQI_FGANIM1_Y = 0;
+        GQI_FGMASK1_X = 0;
+        GQI_FGMASK1_Y = 0;
+        play fganim(1) fg;
+        play fgmask(1) mask;
+    }
+
+    event fgdone(1) {
+        play fganim(1) fg;
+        play fgmask(1) mask;
+    }
+}

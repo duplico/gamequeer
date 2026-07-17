@@ -1,9 +1,10 @@
 """Regenerate the procedural assets for the perf test carts.
 
-These carts (perf_mask.gq, perf_flat.gq, perf_dither.gq, perf_text.gq,
-perf_menu_choice.gq, perf_menu_text.gq) deliberately drive specific renderer
-paths for hardware performance profiling and Stage-2 (grlib row-major
-rewrite) regression coverage (epics duplico/qc2024#45, duplico/qc2024#47).
+These carts (perf_mask.gq, perf_mask_dither.gq, perf_flat.gq, perf_dither.gq,
+perf_save.gq, perf_text.gq, perf_menu_choice.gq, perf_menu_text.gq)
+deliberately drive specific renderer paths for hardware performance profiling
+and Stage-2 (grlib row-major rewrite) regression coverage (epics
+duplico/qc2024#45, duplico/qc2024#47).
 The assets are committed, so you normally do not need to run this; it exists
 to document and reproduce exactly how they were made.
 
@@ -17,13 +18,21 @@ Encoding intent (verified via map.txt's .frame section after `gqc compile`):
                                              both animated in lockstep so the
                                              badge redraws every frame advance,
                                              not just once on `enter`)
-  * perf_flat.gif   frames -> RLE7          (flat / fast decode path)
+  * perf_mask_dither_fg.gif / perf_mask_dither_mask.gif frames -> UNCOMPRESSED
+                                            (dense noise on BOTH streams of the
+                                             masked blit, once compiled with
+                                             `dithering := "floyd_steinberg"` --
+                                             the worst-case masked-content probe
+                                             for duplico/gamequeer#309)
+  * perf_flat.gif   frames -> RLE7          (flat / fast decode path; also the
+                                             background for perf_save.gq)
   * perf_dither.gif frames -> UNCOMPRESSED  (dense noise / slow decode path,
                                              once compiled with
                                              `dithering := "floyd_steinberg"`)
 The text and menu carts (perf_text.gq, perf_menu_choice.gq,
 perf_menu_text.gq) use no image assets at all -- they exercise
 Graphics_drawString / menu.c purely through labels, menus, and strings.
+perf_save.gq reuses perf_flat.gif.
 """
 import sys
 
@@ -82,6 +91,45 @@ for i in range(MASK_FRAMES):
             px[x, y] = row[y]
     mask_frames.append(im)
 save_gif(mask_frames, f"{OUT}/perf_mask_mask.gif")
+
+
+# ---- Dithered-mask-cart assets: animated fg + mask, both UNCOMPRESSED -------
+# perf_mask_dither.gq is the masked counterpart of perf_dither.gq: both the
+# sprite AND its mask are continuous-tone gradients that Floyd-Steinberg
+# dithering (applied at compile time) turns into dense per-pixel noise, so
+# every frame of BOTH streams encodes as IMAGE_FMT_1BPP_UNCOMP. The masked
+# blit (gq_draw_image_with_mask) then pays the slow per-byte decode cost on
+# two image streams at once -- the candidate worst case for steady-state
+# animation playback (duplico/gamequeer#309). Same frame count/timing for
+# both GIFs, same fgdone(1) replay pairing as perf_mask.gq (see the mask-cart
+# comment above for why mismatched frame counts silently fall back to an
+# unmasked draw).
+#
+# Foreground: the perf_dither.gq diagonal gradient, shifted per frame.
+mdith_fg_frames = []
+for i in range(MASK_FRAMES):
+    im = Image.new("L", (128, 128), 0)
+    px = im.load()
+    off = i * 16
+    for y in range(128):
+        for x in range(128):
+            px[x, y] = ((x + y + off) * 2) % 256
+    mdith_fg_frames.append(im)
+save_gif(mdith_fg_frames, f"{OUT}/perf_mask_dither_fg.gif")
+
+# Mask: the same idea on the anti-diagonal (so mask content is distinct from
+# the fg and the composite visibly changes every frame), shifted the opposite
+# direction per frame.
+mdith_mask_frames = []
+for i in range(MASK_FRAMES):
+    im = Image.new("L", (128, 128), 0)
+    px = im.load()
+    off = i * 16
+    for y in range(128):
+        for x in range(128):
+            px[x, y] = ((x - y - off) * 2) % 256
+    mdith_mask_frames.append(im)
+save_gif(mdith_mask_frames, f"{OUT}/perf_mask_dither_mask.gif")
 
 
 # ---- Flat animation: multi-frame, large solid regions -> RLE7 ---------------

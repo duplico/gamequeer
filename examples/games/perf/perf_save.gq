@@ -1,0 +1,70 @@
+/*
+ * perf_save.gq -- persistent-var save-hitch perf cart (duplico/gamequeer#309).
+ *
+ * Plays a continuous full-screen flat/RLE7 background animation (the
+ * perf_flat.gq content -- the cheapest, most stable animation baseline) while
+ * a 5-second timer assigns to a `persistent` int. On the badge, every
+ * assignment to a persistent variable synchronously rewrites the game's 4 KB
+ * persistent_vars cart sector (erase + CRC copy-back -- HAL_badge.c
+ * memcpy_*_to_cart), so each timer fire is a save-induced animation-frame
+ * hitch. Against the flat baseline's tiny frame-time spread, the hitch is
+ * isolated as the FRAME/EVENTS max_us outlier vs the section averages.
+ *
+ * Fully unattended: the timer re-arms itself (the VM timer is one-shot --
+ * system_tick() clears timer_active when it fires), so a 120 s hardware
+ * window collects ~24 saves with no button input. The on-screen label shows
+ * the running save count, which is also how the save path is validated in
+ * the headless emulator (the emulator's HAL writes persistent vars straight
+ * into its in-memory cart, so the hitch itself is hardware-only; the label
+ * proves the timer/SETVAR plumbing runs).
+ *
+ * Note: save_count survives power cycles by design (it is the persistent
+ * var), so the displayed count keeps rising across runs.
+ */
+
+game {
+    id = 108;
+    title := "PerfSave";
+    author := "perf";
+    starting_stage = start;
+}
+
+persistent {
+    int save_count = 0;
+}
+
+volatile {
+    str save_str := "";
+}
+
+animations {
+    flat <- "perf_flat.gif" {
+        frame_rate = 5;
+        dithering := "none";
+    }
+}
+
+stage start {
+    bganim flat;
+
+    event enter {
+        GQI_LABEL1_X = 4;
+        GQI_LABEL1_Y = 60;
+        GQI_LABEL_FLAGS = 2; // label 1 opaque (readable over the animation)
+        save_str := str(save_count);
+        GQS_LABEL1 := "saves=" + save_str;
+        play bganim flat;
+        timer 500; // 100 Hz ticks -> save every 5 s
+    }
+
+    event bgdone {
+        play bganim flat;
+    }
+
+    event timer {
+        save_count = save_count + 1; // persistent SETVAR -> 4 KB sector save
+        save_str := str(save_count);
+        GQS_LABEL1 := "saves=" + save_str;
+        timer 500;
+    }
+}
