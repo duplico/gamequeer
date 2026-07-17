@@ -407,7 +407,7 @@ flashrom invocation is tracked as
 - **Non-opaque + color-inverted label text can render invisible** on an
   untouched black canvas (black-on-black) — see "Labels" above.
 - The OLED framebuffer is **128×128** (`OLED_HORIZONTAL_MAX` /
-  `OLED_VERTICAL_MAX` in `gamequeer.h`), matching the animation `w`/`h` cap;
+  `OLED_VERTICAL_MAX` in `grlib_gfx.h`), matching the animation `w`/`h` cap;
   the golden-test harness's `--dump` PGM header reads `P5\n128 128\n255\n`.
 
 ## 9. The committed perf / regression-content test carts
