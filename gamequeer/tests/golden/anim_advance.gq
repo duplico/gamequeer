@@ -70,7 +70,7 @@
  * FAIL, because draw_animation_stack() keeps re-drawing the cached frame 0
  * metadata forever (the frame index itself still advances -- only the
  * *cache* goes stale) -- the emulator output was frozen at frame 0's pixels
- * at TICKS=22 and TICKS=33 instead of showing frame 1/frame 2. Restored
+ * at TICKS=11 and TICKS=21 instead of showing frame 1/frame 2. Restored
  * before committing.
  *
  * How to reproduce the compiled fixture (anim_advance.gqgame):
