@@ -187,6 +187,45 @@ static void gq_image_advance_byte(gq_image_frame_on_screen *frame) {
     }
 }
 
+/*
+ * gq_image_advance_row() -- row-level advance for gq_draw_image()'s
+ * row-level uncompressed fast path (issue #308, finishing what #303's row
+ * blit started): produces exactly the frame state that calling
+ * gq_image_advance_byte() `nbytes` times in a row would produce, in one
+ * bookkeeping update instead of a per-byte loop.
+ *
+ * Only valid under the same preconditions as the row fast path's own guard
+ * (gq_draw_image()): frame->x_bit_offset == 0 and frame->x_pixel_offset ==
+ * 0 on entry, frame->rle_type == 1, `nbytes` == frame->width / 8 (i.e. the
+ * call covers one *entire* row), and the row's bytes don't straddle an
+ * image_buffer reload boundary (frame->byte_index + nbytes <=
+ * IMAGE_BUFFER_SIZE, checked by the caller). Given those, only the very
+ * LAST of the nbytes individual gq_image_advance_byte() calls can ever (a)
+ * push x_pixel_offset to width (every earlier call adds 8 short of that,
+ * since nbytes * 8 == width) or (b) push byte_index to a multiple of
+ * IMAGE_BUFFER_SIZE and trigger gq_image_load_buffer() (every earlier
+ * call's byte_index is strictly between the row's starting byte_index and
+ * that boundary, per the caller's guard) -- so row-end and any chunk
+ * reload happen at exactly the same point in the stream as the per-byte
+ * loop, just computed directly instead of discovered one byte at a time.
+ * The intermediate calls' only other effect -- re-reading (and discarding)
+ * frame->render_byte from image_buffer -- is unobservable here, since
+ * nothing reads render_byte until the next decode step after this row
+ * finishes, so those calls are skipped entirely.
+ */
+static void gq_image_advance_row(gq_image_frame_on_screen *frame, uint16_t nbytes) {
+    frame->byte_index     = (uint16_t) (frame->byte_index + nbytes);
+    frame->x_pixel_offset = 0;
+    frame->y_curr++;
+
+    // Same as gq_image_advance_byte()'s final iteration: load the next
+    // source byte (possibly triggering a chunk reload) unless the frame is
+    // now fully drawn.
+    if (!gq_image_done(frame)) {
+        gq_image_load_byte(frame);
+    }
+}
+
 void gq_load_image(
     t_gq_pointer image_bytes,
     int16_t bPP,
@@ -267,19 +306,19 @@ void gq_draw_image(
         // drawn past the image's right edge) and the *entire* row lies
         // within the clip region, forward the whole row in one
         // HAL_oled_blit_row() call instead of nbytes individual
-        // HAL_oled_blit_byte() calls (the fast path just below this one).
-        // Falls through to that byte-level fast path (and ultimately the
-        // generic per-run path) for any row that doesn't qualify --
-        // narrower images, a row straddling the clip region's left/right
-        // edge, or (defensively) a row whose bytes straddle an
-        // image_buffer reload boundary. The frame.width > 0 check matters
-        // even though gqc can't emit a zero-width image today: without it,
-        // width == 0 satisfies width % 8 == 0 trivially, nbytes would be 0,
-        // the gq_image_advance_byte() loop below would run zero times (so
-        // frame.x_pixel_offset/y_curr never advance), and the outer while
-        // loop would spin on this same branch forever -- HAL_oled_blit_row()
-        // itself is documented to require nbytes >= 1, and this is the only
-        // caller, so the guard belongs here.
+        // HAL_oled_blit_byte() calls (the fast path just below this one),
+        // and decode-advance the whole row in one gq_image_advance_row()
+        // call (issue #308) instead of nbytes individual
+        // gq_image_advance_byte() calls. Falls through to that byte-level
+        // fast path (and ultimately the generic per-run path) for any row
+        // that doesn't qualify -- narrower images, a row straddling the
+        // clip region's left/right edge, or (defensively) a row whose bytes
+        // straddle an image_buffer reload boundary. The frame.width > 0
+        // check matters even though gqc can't emit a zero-width image
+        // today: without it, width == 0 satisfies width % 8 == 0 trivially
+        // and nbytes would be 0 -- HAL_oled_blit_row() itself is documented
+        // to require nbytes >= 1, and this is the only caller, so the guard
+        // belongs here.
         if (frame.rle_type == 1 && frame.x_bit_offset == 0 && frame.x_pixel_offset == 0 && frame.width > 0 &&
             ((uint16_t) frame.width % 8) == 0 && draw_y >= context->clipRegion.yMin &&
             draw_y <= context->clipRegion.yMax && draw_x >= context->clipRegion.xMin &&
@@ -296,19 +335,16 @@ void gq_draw_image(
             // path's guard comment above.
             if ((uint32_t) row_index + nbytes <= IMAGE_BUFFER_SIZE) {
                 // Read the row's bytes out of image_buffer (via the HAL
-                // call) BEFORE decode-advancing: the last
-                // gq_image_advance_byte() call below may trigger
-                // gq_image_load_buffer(), which overwrites image_buffer in
-                // place with the next cart chunk -- so the source bytes
-                // must be consumed first.
+                // call) BEFORE decode-advancing: gq_image_advance_row()
+                // below may trigger gq_image_load_buffer(), which
+                // overwrites image_buffer in place with the next cart
+                // chunk -- so the source bytes must be consumed first.
                 GQ_PERF_ENTER_RUNS(DRAW_WRITE);
                 HAL_oled_blit_row(draw_x, draw_y, &frame.image_buffer[row_index], nbytes);
                 GQ_PERF_EXIT_RUNS(DRAW_WRITE);
 
                 GQ_PERF_ENTER_RUNS(DRAW_DECODE);
-                for (uint16_t i = 0; i < nbytes; i++) {
-                    gq_image_advance_byte(&frame);
-                }
+                gq_image_advance_row(&frame, nbytes);
                 GQ_PERF_EXIT_RUNS(DRAW_DECODE);
                 continue;
             }
