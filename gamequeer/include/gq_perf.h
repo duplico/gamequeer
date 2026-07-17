@@ -60,16 +60,30 @@
  *                          gq_image_peek_run()/gq_image_advance_run() (the
  *                          pair, together -- one section covers both) in
  *                          oled.c's gq_draw_image()/gq_draw_image_with_mask()
- *                          run loops. Includes any interleaved
- *                          gq_image_load_byte() cart reads triggered by a
- *                          run/buffer boundary. Per-RUN granularity, not
- *                          per-pixel -- see the observer-effect note below.
- *                          The uncompressed fast paths (duplico/gamequeer
- *                          #295's byte blit, #303's row blit) also wrap
- *                          their gq_image_advance_byte() call(s) in this
+ *                          generic per-run merge loops. Includes any
+ *                          interleaved gq_image_load_byte() cart reads
+ *                          triggered by a run/buffer boundary. Per-RUN
+ *                          granularity, not per-pixel -- see the
+ *                          observer-effect note below. Every fast path below
+ *                          also wraps its own decode-advance call(s) in this
  *                          section instead -- same "decode-side work"
- *                          meaning, just per-byte or per-row instead of
- *                          per-run.
+ *                          meaning, just at a coarser granularity than a
+ *                          single RLE run:
+ *                            - duplico/gamequeer#295's byte-aligned
+ *                              uncompressed fast path: one
+ *                              gq_image_advance_byte() call (gq_draw_image())
+ *                              or two -- image then mask
+ *                              (gq_draw_image_with_mask()) -- per byte.
+ *                            - #303/#306's row-level blit fast path and
+ *                              #308/#310's matching row-level decode advance
+ *                              (gq_draw_image()): one gq_image_advance_row()
+ *                              call per row, regardless of how many bytes
+ *                              the row spans.
+ *                            - #311's masked row-level fast path
+ *                              (gq_draw_image_with_mask()): two
+ *                              gq_image_advance_row() calls (image then
+ *                              mask) per row, same one-section-entry-per-row
+ *                              granularity as the unmasked row path above.
  *   6 DRAW_WRITE           issue #261's HAL_oled_fill_run() call, wrapped
  *                          at the same per-run granularity as DRAW_DECODE.
  *                          Only entered when a run actually reaches the
@@ -77,10 +91,16 @@
  *                          transparent-masked run skips it, same as before
  *                          this instrumentation existed) -- so DRAW_WRITE's
  *                          count can be lower than DRAW_DECODE's count for
- *                          the same frame. The uncompressed fast paths
- *                          (#295's HAL_oled_blit_byte(), #303's
- *                          HAL_oled_blit_row()) wrap that HAL call here
- *                          instead, at per-byte or per-row granularity.
+ *                          the same frame. Every fast path below wraps its
+ *                          own HAL write call here instead, at the same
+ *                          granularity as its DRAW_DECODE counterpart above:
+ *                            - #295: HAL_oled_blit_byte() (unmasked) /
+ *                              HAL_oled_blit_byte_masked() (masked), per
+ *                              byte.
+ *                            - #303/#306: HAL_oled_blit_row() (unmasked),
+ *                              per row.
+ *                            - #311: HAL_oled_blit_row_masked() (masked),
+ *                              per row.
  *
  * NOTE (observer effect, DRAW_DECODE/DRAW_WRITE specifically): these two
  * sections are timed per RLE *run*, not per pixel -- that's the whole

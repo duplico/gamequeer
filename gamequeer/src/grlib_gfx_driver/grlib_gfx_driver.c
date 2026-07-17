@@ -135,6 +135,23 @@ void HAL_oled_blit_byte_masked(int16_t x, int16_t y, uint8_t src_byte, uint8_t m
     }
 }
 
+/*
+ * HAL_oled_blit_row_masked() -- emulator implementation (see the doc
+ * comment on its declaration in gamequeer.h for the full contract).
+ *
+ * Same shape as HAL_oled_blit_row() above: frame_buffer is one byte per
+ * pixel here, so this is exactly `nbytes` calls to
+ * HAL_oled_blit_byte_masked(), one per source/mask byte pair -- sufficient
+ * to be a faithful pixel-level oracle for the badge's packed math.
+ * Performance here is not the point -- pixel-identical output vs. the
+ * byte-at-a-time path is.
+ */
+void HAL_oled_blit_row_masked(int16_t x, int16_t y, const uint8_t *src, const uint8_t *mask, uint16_t nbytes) {
+    for (uint16_t i = 0; i < nbytes; i++) {
+        HAL_oled_blit_byte_masked((int16_t) (x + 8 * i), y, src[i], mask[i], 8);
+    }
+}
+
 static void gfx_driver_pixelDrawMultiple(
     void *displayData,
     int16_t x,
