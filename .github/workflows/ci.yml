@@ -111,9 +111,11 @@ jobs:
         # test) never ran in CI at all -- the plain golden suite proves
         # pixel identity either way, but only these instrumented tests catch
         # a regression that silently defeats a fast path's engagement gate
-        # (verified empirically during #306/#310/#311's review: forcing a
-        # fast-path gate off still passes every pixel golden; only the
-        # instrumented count tests fail). GQ_PERF_INSTRUMENT_RUNS requires
+        # (verified empirically during the #306/#310/#313 review rounds --
+        # the PRs that introduced the row blit, row decode advance, and
+        # masked row blit fast paths -- forcing a fast-path gate off still
+        # passes every pixel golden; only the instrumented count tests
+        # fail). GQ_PERF_INSTRUMENT_RUNS requires
         # GQ_PERF_INSTRUMENT (see gq_perf.h's own doc comment) -- both are
         # set here, deliberately not relying on GQ_PERF_INSTRUMENT_RUNS's
         # implicit default.
@@ -126,12 +128,14 @@ jobs:
 
       - name: Run full ctest suite (instrumented)
         # Deliberately does NOT hardcode an expected test count -- the
-        # instrumented suite has grown from 26 (gamequeer#307 was filed
-        # against) to 30 as of gamequeer#311, and will keep growing as more
-        # GQ_PERF_INSTRUMENT_RUNS-gated tests are added. `ctest` itself
-        # already fails the job on any individual test failure; asserting a
-        # specific total count here would just be one more place to
-        # remember to update per PR; the leg's job is to run every
-        # registered test, not to know in advance how many there are.
+        # instrumented suite has already grown once (26 when gamequeer#307
+        # was filed, 27 on `default` as of this PR) and will keep growing
+        # as more GQ_PERF_INSTRUMENT_RUNS-gated tests are added (e.g.
+        # gamequeer#313's masked row-blit engagement tests, still in
+        # review as of this writing). `ctest` itself already fails the job
+        # on any individual test failure; asserting a specific total count
+        # here would just be one more place to remember to update per PR --
+        # the leg's job is to run every registered test, not to know in
+        # advance how many there are.
         run: ctest --output-on-failure
         working-directory: gamequeer/build-headless
