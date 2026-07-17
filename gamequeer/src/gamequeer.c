@@ -466,8 +466,22 @@ void system_tick() {
             continue;
         }
 
+        // Decrement first, then check: a freshly (re)loaded frame's `ticks`
+        // holds its full authored duration (e.g. 20), and this is the same
+        // system_tick() call that keeps it on screen for that Nth tick, so
+        // the decrement-and-test must happen together here rather than on
+        // the following call. Checking `ticks > 0` *before* decrementing
+        // (the old code) let a frame survive one extra, undecremented call
+        // once `ticks` reached 0 before the advance below finally fired --
+        // every animation frame was shown for N+1 ticks instead of the
+        // authored N (duplico/gamequeer#315). The `ticks > 0` guard around
+        // the decrement itself is preserved so a `ticks` value of 0 (only
+        // reachable if GQ_MIN_FRAME_DURATION is ever overridden down to 0)
+        // still advances immediately instead of underflowing the u16.
         if (current_animations[i].ticks > 0) {
             current_animations[i].ticks--;
+        }
+        if (current_animations[i].ticks > 0) {
             continue;
         }
 

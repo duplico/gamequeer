@@ -271,9 +271,9 @@ add_test(NAME led_fade_delta COMMAND test_led_fade_delta)
 add_golden_test(golden_framebuffer_anim_advance_frame0 anim_advance
     TICKS 1  GOLDEN_SUFFIX anim_advance_frame0)
 add_golden_test(golden_framebuffer_anim_advance_frame1 anim_advance
-    TICKS 22 GOLDEN_SUFFIX anim_advance_frame1)
+    TICKS 21 GOLDEN_SUFFIX anim_advance_frame1)
 add_golden_test(golden_framebuffer_anim_advance_frame2 anim_advance
-    TICKS 43 GOLDEN_SUFFIX anim_advance_frame2)
+    TICKS 41 GOLDEN_SUFFIX anim_advance_frame2)
 
 # ---- golden_framebuffer_edge_coverage: true-display-edge oracle coverage
 # gamequeer#297 fixed the emulator canvas (OLED_HORIZONTAL_MAX/
