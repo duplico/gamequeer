@@ -301,6 +301,20 @@ void gq_draw_image(
 
     gq_load_image(image_bytes, bPP, width, height, img_frame_data_size, x, y, &frame);
 
+    // Row-level uncompressed fast path (issue #303) invariant gate (issue
+    // #312): rle_type, width, x, and context are all fixed for the whole
+    // call (gq_load_image() sets frame.rle_type once and nothing below ever
+    // changes it or frame.width; x/context are plain parameters), so every
+    // term that doesn't depend on the current row is evaluated once here
+    // instead of on every iteration of the loop below. The frame.width > 0
+    // check matters even though gqc can't emit a zero-width image today:
+    // without it, width == 0 satisfies width % 8 == 0 trivially and nbytes
+    // would be 0 -- HAL_oled_blit_row() itself is documented to require
+    // nbytes >= 1, and this is the only caller, so the guard belongs here.
+    uint8_t row_fastpath_x_ok = frame.rle_type == 1 && frame.width > 0 && ((uint16_t) frame.width % 8) == 0 &&
+        x >= context->clipRegion.xMin && (x + frame.width - 1) <= context->clipRegion.xMax;
+    uint16_t row_fastpath_nbytes = (uint16_t) (frame.width / 8);
+
     while (!(gq_image_done(&frame))) {
         // Decode the next run (same procedure regardless of clipping --
         // see gq_image_peek_run()'s doc comment: the RLE stream must be
@@ -311,12 +325,8 @@ void gq_draw_image(
 
         // Row-level uncompressed fast path (issue #303): at the very start
         // of an uncompressed image row (x_bit_offset == 0, x_pixel_offset
-        // == 0), if the row's byte count divides its width evenly (width %
-        // 8 == 0 -- gqc's uncompressed encoder pads every row to a whole
-        // number of bytes, so a non-multiple-of-8 width would otherwise
-        // have don't-care padding bits in the last byte that must NOT be
-        // drawn past the image's right edge) and the *entire* row lies
-        // within the clip region, forward the whole row in one
+        // == 0), if the invariant part above held and the row's y coordinate
+        // lies within the clip region, forward the whole row in one
         // HAL_oled_blit_row() call instead of nbytes individual
         // HAL_oled_blit_byte() calls (the fast path just below this one),
         // and decode-advance the whole row in one gq_image_advance_row()
@@ -325,17 +335,16 @@ void gq_draw_image(
         // fast path (and ultimately the generic per-run path) for any row
         // that doesn't qualify -- narrower images, a row straddling the
         // clip region's left/right edge, or (defensively) a row whose bytes
-        // straddle an image_buffer reload boundary. The frame.width > 0
-        // check matters even though gqc can't emit a zero-width image
-        // today: without it, width == 0 satisfies width % 8 == 0 trivially
-        // and nbytes would be 0 -- HAL_oled_blit_row() itself is documented
-        // to require nbytes >= 1, and this is the only caller, so the guard
-        // belongs here.
-        if (frame.rle_type == 1 && frame.x_bit_offset == 0 && frame.x_pixel_offset == 0 && frame.width > 0 &&
-            ((uint16_t) frame.width % 8) == 0 && draw_y >= context->clipRegion.yMin &&
-            draw_y <= context->clipRegion.yMax && draw_x >= context->clipRegion.xMin &&
-            (draw_x + frame.width - 1) <= context->clipRegion.xMax) {
-            uint16_t nbytes    = (uint16_t) (frame.width / 8);
+        // straddle an image_buffer reload boundary. x_bit_offset/
+        // x_pixel_offset are structurally always 0 here whenever this path
+        // was also taken for the previous row (gq_image_advance_row() resets
+        // x_pixel_offset and never touches x_bit_offset), but are still
+        // checked explicitly rather than relied on, so the gate stays
+        // self-contained if a future change to the fallback paths below ever
+        // lets them drift.
+        if (row_fastpath_x_ok && frame.x_bit_offset == 0 && frame.x_pixel_offset == 0 &&
+            draw_y >= context->clipRegion.yMin && draw_y <= context->clipRegion.yMax) {
+            uint16_t nbytes    = row_fastpath_nbytes;
             uint16_t row_index = frame.byte_index;
 
             // Buffer-straddle guard: HAL_oled_blit_row() needs the whole
@@ -449,6 +458,18 @@ void gq_draw_image_with_mask(
     gq_load_image(image_bytes, image_bPP, width, height, img_frame_data_size, x, y, &image_frame);
     gq_load_image(mask_bytes, mask_bPP, width, height, mask_frame_data_size, x, y, &mask_frame);
 
+    // Row-level masked uncompressed fast path (issue #311) invariant gate
+    // (issue #312, extending gq_draw_image()'s matching hoist to the masked
+    // path): image_frame.rle_type/mask_frame.rle_type, width, x, and context
+    // are all fixed for the whole call (gq_load_image() sets each frame's
+    // rle_type once and nothing below ever changes it or width; x/context
+    // are plain parameters), so every term that doesn't depend on the
+    // current row is evaluated once here instead of on every iteration of
+    // the loop below.
+    uint8_t row_fastpath_x_ok = image_frame.rle_type == 1 && mask_frame.rle_type == 1 && width > 0 &&
+        ((uint16_t) width % 8) == 0 && x >= context->clipRegion.xMin && (x + width - 1) <= context->clipRegion.xMax;
+    uint16_t row_fastpath_nbytes = (uint16_t) (width / 8);
+
     while (!gq_image_done(&image_frame) && !gq_image_done(&mask_frame)) {
         int16_t draw_x = x + image_frame.x_pixel_offset;
         int16_t draw_y = y + image_frame.y_curr;
@@ -462,13 +483,11 @@ void gq_draw_image_with_mask(
         // fast path below relies on, but this gate checks both explicitly
         // rather than leaning on that invariant, so the precondition stays
         // self-contained even if a future change to either stream's
-        // advance logic ever let them drift), if BOTH streams are
-        // uncompressed and byte-aligned in their own decode stream
-        // (x_bit_offset == 0, checked independently per stream -- the
-        // image and mask are
-        // independently RLE/byte-position-tracked even though they share
-        // width/height), the row's byte count divides its width evenly,
-        // and the *entire* row lies within the clip region, forward the
+        // advance logic ever let them drift), if the invariant part above
+        // held for both streams (x_bit_offset == 0, checked independently
+        // per stream -- the image and mask are independently RLE/byte-
+        // position-tracked even though they share width/height) and the
+        // row's y coordinate lies within the clip region, forward the
         // whole row's image+mask bytes in one HAL_oled_blit_row_masked()
         // call instead of nbytes individual HAL_oled_blit_byte_masked()
         // calls, and decode-advance BOTH streams a whole row at a time via
@@ -487,12 +506,10 @@ void gq_draw_image_with_mask(
         // stream, a row straddling the clip region's edge, or
         // (defensively) either stream's row bytes straddling ITS OWN
         // image_buffer reload boundary.
-        if (image_frame.rle_type == 1 && mask_frame.rle_type == 1 && image_frame.x_bit_offset == 0 &&
-            mask_frame.x_bit_offset == 0 && image_frame.x_pixel_offset == 0 && mask_frame.x_pixel_offset == 0 &&
-            width > 0 && ((uint16_t) width % 8) == 0 && draw_y >= context->clipRegion.yMin &&
-            draw_y <= context->clipRegion.yMax && draw_x >= context->clipRegion.xMin &&
-            (draw_x + width - 1) <= context->clipRegion.xMax) {
-            uint16_t nbytes          = (uint16_t) (width / 8);
+        if (row_fastpath_x_ok && image_frame.x_bit_offset == 0 && mask_frame.x_bit_offset == 0 &&
+            image_frame.x_pixel_offset == 0 && mask_frame.x_pixel_offset == 0 && draw_y >= context->clipRegion.yMin &&
+            draw_y <= context->clipRegion.yMax) {
+            uint16_t nbytes          = row_fastpath_nbytes;
             uint16_t image_row_index = image_frame.byte_index;
             uint16_t mask_row_index  = mask_frame.byte_index;
 
