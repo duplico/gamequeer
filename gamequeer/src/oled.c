@@ -456,12 +456,16 @@ void gq_draw_image_with_mask(
         // Row-level masked uncompressed fast path (issue #311, applying
         // gq_draw_image()'s row blit (#303) and row-level decode advance
         // (#308) to the masked path): at the very start of an image row
-        // (x_pixel_offset == 0 -- checked once via image_frame, since
+        // (x_pixel_offset == 0, checked independently per stream --
         // image_frame.x_pixel_offset == mask_frame.x_pixel_offset always
-        // holds here, same invariant the byte-aligned masked fast path
-        // below relies on), if BOTH streams are uncompressed and
-        // byte-aligned in their own decode stream (x_bit_offset == 0,
-        // checked independently per stream -- the image and mask are
+        // holds here in practice, same invariant the byte-aligned masked
+        // fast path below relies on, but this gate checks both explicitly
+        // rather than leaning on that invariant, so the precondition stays
+        // self-contained even if a future change to either stream's
+        // advance logic ever let them drift), if BOTH streams are
+        // uncompressed and byte-aligned in their own decode stream
+        // (x_bit_offset == 0, checked independently per stream -- the
+        // image and mask are
         // independently RLE/byte-position-tracked even though they share
         // width/height), the row's byte count divides its width evenly,
         // and the *entire* row lies within the clip region, forward the
@@ -484,9 +488,10 @@ void gq_draw_image_with_mask(
         // (defensively) either stream's row bytes straddling ITS OWN
         // image_buffer reload boundary.
         if (image_frame.rle_type == 1 && mask_frame.rle_type == 1 && image_frame.x_bit_offset == 0 &&
-            mask_frame.x_bit_offset == 0 && image_frame.x_pixel_offset == 0 && width > 0 &&
-            ((uint16_t) width % 8) == 0 && draw_y >= context->clipRegion.yMin && draw_y <= context->clipRegion.yMax &&
-            draw_x >= context->clipRegion.xMin && (draw_x + width - 1) <= context->clipRegion.xMax) {
+            mask_frame.x_bit_offset == 0 && image_frame.x_pixel_offset == 0 && mask_frame.x_pixel_offset == 0 &&
+            width > 0 && ((uint16_t) width % 8) == 0 && draw_y >= context->clipRegion.yMin &&
+            draw_y <= context->clipRegion.yMax && draw_x >= context->clipRegion.xMin &&
+            (draw_x + width - 1) <= context->clipRegion.xMax) {
             uint16_t nbytes          = (uint16_t) (width / 8);
             uint16_t image_row_index = image_frame.byte_index;
             uint16_t mask_row_index  = mask_frame.byte_index;
