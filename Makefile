@@ -92,7 +92,12 @@ DOCKER_CMD_NIT := docker run --rm --workdir /workspaces/gamequeer -v $(PWD):/wor
 #    row-major rewrite) text/menu pixel-identity baselines -- no
 #    animations, no ffmpeg/image assets needed, so compiled the same way as
 #    hello.gq/redundant_write.gq.
-golden-fixture: builder-build gamequeer/tests/golden/hello.gq gamequeer/tests/golden/mask_encoding_a.gq gamequeer/tests/golden/mask_encoding_b.gq gamequeer/tests/golden/mask_encoding_c.gq gamequeer/tests/golden/redundant_write.gq gamequeer/tests/golden/anim_advance.gq gamequeer/tests/golden/rowmajor_byte_blit.gq gamequeer/tests/golden/edge_coverage.gq gamequeer/tests/golden/full_frame_row_blit.gq gamequeer/tests/golden/full_frame_mask_row_blit.gq gamequeer/tests/golden/label_text.gq gamequeer/tests/golden/menu_choice.gq gamequeer/tests/golden/menu_text.gq
+#  - leds_dump_test.gq: --dump-leds golden CSV fixture (#339), using
+#    leds_dump_test.gqcue under gamequeer/tests/golden/assets/lighting/;
+#    like the animation-asset fixtures above, gqc resolves light-cue
+#    sources relative to CWD, so this must be compiled from
+#    gamequeer/tests/golden too.
+golden-fixture: builder-build gamequeer/tests/golden/hello.gq gamequeer/tests/golden/mask_encoding_a.gq gamequeer/tests/golden/mask_encoding_b.gq gamequeer/tests/golden/mask_encoding_c.gq gamequeer/tests/golden/redundant_write.gq gamequeer/tests/golden/anim_advance.gq gamequeer/tests/golden/rowmajor_byte_blit.gq gamequeer/tests/golden/edge_coverage.gq gamequeer/tests/golden/full_frame_row_blit.gq gamequeer/tests/golden/full_frame_mask_row_blit.gq gamequeer/tests/golden/label_text.gq gamequeer/tests/golden/menu_choice.gq gamequeer/tests/golden/menu_text.gq gamequeer/tests/golden/leds_dump_test.gq
 	$(DOCKER_CMD_NIT) /bin/bash -c "PYTHONPATH=gqc/src python -m gqc compile --no-mem-map -o gamequeer/tests/golden gamequeer/tests/golden/hello.gq && \
 		PYTHONPATH=gqc/src python -m gqc compile --no-mem-map -o gamequeer/tests/golden gamequeer/tests/golden/redundant_write.gq && \
 		PYTHONPATH=gqc/src python -m gqc compile --no-mem-map -o gamequeer/tests/golden gamequeer/tests/golden/label_text.gq && \
@@ -107,6 +112,7 @@ golden-fixture: builder-build gamequeer/tests/golden/hello.gq gamequeer/tests/go
 		PYTHONPATH=/workspaces/gamequeer/gqc/src python -m gqc compile --no-mem-map -o . edge_coverage.gq && \
 		PYTHONPATH=/workspaces/gamequeer/gqc/src python -m gqc compile --no-mem-map -o . full_frame_row_blit.gq && \
 		PYTHONPATH=/workspaces/gamequeer/gqc/src python -m gqc compile --no-mem-map -o . full_frame_mask_row_blit.gq && \
+		PYTHONPATH=/workspaces/gamequeer/gqc/src python -m gqc compile --no-mem-map -o . leds_dump_test.gq && \
 		rm -rf build"
 
 # Build the headless emulator and run the golden framebuffer test.

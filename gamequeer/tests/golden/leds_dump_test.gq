@@ -1,0 +1,94 @@
+/*
+ * leds_dump_test.gq — Golden-test fixture for --dump-leds (gamequeer#339),
+ * the CSV counterpart of the pixel-framebuffer goldens above: LED state
+ * isn't part of the OLED framebuffer, so no existing fixture gives any
+ * coverage of leds.c's cadence (25 Hz redraw vs. 100 Hz system tick) or
+ * frame-advance/loop behavior.
+ *
+ * Uses leds_dump_test.gqcue (assets/lighting/), a 3-frame, non-smooth,
+ * solid-color bgcue (red -> lime -> blue), each frame's duration the
+ * minimum legal multiple of LEDS_SUBTICKS (4 -- see leds.c). A bgcue is
+ * auto-started by load_stage() (gamequeer.c) as soon as the stage loads,
+ * i.e. before the tick loop even starts, and led_play_cue() always forces
+ * `loop=1` for background cues (leds.c), so this cycles indefinitely with
+ * no event-handler/button-input plumbing needed -- unlike a foreground
+ * `cue` statement (e.g. tutorial_1.gq's `flash`), which requires scripted
+ * input to trigger.
+ *
+ * Timing (see leds.c's led_tick() for the full state machine; HAL.c's
+ * HAL_update_leds() is the redraw hook --dump-leds observes, called only
+ * when led_tick() sets need_to_redraw):
+ *
+ *   `tick` in each CSV row is the number of HAL_sleep() calls completed
+ *   strictly before that row's redraw (see HAL.c's leds_dump_tick_count),
+ *   i.e. the 0-based system_tick() iteration count. led_tick() only
+ *   reaches its redraw-eligible branch every 4th call (LEDS_SUBTICKS), so
+ *   cue-driven redraws land on tick 3, 7, 11, 15, ... regardless of what's
+ *   animating.
+ *
+ *   tick 0:  load_game() (gamequeer.c) unconditionally sets a fixed boot
+ *            color (0x1000, 0x2000, 0x0000 in the 16-bit expanded form ->
+ *            16, 32, 0 once >> 8) and calls HAL_update_leds() once, before
+ *            load_stage() even starts this fixture's bgcue -- this is
+ *            "initial state" for --dump-leds's purposes, not something
+ *            this fixture arranges. It happens during load_game(), which
+ *            main() calls before the tick loop starts, so it's always
+ *            tick 0 regardless of what --ticks is given.
+ *   tick 3:  first cue redraw. leds_cue_frame_ticks_elapsed==0 for frame 0
+ *            (duration 4) -> shows frame 0 (red).
+ *   tick 7:  frame 0's ticks_elapsed (4) >= duration (4) -> frame done;
+ *            advances to frame 1 (lime) and redraws its color immediately
+ *            (the "show the destination color of the completed
+ *            transition" branch in led_tick()).
+ *   tick 11: first redraw of frame 1 itself (ticks_elapsed==0) -> redraws
+ *            the *same* lime already shown at tick 7 (expected/known
+ *            behavior of a non-smooth cue: the frame-done transition and
+ *            the new frame's first-tick redraw both show the new frame's
+ *            color, one LEDS_SUBTICKS apart).
+ *   tick 15: frame 1 done -> advances to frame 2 (blue), redraws.
+ *   tick 19: first redraw of frame 2 -> redraws blue again (same pattern
+ *            as tick 11).
+ *   tick 23: frame 2 done -> frame_count (3) reached with loop=1 -> wraps
+ *            to frame 0 -> redraws red again.
+ *
+ * TICKS=24 in the ctest call (tests/CMakeLists.txt) runs iterations
+ * 0..23, landing exactly on the tick 23 wraparound row -- 7 rows total
+ * (plus the header), confirmed by running the built emulator once and
+ * inspecting the output before committing it as the golden CSV.
+ *
+ * How to reproduce the compiled fixture (leds_dump_test.gqgame):
+ *
+ *   From the gamequeer repo root, using the builder container:
+ *     docker run --rm -v $(pwd):/workspaces/gamequeer --workdir /workspaces/gamequeer \
+ *         --user $(id -u):$(id -g) gamequeer-builder:latest \
+ *         /bin/bash -c "cd gamequeer/tests/golden && PYTHONPATH=/workspaces/gamequeer/gqc/src \
+ *             python -m gqc compile --no-mem-map -o . leds_dump_test.gq"
+ *
+ *   Or via the Makefile target:
+ *     make golden-fixture
+ */
+
+game {
+    id = 1;
+    title := "LedsDumpTest";
+    author := "test";
+    starting_stage = leds_test;
+}
+
+lightcues {
+    rgbcycle <- "leds_dump_test.gqcue";
+}
+
+stage leds_test {
+    bgcue rgbcycle;
+
+    // gqc's linker (create_symbol_table()'s human-readable command-table
+    // dump) indexes Event.link_table[0].event_statements[0], so a stage
+    // needs at least one event with at least one statement to compile at
+    // all -- this fixture has no other reason to need one. A `timer` far
+    // outside the TICKS=24 window used by the ctest is a harmless no-op
+    // for the LED CSV under test.
+    event enter {
+        timer 10000;
+    }
+}

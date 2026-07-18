@@ -107,6 +107,36 @@ t_gq_int gq_load_int(t_gq_pointer src) {
     return value;
 }
 
+// --dump-leds state (see HAL_leds_dump_open()/HAL_leds_dump_close() below).
+// NULL whenever --dump-leds wasn't given, which HAL_update_leds() uses to
+// skip the CSV row entirely -- the common case pays only that one branch.
+static FILE *leds_dump_file = NULL;
+// Count of HAL_sleep() calls so far, i.e. the number of system_tick()
+// iterations completed *before* the current one (main()'s loop calls
+// system_tick() then HAL_sleep() then increments its own ticks_done, once
+// each per iteration -- see HAL_sleep() below for where this is
+// incremented). Used only to label CSV rows; not accurate once GQ_HEADLESS
+// is off and HAL_sleep() free-runs in real time, but the row's *contents*
+// are correct in every build, and this file is emulator-only regardless.
+static uint32_t leds_dump_tick_count = 0;
+
+int HAL_leds_dump_open(const char *path) {
+    leds_dump_file = fopen(path, "wb");
+    if (!leds_dump_file) {
+        fprintf(stderr, "HAL_leds_dump_open: cannot open %s for writing\n", path);
+        return 0;
+    }
+    fprintf(leds_dump_file, "tick,r0,g0,b0,r1,g1,b1,r2,g2,b2,r3,g3,b3,r4,g4,b4\n");
+    return 1;
+}
+
+void HAL_leds_dump_close() {
+    if (leds_dump_file) {
+        fclose(leds_dump_file);
+        leds_dump_file = NULL;
+    }
+}
+
 void HAL_update_leds() {
     for (uint8_t i = 0; i < 5; i++) {
         gfx_color(gq_leds[i].r >> 8, gq_leds[i].g >> 8, gq_leds[i].b >> 8);
@@ -115,6 +145,36 @@ void HAL_update_leds() {
             LEDS_W + OLED_HORIZONTAL_MAX, i * LEDS_H, LEDS_W + OLED_HORIZONTAL_MAX + LEDS_W, i * LEDS_H + LEDS_H);
     }
     gfx_flush();
+
+    // One CSV row per actual redraw (this function is only ever called when
+    // the LED subsystem has new output to show -- see leds.c's led_tick()
+    // need_to_redraw gating and led_stop()), not per tick: rows are ~4 ticks
+    // apart during a cue (LEDS_SUBTICKS' 25 Hz vs. the 100 Hz system tick),
+    // and can be any distance apart otherwise. Columns are the 8-bit
+    // authored color (gq_leds is the 16-bit expanded form used for
+    // sub-tick fade interpolation; >> 8 recovers the meaningful high byte,
+    // same as the gfx_color() call above).
+    if (leds_dump_file) {
+        fprintf(
+            leds_dump_file,
+            "%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u\n",
+            (unsigned) leds_dump_tick_count,
+            (unsigned) (gq_leds[0].r >> 8),
+            (unsigned) (gq_leds[0].g >> 8),
+            (unsigned) (gq_leds[0].b >> 8),
+            (unsigned) (gq_leds[1].r >> 8),
+            (unsigned) (gq_leds[1].g >> 8),
+            (unsigned) (gq_leds[1].b >> 8),
+            (unsigned) (gq_leds[2].r >> 8),
+            (unsigned) (gq_leds[2].g >> 8),
+            (unsigned) (gq_leds[2].b >> 8),
+            (unsigned) (gq_leds[3].r >> 8),
+            (unsigned) (gq_leds[3].g >> 8),
+            (unsigned) (gq_leds[3].b >> 8),
+            (unsigned) (gq_leds[4].r >> 8),
+            (unsigned) (gq_leds[4].g >> 8),
+            (unsigned) (gq_leds[4].b >> 8));
+    }
 }
 
 void HAL_new_game() {
@@ -233,6 +293,11 @@ void HAL_event_poll() {
 }
 
 void HAL_sleep() {
+    // Called exactly once per main()-loop iteration in every build
+    // (headless or not), so this is the one place to count iterations for
+    // --dump-leds's CSV `tick` column -- see leds_dump_tick_count above.
+    // Placed before the #ifdef/return below so it's hit on every path.
+    leds_dump_tick_count++;
 #ifdef GQ_HEADLESS
     /* In headless mode, skip the 10ms timing loop entirely so that --ticks N
      * runs complete instantly without real-time delays. */
