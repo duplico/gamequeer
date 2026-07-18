@@ -108,8 +108,11 @@ def test_animation_option_forms_accept(compile_gq, option_clause):
     assert exit_code == 0, stderr
 
 
-@pytest.mark.ffmpeg
 def test_animation_duplicate_option_rejects(compile_gq):
+    # Not `ffmpeg`-marked: parse_animation_definition's duplicate-option
+    # check runs in the loop that builds kwargs *before* it constructs
+    # Animation(...), so this rejects before ffmpeg is ever invoked -- it
+    # passes identically with or without a real ffmpeg on PATH.
     source = game_with_stage(
         "badge_set 1;",
         'animations { pmm <- "perf_mask_mask.gif" { duration = 500; duration = 600; } }\n',

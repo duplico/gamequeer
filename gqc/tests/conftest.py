@@ -5,6 +5,21 @@ import sys
 
 import pytest
 
+COMPILE_TIMEOUT_S = 60
+
+
+def pytest_collection_modifyitems(config, items):
+    """Skip `ffmpeg`-marked tests when there's no real ffmpeg binary on
+    PATH, rather than letting them fail with a raw FileNotFoundError.
+    CI installs ffmpeg explicitly for this job (see ci.yml) so this only
+    bites local runs without it."""
+    if shutil.which("ffmpeg"):
+        return
+    skip_no_ffmpeg = pytest.mark.skip(reason="ffmpeg not found on PATH")
+    for item in items:
+        if "ffmpeg" in item.keywords:
+            item.add_marker(skip_no_ffmpeg)
+
 
 @pytest.fixture
 def compile_gq(tmp_path):
@@ -21,6 +36,10 @@ def compile_gq(tmp_path):
     Returns a `(exit_code, stderr, out_dir)` tuple. `out_dir` is the
     directory gqc was told to write its build output to (it may not exist,
     or may be incomplete, if compilation failed).
+
+    The subprocess is bounded by a `COMPILE_TIMEOUT_S`-second timeout; a
+    hung compile fails the test via `pytest.fail` instead of hanging the
+    whole suite (and CI) indefinitely.
 
     Args:
         source: the .gq source text to compile.
@@ -53,7 +72,20 @@ def compile_gq(tmp_path):
         if extra_args:
             cmd.extend(extra_args)
 
-        proc = subprocess.run(cmd, cwd=tmp_path, capture_output=True, text=True)
+        try:
+            proc = subprocess.run(
+                cmd,
+                cwd=tmp_path,
+                capture_output=True,
+                text=True,
+                timeout=COMPILE_TIMEOUT_S,
+            )
+        except subprocess.TimeoutExpired as exc:
+            pytest.fail(
+                f"gqc compile did not finish within {COMPILE_TIMEOUT_S}s "
+                f"(cmd={cmd!r}); stdout so far: {exc.stdout!r}; "
+                f"stderr so far: {exc.stderr!r}"
+            )
 
         return proc.returncode, proc.stderr, out_dir
 
