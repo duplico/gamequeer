@@ -147,7 +147,7 @@ def build_game_parser():
     animation_assignment.set_parse_action(parse_animation_definition)
 
     # Light cue sections
-    lightcue_definition_section = pp.Suppress("lightcues") - file_assignments
+    lightcue_definition_section = pp.Suppress(pp.Keyword("lightcues")) - file_assignments
     lightcue_definition_section.set_parse_action(parse_lightcue_definition_section)
 
     # Menu sections
@@ -166,7 +166,7 @@ def build_game_parser():
     int_operand = identifier | integer
     int_operand.set_parse_action(parse_int_operand)
     int_expression = pp.infix_notation(int_operand, [
-        (pp.oneOf('! - ~ badge_get'), 1, pp.opAssoc.RIGHT),
+        (pp.Keyword('badge_get') | pp.one_of('! - ~'), 1, pp.opAssoc.RIGHT),
         (pp.one_of('* / %'), 2, pp.opAssoc.LEFT),
         (pp.one_of('+ -'), 2, pp.opAssoc.LEFT),
         (pp.one_of('<< >>'), 2, pp.opAssoc.LEFT),
@@ -182,7 +182,7 @@ def build_game_parser():
 
     string_literal = pp.QuotedString('"').setName("string_literal")
     string_literal.set_parse_action(parse_str_literal)
-    string_cast = pp.Group(pp.Suppress("str") - pp.Suppress("(") - int_expression - pp.Suppress(")"))
+    string_cast = pp.Group(pp.Suppress(pp.Keyword("str")) - pp.Suppress("(") - int_expression - pp.Suppress(")"))
     string_operand = identifier | string_literal
     string_expression = pp.infix_notation(string_operand, [
         ('+', 2, pp.opAssoc.LEFT),
@@ -195,7 +195,7 @@ def build_game_parser():
     assignment_statement.add_parse_action(parse_assignment)
 
     # Flow control
-    if_statement = pp.Suppress("if") - pp.Suppress("(") - int_expression - pp.Suppress(")") - event_statements - pp.Optional(pp.Suppress("else") - event_statements)
+    if_statement = pp.Suppress(pp.Keyword("if")) - pp.Suppress("(") - int_expression - pp.Suppress(")") - event_statements - pp.Optional(pp.Suppress(pp.Keyword("else")) - event_statements)
     if_statement.set_parse_action(parse_if)
 
     loop_statement = pp.Group(pp.Keyword("loop") - event_statements)
@@ -227,12 +227,12 @@ def build_game_parser():
     # General stage definition and options
     stage_bganim = pp.Group(pp.Keyword("bganim") - identifier - pp.Suppress(";"))
     stage_bgcue = pp.Group(pp.Keyword("bgcue") - identifier - pp.Suppress(";"))
-    stage_menu = pp.Suppress("menu") - identifier - pp.Optional(pp.Suppress("prompt") - string_operand) - pp.Suppress(";")
+    stage_menu = pp.Suppress(pp.Keyword("menu")) - identifier - pp.Optional(pp.Suppress(pp.Keyword("prompt")) - string_operand) - pp.Suppress(";")
     stage_textmenu = pp.Group(pp.Keyword("textmenu") - pp.Optional(pp.Keyword("prompt") - string_operand) - pp.Suppress(";"))
     stage_event = pp.Group(pp.Keyword("event") - event_type - event_statements)
     stage_option = stage_bganim | stage_bgcue | stage_menu | stage_event | stage_textmenu
     stage_options = pp.Group(stage_option | pp.Suppress("{") - pp.ZeroOrMore(stage_option) - pp.Suppress("}"))
-    stage_definition_section = pp.Group(pp.Suppress("stage") - identifier - stage_options)
+    stage_definition_section = pp.Group(pp.Suppress(pp.Keyword("stage")) - identifier - stage_options)
 
     stage_menu.set_parse_action(parse_bound_menu)
     stage_event.set_parse_action(parse_event_definition)
