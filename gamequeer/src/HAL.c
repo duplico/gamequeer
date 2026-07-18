@@ -159,7 +159,9 @@ void HAL_init(int argc, char *argv[]) {
  * This is minimal — enough to exercise button-driven game logic in tests.
  */
 
-#define HAL_INPUT_MAX_EVENTS 256
+#ifndef HAL_INPUT_MAX_EVENTS
+#define HAL_INPUT_MAX_EVENTS 4096
+#endif
 
 static uint16_t hal_input_events[HAL_INPUT_MAX_EVENTS];
 static int hal_input_count  = 0;
