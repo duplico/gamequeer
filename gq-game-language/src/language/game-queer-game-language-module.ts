@@ -1,6 +1,8 @@
 import { type Module, inject } from 'langium';
 import { createDefaultModule, createDefaultSharedModule, type DefaultSharedModuleContext, type LangiumServices, type LangiumSharedServices, type PartialLangiumServices } from 'langium/lsp';
 import { GameQueerGameLanguageGeneratedModule, GameQueerGameLanguageGeneratedSharedModule } from './generated/module.js';
+import { GameQueerGameLanguageCompletionProvider } from './game-queer-game-language-completion-provider.js';
+import { GameQueerGameLanguageHoverProvider } from './game-queer-game-language-hover-provider.js';
 import { GameQueerGameLanguageValidator, registerValidationChecks } from './game-queer-game-language-validator.js';
 
 /**
@@ -26,6 +28,10 @@ export type GameQueerGameLanguageServices = LangiumServices & GameQueerGameLangu
 export const GameQueerGameLanguageModule: Module<GameQueerGameLanguageServices, PartialLangiumServices & GameQueerGameLanguageAddedServices> = {
     validation: {
         GameQueerGameLanguageValidator: () => new GameQueerGameLanguageValidator()
+    },
+    lsp: {
+        CompletionProvider: (services) => new GameQueerGameLanguageCompletionProvider(services),
+        HoverProvider: (services) => new GameQueerGameLanguageHoverProvider(services)
     }
 };
 
