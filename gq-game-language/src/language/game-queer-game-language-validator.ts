@@ -1,6 +1,7 @@
 import type { ValidationAcceptor, ValidationChecks } from 'langium';
-import type { GameAssignment, GameDefinitionSection, GameQueerGameLanguageAstType } from './generated/ast.js';
+import type { CmdAssignmentInt, CmdAssignmentStr, GameAssignment, GameDefinitionSection, GameQueerGameLanguageAstType } from './generated/ast.js';
 import type { GameQueerGameLanguageServices } from './game-queer-game-language-module.js';
+import { findGqBuiltin } from './gq-builtins.js';
 
 /**
  * Register custom validation checks.
@@ -9,7 +10,9 @@ export function registerValidationChecks(services: GameQueerGameLanguageServices
     const registry = services.validation.ValidationRegistry;
     const validator = services.validation.GameQueerGameLanguageValidator;
     const checks: ValidationChecks<GameQueerGameLanguageAstType> = {
-        GameDefinitionSection: validator.checkGameAssignmentCardinality
+        GameDefinitionSection: validator.checkGameAssignmentCardinality,
+        CmdAssignmentInt: validator.checkIntAssignmentBuiltin,
+        CmdAssignmentStr: validator.checkStrAssignmentBuiltin
     };
     registry.register(checks, validator);
 }
@@ -51,6 +54,46 @@ export class GameQueerGameLanguageValidator {
                     accept('error', `Duplicate '${key}' assignment in game block; exactly one is allowed.`, { node: duplicate });
                 }
             }
+        }
+    }
+
+    /**
+     * `dst = ...;` assigns with the int operator. If `dst` names a reserved
+     * builtin, it must be an int builtin (a str builtin here is a kind
+     * mismatch -- it needs `:=`), and if it's a read-only (VM/firmware-
+     * managed) builtin, writing it is reported as a warning rather than an
+     * error: the VM does not itself reject the write (see gamequeer#326),
+     * so this is a lint, not a hard failure.
+     */
+    checkIntAssignmentBuiltin(node: CmdAssignmentInt, accept: ValidationAcceptor): void {
+        const builtin = findGqBuiltin(node.dst);
+        if (!builtin) {
+            return;
+        }
+        if (builtin.kind !== 'int') {
+            accept('error', `'${builtin.name}' is a str builtin; assign to it with ':=', not '='.`, { node, property: 'dst' });
+            return;
+        }
+        if (!builtin.writable) {
+            accept('warning', `'${builtin.name}' is a read-only builtin (${builtin.description}); the VM/firmware manages it and a game assignment will be overwritten.`, { node, property: 'dst' });
+        }
+    }
+
+    /**
+     * `dst := ...;` assigns with the str operator; see
+     * {@link checkIntAssignmentBuiltin} for the mirrored int-side checks.
+     */
+    checkStrAssignmentBuiltin(node: CmdAssignmentStr, accept: ValidationAcceptor): void {
+        const builtin = findGqBuiltin(node.dst);
+        if (!builtin) {
+            return;
+        }
+        if (builtin.kind !== 'str') {
+            accept('error', `'${builtin.name}' is an int builtin; assign to it with '=', not ':='.`, { node, property: 'dst' });
+            return;
+        }
+        if (!builtin.writable) {
+            accept('warning', `'${builtin.name}' is a read-only builtin (${builtin.description}); the VM/firmware manages it and a game assignment will be overwritten.`, { node, property: 'dst' });
         }
     }
 }
