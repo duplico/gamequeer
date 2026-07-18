@@ -100,18 +100,35 @@ event timer {
 
 The VM timer is a single global one-shot (see `timer_active` in
 `gamequeer.c`), so this pattern monopolizes it for as long as it runs — don't
-also rely on `timer` for anything else (e.g. an animation cadence) while this
-is armed.
+also rely on `timer` for anything else (e.g. a periodic scripted behavior
+you built with `timer`) while this is armed.
 
 **Generation**: seed a Park-Miller LCG from the sampled counter (fold in
 `GQI_PLAYER_ID`, or another badge word, first if per-cart variation across
-badges is wanted, then clamp into `[1, 2147483646]`, e.g.
-`seed % 2147483646 + 1`), and step it with the **Schrage-form** update below.
-This is the only form to use: the VM's arithmetic is plain signed `int32` C
-arithmetic, and a naive LCG like `state = state * 1103515245 + 12345` relies
-on signed-overflow wraparound, which is undefined behavior in C and not
-guaranteed to produce identical results between the emulator (gcc/clang) and
-the badge (`cl430 --opt_level=3`).
+badges is wanted), clamp into `[1, 2147483646]`, and step it with the
+**Schrage-form** update below. This is the only LCG form to use: the VM's
+arithmetic is plain signed `int32` C arithmetic, and a naive LCG like
+`state = state * 1103515245 + 12345` relies on signed-overflow wraparound,
+which is undefined behavior in C and not guaranteed to produce identical
+results between the emulator (gcc/clang) and the badge (`cl430
+--opt_level=3`).
+
+**Clamp the seed as two separate statements, mask before modulo**: C's `%`
+takes the sign of the dividend, so if the folded-in badge word can be
+negative (bit 31 set), `seed % 2147483646 + 1` can land on `state = 0` —
+which is an absorbing fixed point of the Schrage step below (`0 →
+2147483647 → 2147483647 …`, a permanently stuck generator). Mask to
+non-negative *before* the modulo clamp:
+
+```
+seed = seed & 2147483647;
+state = seed % 2147483646 + 1;
+```
+
+After masking, `seed` ∈ `[0, 2^31-1]`; `% 2147483646` gives `[0,
+2147483645]`; `+1` gives `[1, 2147483646]` — `state` can never be `0` or
+`2147483647`. Keep the mask and the modulo/`+1` clamp as separate
+statements as shown, not combined into one mixed `%`/`&`/`+` expression.
 
 ```
 // state must be a volatile int, seeded to 1..2147483646 before first use
