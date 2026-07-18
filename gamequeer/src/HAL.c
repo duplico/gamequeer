@@ -131,7 +131,22 @@ static FILE *leds_dump_file = NULL;
 // immediate foreground cue could someday produce two same-tick rows.
 static uint32_t leds_dump_tick_count = 0;
 
+void HAL_leds_dump_close() {
+    if (leds_dump_file) {
+        fclose(leds_dump_file);
+        leds_dump_file = NULL;
+    }
+}
+
 int HAL_leds_dump_open(const char *path) {
+    // Defensive: main() only calls this once per process today, but close
+    // out any previously-open dump file first (rather than leaking its FILE*)
+    // and reset the tick counter, so a hypothetical future caller opening a
+    // second dump gets its own 0-based `tick` column instead of continuing
+    // the previous run's count.
+    HAL_leds_dump_close();
+    leds_dump_tick_count = 0;
+
     leds_dump_file = fopen(path, "wb");
     if (!leds_dump_file) {
         fprintf(stderr, "HAL_leds_dump_open: cannot open %s for writing\n", path);
@@ -139,13 +154,6 @@ int HAL_leds_dump_open(const char *path) {
     }
     fprintf(leds_dump_file, "tick,r0,g0,b0,r1,g1,b1,r2,g2,b2,r3,g3,b3,r4,g4,b4\n");
     return 1;
-}
-
-void HAL_leds_dump_close() {
-    if (leds_dump_file) {
-        fclose(leds_dump_file);
-        leds_dump_file = NULL;
-    }
 }
 
 void HAL_update_leds() {
