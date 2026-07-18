@@ -230,11 +230,16 @@ def parse_int_expression(instring, loc, toks):
     toks = toks[0]
     if isinstance(toks, GqcIntOperand):
         return toks
-    
+
+    # pyparsing's infix_notation hands us a flat token list [a, op1, b, op2,
+    # c, ...] for a chain of same-precedence (opAssoc.LEFT) operators. Fold
+    # it so the left operand accumulates, e.g. "10 - 5 - 2" compiles as
+    # (10 - 5) - 2, not 10 - (5 - 2).
     if len(toks) > 3:
-        rtoks = [toks[2:]]
-        toks = toks[:2]
-        toks.append(parse_int_expression(instring, loc, rtoks))
+        ltoks = [toks[:-2]]
+        last_op = toks[-2]
+        last_operand = toks[-1]
+        toks = [parse_int_expression(instring, loc, ltoks), last_op, last_operand]
 
     try:
         return IntExpression(toks, instring, loc)
@@ -252,11 +257,15 @@ def parse_str_expression(instring, loc, toks):
     if isinstance(toks, str):
         return toks
 
+    # Same left-fold as parse_int_expression. String `+` is associative
+    # (concatenation), so this doesn't change the resulting string value —
+    # it just makes the accumulation order consistent with int expressions.
     if len(toks) > 3:
-        rtoks = [toks[2:]]
-        toks = toks[:2]
-        toks.append(parse_str_expression(instring, loc, rtoks))
-    
+        ltoks = [toks[:-2]]
+        last_op = toks[-2]
+        last_operand = toks[-1]
+        toks = [parse_str_expression(instring, loc, ltoks), last_op, last_operand]
+
     try:
         return StrExpression(toks, instring, loc)
     except ValueError as ve:
