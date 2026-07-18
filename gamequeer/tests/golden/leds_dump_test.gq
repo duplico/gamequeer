@@ -33,7 +33,13 @@
  *            "initial state" for --dump-leds's purposes, not something
  *            this fixture arranges. It happens during load_game(), which
  *            main() calls before the tick loop starts, so it's always
- *            tick 0 regardless of what --ticks is given.
+ *            tick 0 regardless of what --ticks is given. Note for anyone
+ *            authoring a fixture with an immediately-triggered foreground
+ *            cue: a redraw landing in the very first loop iteration would
+ *            also be labeled tick 0 (leds_dump_tick_count only advances at
+ *            end-of-iteration -- see its comment in HAL.c), colliding with
+ *            this boot-color row. Not reachable here (led_tick()'s subtick
+ *            countdown needs 4 calls before its first redraw).
  *   tick 3:  first cue redraw. leds_cue_frame_ticks_elapsed==0 for frame 0
  *            (duration 4) -> shows frame 0 (red).
  *   tick 7:  frame 0's ticks_elapsed (4) >= duration (4) -> frame done;

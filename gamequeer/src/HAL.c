@@ -118,6 +118,12 @@ static FILE *leds_dump_file = NULL;
 // incremented). Used only to label CSV rows; not accurate once GQ_HEADLESS
 // is off and HAL_sleep() free-runs in real time, but the row's *contents*
 // are correct in every build, and this file is emulator-only regardless.
+// Caveat: because the counter only advances at end-of-iteration, tick 0
+// labels both load_game()'s pre-loop boot-color row (see load_game() in
+// gamequeer.c) *and* any redraw that happens to land during the first loop
+// iteration itself -- currently unreachable (led_tick()'s subtick countdown
+// needs 4 calls before its first redraw), but a fixture scripting an
+// immediate foreground cue could someday produce two same-tick rows.
 static uint32_t leds_dump_tick_count = 0;
 
 int HAL_leds_dump_open(const char *path) {
