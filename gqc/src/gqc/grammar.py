@@ -66,7 +66,6 @@ break = "break" ";"
 loop = "loop" event_statements
 badge_set = "badge_set" int_expression ";"
 badge_clear = "badge_clear" int_expression ";"
-badge_get = "badge_get" "(" int_expression ")" ";"
 
 assignment_statement = int_assignment | string_assignment
 int_assignment = identifier "=" int_expression ";"
@@ -76,15 +75,17 @@ int_operand = identifier | integer
 string_operand = identifier | string
 
 # Shorthand; see https://stackoverflow.com/a/23956778
-int_expression = badge_get | pp.infixNotation(int_operand, [
-    (pp.oneOf('! - ~'), 1, pp.opAssoc.RIGHT),
+# badge_get is a right-associative unary prefix operator, e.g. badge_get(x).
+int_expression = pp.infixNotation(int_operand, [
+    (pp.oneOf('! - ~ badge_get'), 1, pp.opAssoc.RIGHT),
     (pp.oneOf('* / %'), 2, pp.opAssoc.LEFT),
     (pp.oneOf('+ -'), 2, pp.opAssoc.LEFT),
     (pp.oneOf('<< >>'), 2, pp.opAssoc.LEFT),
-    (pp.oneOf('== !='), 2, pp.opAssoc.LEFT),
+    (pp.oneOf('< > <= >='), 2, pp.opAssoc.LEFT),
     ('&', 2, pp.opAssoc.LEFT),
     ('^', 2, pp.opAssoc.LEFT),
     ('|', 2, pp.opAssoc.LEFT),
+    (pp.oneOf('== !='), 2, pp.opAssoc.LEFT),
     (pp.oneOf('&& ||'), 2, pp.opAssoc.LEFT),
 ])
 
