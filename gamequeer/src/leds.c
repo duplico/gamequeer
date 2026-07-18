@@ -213,7 +213,11 @@ static void led_render_frame() {
     }
 }
 
-void led_stop() {
+// Shared bookkeeping for led_stop() and led_anim_done()'s non-bg-cue stop
+// branch: clears animation/color state but doesn't flush -- callers decide
+// which HAL flush variant is safe for their context (see led_stop() vs.
+// led_anim_done() below).
+static void led_stop_state() {
     // Stop the animation flag.
     leds_animating = 0;
     // Unsave any background cue.
@@ -223,11 +227,23 @@ void led_stop() {
     for (uint8_t i = 0; i < 5; i++) {
         gq_leds[i] = (rgbcolor16_t) {.r = 0, .g = 0, .b = 0};
     }
+}
 
-    // Flush the LEDs.
+void led_stop() {
+    led_stop_state();
+    // Flush the LEDs. This flush's only callers (gamequeer.c's load_stage()
+    // and unload_game()) run from ordinary main-loop context, never from
+    // the RTC ISR, so it's safe -- and needs to actually take effect rather
+    // than possibly get dropped -- to block until any in-flight transfer
+    // completes.
     HAL_update_leds();
 }
 
+// Only ever called from led_tick(), i.e. from the RTC ISR: every flush in
+// this function must therefore use HAL_update_leds_nonblocking(), not
+// HAL_update_leds() -- a blocking wait here for an in-flight transfer could
+// deadlock, since the transfer's own completion interrupt can't run until
+// the RTC ISR returns (see HAL_update_leds_nonblocking()'s declaration).
 void led_anim_done() {
     // If we just completed a non-background cue, and we have a background cue saved, restore it.
     if (leds_cue_bg_saved && !leds_cue.bgcue) {
@@ -253,7 +269,7 @@ void led_anim_done() {
         // gap-free: the fg cue's final frame row is followed directly by
         // the bg cue's correct, fully resumed (possibly mid-fade) color.
         led_render_frame();
-        HAL_update_leds();
+        HAL_update_leds_nonblocking();
         // Credit this display the same way led_tick()'s own per-subtick
         // advance does (render, then bump leds_cue_frame_ticks_elapsed by
         // LEDS_SUBTICKS): this render just showed the resumed elapsed value,
@@ -264,8 +280,12 @@ void led_anim_done() {
         // ordinary frame-advance case.
         leds_cue_frame_ticks_elapsed += LEDS_SUBTICKS;
     } else {
-        // Otherwise, just stop the animation.
-        led_stop();
+        // Otherwise, just stop the animation. Inlined rather than calling
+        // led_stop(): this function only ever runs from the RTC ISR (see
+        // the function comment above), so it needs led_stop()'s bookkeeping
+        // with a non-blocking flush, not led_stop()'s own blocking one.
+        led_stop_state();
+        HAL_update_leds_nonblocking();
     }
 }
 
@@ -382,6 +402,13 @@ void led_play_cue(t_gq_pointer cue_ptr, uint8_t background) {
     led_setup_frame();
 }
 
+// Runs from the RTC ISR in every build that defines GQ_SUPPRESS_LED_TICK
+// (all builds as of this writing); when that's absent it instead runs from
+// system_tick() in ordinary main-loop context (see gamequeer.c). Either
+// way, its own flush and every flush reachable only through it (see
+// led_anim_done()'s comment) must be non-blocking: a bail-if-busy flush is
+// harmless main-loop-context too (it just drops a redraw), so this doesn't
+// need to detect which context it's actually running in.
 void led_tick() {
     uint8_t need_to_redraw = 0;
     static uint8_t subtick = LEDS_SUBTICKS - 1;
@@ -453,6 +480,6 @@ void led_tick() {
     }
 
     if (need_to_redraw) {
-        HAL_update_leds();
+        HAL_update_leds_nonblocking();
     }
 }
