@@ -196,6 +196,12 @@ void HAL_update_leds() {
     }
 }
 
+void HAL_update_leds_nonblocking() {
+    // The emulator has no in-flight-transfer hazard to avoid (gfx_flush()
+    // is synchronous), so the non-blocking variant is just an alias.
+    HAL_update_leds();
+}
+
 void HAL_new_game() {
     // Nothing to do, on the emulator.
 }
