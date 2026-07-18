@@ -35,3 +35,9 @@ gqc = "gqc.gqc:gqc_cli"
 [project.urls]
 Homepage = "https://github.com/duplico/gamequeer"
 Issues = "https://github.com/duplico/gamequeer/issues"
+
+[tool.pytest.ini_options]
+markers = [
+    "ffmpeg: needs a real ffmpeg binary on PATH (present in the gamequeer builder image)",
+    "golden: byte-exact compiled-output regression tests (see gamequeer#333)",
+]
