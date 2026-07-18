@@ -139,11 +139,12 @@ int main(int argc, char *argv[]) {
      *   --input FILE         : replay button events from a script (see HAL_input_load)
      *   --draw-count-out PATH: write the draw_oled_stack() invocation count
      *                          (decimal, headless builds only)
-     *   --dump-leds PATH     : append one CSV row per LED redraw over the run
-     *                          (available in every build -- see
-     *                          HAL_leds_dump_open()/HAL_update_leds() in HAL.c
-     *                          for the row format and why this isn't gated on
-     *                          GQ_HEADLESS like --draw-count-out)
+     *   --dump-leds PATH     : write PATH as a CSV, truncating any existing
+     *                          file, with one row appended per LED redraw
+     *                          over the run (available in every build --
+     *                          see HAL_leds_dump_open()/HAL_update_leds() in
+     *                          HAL.c for the row format and why this isn't
+     *                          gated on GQ_HEADLESS like --draw-count-out)
      *   --perf-dump PATH     : write gq_perf_stats as text (GQ_PERF_INSTRUMENT
      *                          builds only; see dump_perf_stats() above)
      * Defaults: unlimited ticks, no dump, no scripted input, no draw-count
