@@ -158,15 +158,14 @@ opaque unset nothing paints the background, so black-on-black renders
 nothing (found while authoring `perf_text.gq`'s edge-case label — fixed by
 also setting the opaque bit).
 
-**A flat `|` chain of literal-shift (`1<<n`) terms compiles fine at any
-length** — codegen left-folds it into a single accumulator, so
-`(1<<0)|(1<<1)|(1<<9)|(1<<16)|(1<<17)` only ever needs ~2 of the 4 int
-registers (`GQ_REGISTERS_INT` in `structs.py`). **Deeply *nested*
-parenthesized subexpressions can still exhaust the pool** — each additional
-level of `(term | (term | (term | …)))` nesting holds one more register live
-while it recurses into the next level, so a handful of nested levels reaches
-`No free registers available`. Restructure into a flat chain, or precompute
-a literal, instead of nesting.
+**Deeply nested parenthesized `|`-of-shifts subexpressions can exhaust the
+compiler's register pool** — each level of `(term | (term | …))` nesting
+holds one more register live while codegen recurses into the next, and
+`IntExpression`'s allocator has only 4 int registers (`GQ_REGISTERS_INT` in
+`structs.py`), so a handful of nested levels fails with `No free registers
+available`. A flat chain like `(1<<0)|(1<<1)|(1<<9)|(1<<16)|(1<<17)`
+left-folds into a single accumulator (~2 registers) and is fine at any
+length. Restructure into a flat chain, or precompute a literal.
 
 The font is `g_sFontFixed6x8` (`grlib/fonts/fontfixed6x8.c`): fixed 6×8px
 glyphs, covering printable ASCII **0x20 (space) .. 0x7E (`~`)**, 95 glyphs.
