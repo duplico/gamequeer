@@ -66,13 +66,14 @@ rgbcolor16_t gq_leds[5] = {
 #define LED_DELTA_FRAC_BITS 14
 
 // volatile: layered on top of the HAL_critical_enter()/HAL_critical_exit()
-// masked windows below (matching this codebase's established pattern for
-// other cross-context flags -- rtc_ticks_pending in main.c,
-// tlc_send_type in tlc5948a.c/I5) so the leds_animating = 0 -> ... ->
-// leds_animating = 1 ordering those windows rely on (I11) doesn't depend
-// on HAL_critical_enter()/HAL_critical_exit() staying opaque to the
-// compiler (e.g. under a future whole-program-optimized build that inlines
-// them across translation units).
+// masked windows below (matching this file's own gq_game_unload_flag in
+// gamequeer.c, and the badge firmware's analogous tlc_send_type/
+// rtc_ticks_pending -- see docs/led-tlc-concurrency.md's I5 in the qc2024
+// repo) so the leds_animating = 0 -> ... -> leds_animating = 1 ordering
+// those windows rely on (I11) doesn't depend on HAL_critical_enter()/
+// HAL_critical_exit() staying opaque to the compiler (e.g. under a future
+// whole-program-optimized build that inlines them across translation
+// units).
 volatile uint8_t leds_animating = 0;
 gq_ledcue_frame_t leds_cue_fg_frames[GQ_CUE_MAX_FRAMES];
 gq_ledcue_frame_t leds_cue_bg_frames[GQ_CUE_MAX_FRAMES];
@@ -483,9 +484,9 @@ void led_play_cue(t_gq_pointer cue_ptr, uint8_t background) {
     HAL_critical_enter();
     leds_cue             = new_cue;
     leds_cue_frame_index = 0;
-    leds_animating       = 1; // Last store: turns the RTC-ISR consumer back on.
-    led_setup_frame();
-    HAL_critical_exit();
+    leds_animating       = 1; // Before led_setup_frame(): it early-returns on !leds_animating.
+    led_setup_frame();        // Consumes leds_cue/leds_cue_frame_index set just above.
+    HAL_critical_exit();      // Only past this point can RTC_ISR observe any of this state.
 }
 
 // Runs from the RTC ISR in every build that defines GQ_SUPPRESS_LED_TICK
