@@ -390,3 +390,124 @@ def test_7_option_menu_rejects(compile_gq):
     exit_code, stderr, _ = compile_gq(source)
     assert exit_code != 0
     assert "too many options" in stderr
+
+
+# --- keyword-prefixed identifiers (gamequeer#354) ----------------------------
+# Several bare-string grammar literals (`pp.Suppress("str")`,
+# `pp.Suppress("if")`, `pp.Suppress("else")`, and the `badge_get` unary
+# operator, all matched via a plain `Literal` rather than a word-boundary-
+# anchored `Keyword`) used to greedily consume a matching prefix of a longer
+# identifier -- e.g. `str_scratch` lost its leading "str" to the `str(...)`
+# cast literal. Because these all sit ahead of `-` (And, "no backtrack")
+# operators, the mismatch after the truncated match surfaced as a hard
+# ParseSyntaxException rather than falling through to try the identifier as
+# a whole. `badge_get`/`else` are worse: since nothing *requires* the
+# character after the literal to be non-identifier, a colliding identifier
+# can still fully parse, just as the *wrong* tokens (see
+# test_else_prefixed_identifier_accepts and
+# test_badge_get_prefixed_identifier_in_expression_accepts below, which pin
+# the corrupted-but-non-crashing failure mode against fresh regressions).
+
+
+def test_str_prefixed_str_var_accepts(compile_gq):
+    # The original gamequeer#354 report: a `str`-prefixed str variable name
+    # used as the RHS operand of another string assignment used to trip the
+    # `str(...)` cast literal.
+    source = game_with_stage(
+        's := str_scratch;',
+        'volatile { str str_scratch := "x"; str s := ""; }',
+    )
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+@pytest.mark.parametrize(
+    "prefix",
+    ["int", "timer", "cue", "play", "loop"],
+)
+def test_int_keyword_prefixed_var_accepts(compile_gq, prefix):
+    # Keyword-prefixed int variable names, both as an assignment target and
+    # as an operand inside an int_expression.
+    varname = f"{prefix}_v"
+    source = game_with_stage(
+        f"{varname} = {varname} + 1;",
+        f"volatile {{ int {varname} = 0; }}",
+    )
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_badge_get_prefixed_identifier_in_expression_accepts(compile_gq):
+    # `badge_get` is matched as one alternative of a bare-string oneOf(...)
+    # inside int_expression's infixNotation; `badge_getter` used to lose its
+    # leading `badge_get` to that operator, leaving a bogus `ter` operand.
+    source = game_with_stage(
+        "y = badge_getter + 1;",
+        "volatile { int badge_getter = 0; int y = 0; }",
+    )
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_if_prefixed_identifier_as_assignment_target_accepts(compile_gq):
+    # `ifconfig = 5;` used to lose its leading `if` to if_statement's
+    # `Suppress("if")`, then hard-fail expecting `(`.
+    source = game_with_stage(
+        "ifconfig = 5;", "volatile { int ifconfig = 0; }"
+    )
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_else_prefixed_identifier_accepts(compile_gq):
+    # `elsewhere = 5;` immediately after a real if-block's true branch used
+    # to have its leading `else` silently consumed by if_statement's
+    # optional `Suppress("else")` (no word-boundary check), leaving `where =
+    # 5;` to parse as its own (bogus) assignment -- a silent corruption
+    # rather than a parse error. The if-condition here is a variable
+    # comparison (not a bare literal) to route around an unrelated,
+    # pre-existing CommandIf bug (see gamequeer#354's PR) that only
+    # misfires for literal-only if-conditions.
+    source = game_with_stage(
+        "if (x == 1) { badge_set 1; } elsewhere = 5;",
+        "volatile { int x = 0; int elsewhere = 0; }",
+    )
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_stage_prefixed_stage_name_accepts(compile_gq):
+    source = (
+        'game { id = 1; title := "T"; author := "A"; starting_stage = stage_one; }\n'
+        "stage stage_one { event enter { gostage stage_two; } }\n"
+        "stage stage_two { event enter { badge_set 1; } }\n"
+    )
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+# --- real keywords still parse as keywords (not swallowed by the fix) -------
+
+
+def test_str_cast_still_works_alongside_str_prefixed_var(compile_gq):
+    source = game_with_stage(
+        's := str(x);',
+        "volatile { int x = 0; str s := \"\"; str str_scratch := \"y\"; }",
+    )
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_bare_timer_statement_still_works(compile_gq):
+    source = game_with_stage("timer 5;")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_if_else_statement_still_works(compile_gq):
+    source = game_with_stage(
+        "if (x == 1) { badge_set 1; } else { badge_clear 1; }",
+        "volatile { int x = 0; }",
+    )
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
