@@ -1,0 +1,40 @@
+/*
+ * led_handback_fg.gqcue -- one-shot foreground cue for led_handback.gq
+ * (gamequeer#347/#350). Two frames, NOT looping (see the `cue` statement in
+ * led_handback.gq -- foreground cues never force loop=1 the way bgcue does):
+ *
+ *   frame 0: blue, SMOOTH toward frame 1's yellow, duration 16 (4 subticks)
+ *            -- covers the "a smooth cue still interpolates over exactly
+ *            `duration`" verification, independent of the bg cue's own
+ *            smooth frame.
+ *   frame 1: yellow, hold (no transition), duration 8 (2 subticks) -- the
+ *            cue's last frame is deliberately a hold, not smooth, to avoid
+ *            entangling this fixture with the separate (untouched, tracked
+ *            elsewhere) non-looping-cue-fades-to-black-on-its-last-frame
+ *            behavior noted in gamequeer#347.
+ *
+ * See led_handback.gq's header comment for the full tick-by-tick timeline.
+ */
+
+frame {
+    duration = 16;
+    transition := "smooth";
+    colors {
+        blue,
+        blue,
+        blue,
+        blue,
+        blue
+    }
+}
+
+frame {
+    duration = 8;
+    colors {
+        yellow,
+        yellow,
+        yellow,
+        yellow,
+        yellow
+    }
+}

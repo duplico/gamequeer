@@ -13,6 +13,9 @@
 #   ACTUAL   — path where the actual CSV will be written
 #   GOLDEN   — path to the committed golden CSV
 #   TICKS    — number of system_tick iterations to run
+#   INPUT    — (optional) path to a scripted button-input file, replayed via
+#              --input (see HAL.c's HAL_input_load()). Omit for fixtures that
+#              don't need scripted navigation (e.g. bgcue-only fixtures).
 #
 # Exits with FATAL_ERROR if the emulator fails or the CSVs differ.
 
@@ -20,8 +23,14 @@ cmake_minimum_required(VERSION 3.18)
 
 # ---- 1. Run the headless emulator ----------------------------------------
 
+if(INPUT)
+    set(_input_arg --input "${INPUT}")
+else()
+    set(_input_arg "")
+endif()
+
 execute_process(
-    COMMAND "${EXE}" --ticks "${TICKS}" --dump-leds "${ACTUAL}" "${FIXTURE}"
+    COMMAND "${EXE}" --ticks "${TICKS}" --dump-leds "${ACTUAL}" ${_input_arg} "${FIXTURE}"
     RESULT_VARIABLE run_result
     OUTPUT_VARIABLE run_stdout
     ERROR_VARIABLE  run_stderr
