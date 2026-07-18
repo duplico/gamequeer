@@ -146,6 +146,30 @@ stage start {
         expect(document.diagnostics ?? []).toEqual([]);
     });
 
+    test('reading a read-only builtin (not assigning to it) produces no diagnostics', async () => {
+        // GQI_PLAYER_ID is read-only, but only the *assignment target*
+        // checks (checkIntAssignmentBuiltin/checkStrAssignmentBuiltin) look
+        // at builtins -- a read (an IntOperand use, e.g. in a condition)
+        // should never be flagged.
+        const document = await parse(`
+game {
+    id = 0;
+    title := "Test Game";
+    author := "duplico";
+    starting_stage = start;
+}
+stage start {
+    event enter {
+        if (GQI_PLAYER_ID == 1) {
+        }
+    }
+}
+`, { validation: true });
+
+        expect(lexerAndParserErrors(document)).toEqual([]);
+        expect(document.diagnostics ?? []).toEqual([]);
+    });
+
     test('errors when an int builtin is assigned with := (kind mismatch)', async () => {
         const document = await parse(`
 game {
