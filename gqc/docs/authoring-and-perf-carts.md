@@ -158,12 +158,15 @@ opaque unset nothing paints the background, so black-on-black renders
 nothing (found while authoring `perf_text.gq`'s edge-case label — fixed by
 also setting the opaque bit).
 
-**A long chain of `<<`/`|` literal-shift terms in one expression can exhaust
-the compiler's register pool.** `IntExpression`'s allocator has only 4 int
-registers (`GQ_REGISTERS_INT` in `structs.py`); a 5-term chain like
-`(1<<0)|(1<<1)|(1<<9)|(1<<16)|(1<<17)` fails to compile with `No free
-registers available`, while a 2-3 term chain is fine. Precompute a literal
-for wide bitmasks instead.
+**A flat chain of same-precedence `<<`/`|` literal-shift terms compiles fine
+at any length** — codegen left-folds it into a single accumulator, so
+`(1<<0)|(1<<1)|(1<<9)|(1<<16)|(1<<17)` only ever needs ~2 of the 4 int
+registers (`GQ_REGISTERS_INT` in `structs.py`). **Deeply *nested*
+parenthesized subexpressions can still exhaust the pool** — each additional
+level of `(term | (term | (term | …)))` nesting holds one more register live
+while it recurses into the next level, so a handful of nested levels reaches
+`No free registers available`. Restructure into a flat chain, or precompute
+a literal, instead of nesting.
 
 The font is `g_sFontFixed6x8` (`grlib/fonts/fontfixed6x8.c`): fixed 6×8px
 glyphs, covering printable ASCII **0x20 (space) .. 0x7E (`~`)**, 95 glyphs.
@@ -458,9 +461,10 @@ flashrom invocation is tracked as
 - **Strings are 21 usable chars**; overlong values raise at compile time.
 - **`str(x)` casts can't be composed inline in a `+` chain** — cast into an
   intermediate str var first (see "Event-body statements" above).
-- **A wide `<<`/`|` literal expression can exhaust the 4-register compiler
-  pool** (`No free registers available`) — precompute a literal instead (see
-  "Labels" above).
+- **A deeply *nested* parenthesized `<<`/`|` expression can exhaust the
+  4-register compiler pool** (`No free registers available`) — a flat
+  same-precedence chain is fine at any length; restructure or precompute a
+  literal instead (see "Labels" above).
 - **Integer division/modulo by a zero divisor is unguarded.**
   `run_arithmetic()`'s `GQ_OP_DIVBY`/`GQ_OP_MODBY` cases (`bytecode.c`) are
   bare C `/` and `%` with no zero check — a zero divisor is undefined
