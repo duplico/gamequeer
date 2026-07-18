@@ -276,7 +276,7 @@ extern Graphics_Context g_sContext;
 extern uint8_t gq_heap[GQ_HEAP_SIZE];
 extern rgbcolor16_t gq_leds[5];
 extern gq_ledcue_t leds_cue;
-extern uint8_t leds_animating;
+extern volatile uint8_t leds_animating;
 
 extern uint8_t gq_builtin_ints[];
 extern uint8_t gq_builtin_strs[];
