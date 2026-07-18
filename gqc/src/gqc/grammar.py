@@ -81,10 +81,11 @@ int_expression = pp.infixNotation(int_operand, [
     (pp.oneOf('* / %'), 2, pp.opAssoc.LEFT),
     (pp.oneOf('+ -'), 2, pp.opAssoc.LEFT),
     (pp.oneOf('<< >>'), 2, pp.opAssoc.LEFT),
-    (pp.oneOf('== !='), 2, pp.opAssoc.LEFT),
+    (pp.oneOf('< > <= >='), 2, pp.opAssoc.LEFT),
     ('&', 2, pp.opAssoc.LEFT),
     ('^', 2, pp.opAssoc.LEFT),
     ('|', 2, pp.opAssoc.LEFT),
+    (pp.oneOf('== !='), 2, pp.opAssoc.LEFT),
     (pp.oneOf('&& ||'), 2, pp.opAssoc.LEFT),
 ])
 
