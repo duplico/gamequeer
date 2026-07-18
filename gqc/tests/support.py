@@ -8,11 +8,11 @@ package doesn't need any of that: it drives `python -m gqc compile` as a
 subprocess per test (see `compile_gq` in conftest.py), which gets fresh
 state for free.
 
-`reset_compiler_state()` exists for *future* tests that want to compile
-in-process (e.g. to inspect intermediate objects instead of just exit code
-and stderr) more than once per pytest session. It is additive only: nothing
-in this file changes any production behavior, and nothing in the current
-suite calls it.
+`reset_compiler_state()` lets tests that want to compile in-process (e.g. to
+inspect intermediate objects instead of just exit code and stderr) do so
+more than once per pytest session -- see `test_support.py` and other
+in-process test modules in this package for callers. It is additive only:
+nothing in this file changes any production behavior.
 """
 
 from gqc import structs
