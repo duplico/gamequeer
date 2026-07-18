@@ -38,6 +38,42 @@ jobs:
         run: pytest tests
         working-directory: gqc/
 
+  gq-game-language-tests:
+    name: gq-game-language vitest suite
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        # Matches gq-game-language/install-langium-deps.sh's `nvm install 20`
+        # (the version its Docker-based dev setup uses); package.json places
+        # no floor on engines.node.
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: gq-game-language/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: gq-game-language/
+
+      - name: Generate Langium artifacts
+        # test/*.test.ts import from src/language/generated/, which is
+        # gitignored and produced by this step (see langium-quickstart.md).
+        run: npm run langium:generate
+        working-directory: gq-game-language/
+
+      - name: Run vitest suite
+        # No Docker/submodules needed: vitest only needs Node, and
+        # test/golden.test.ts's fixture sweep reads .gq files straight from
+        # this checkout (gamequeer/tests/golden/, examples/games/,
+        # gqc/examples/skel/games/working_samples/ -- all plain paths
+        # relative to the repo root, no submodule required).
+        run: npm test
+        working-directory: gq-game-language/
+
   gamequeer-vm-build:
     name: gamequeer C VM native build + headless golden suite
     runs-on: ubuntu-latest
