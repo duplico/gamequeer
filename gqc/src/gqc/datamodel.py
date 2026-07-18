@@ -740,8 +740,18 @@ class Menu:
 
         for label, value in self.options.items():
             bytes_out += label.encode('ascii').ljust(structs.GQ_STR_SIZE, b'\x00')
-            bytes_out += value.to_bytes(structs.GQ_INT_SIZE, 'little')
-        
+            # t_gq_int (GQI_MENU_VALUE) is a signed 32-bit int on-cart (see
+            # gamequeer.h), so a negative option value must be encoded as
+            # signed two's complement -- plain int.to_bytes(..., 'little')
+            # defaults to unsigned and raises OverflowError on a negative
+            # value (gamequeer#362). Non-negative values keep the unsigned
+            # encoding they already had; unlike the persistent-variable
+            # section (gamequeer#359 / linker.py's 0xFFFFFFFF padding
+            # sentinel), the menu section has no analogous non-negative
+            # sentinel that would need to stay unsigned, but the conditional
+            # form is kept anyway to match that fix's pattern.
+            bytes_out += value.to_bytes(structs.GQ_INT_SIZE, 'little', signed=value < 0)
+
         return bytes_out
     
     def set_addr(self, addr : int, namespace : int = structs.GQ_PTR_NS_CART):
