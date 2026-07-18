@@ -152,6 +152,41 @@ static inline int32_t led_delta_shift(int32_t product) {
     return (product < 0) ? -shifted : shifted;
 }
 
+// Publish gq_leds for whatever cue/frame state is currently loaded
+// (leds_cue_frame_curr / leds_cue_color_curr / leds_cue_color_delta, at
+// leds_cue_frame_ticks_elapsed). Doesn't touch leds_cue_frame_ticks_elapsed
+// and doesn't flush (callers decide whether/when to call HAL_update_leds()).
+//
+// This is the one place that turns "which subtick of which frame are we on"
+// into a color, shared between led_tick()'s per-subtick advance and
+// led_anim_done()'s one-shot handback publish below -- so the two can't
+// drift apart the way they did before gamequeer#347 (the handback path used
+// to publish leds_cue_color_next, the *next* frame's colors, instead of
+// rendering the resumed frame's actual current state).
+static void led_render_frame() {
+    if (leds_cue_frame_ticks_elapsed == 0 || !leds_cue_frame_curr.transition_smooth) {
+        // First subtick of the frame, or a hold (non-smooth) transition:
+        // display the frame's starting colors outright.
+        for (uint8_t i = 0; i < 5; i++) {
+            gq_leds[i].r = leds_cue_color_curr[i].r;
+            gq_leds[i].g = leds_cue_color_curr[i].g;
+            gq_leds[i].b = leds_cue_color_curr[i].b;
+        }
+    } else {
+        // Mid-frame smooth transition: interpolate at the current elapsed
+        // ticks, using the per-tick deltas precomputed in led_setup_frame().
+        // See led_delta_shift()'s comment for why this can't overflow.
+        for (uint8_t i = 0; i < 5; i++) {
+            gq_leds[i].r = leds_cue_color_curr[i].r +
+                led_delta_shift(leds_cue_color_delta[i].r * (int32_t) leds_cue_frame_ticks_elapsed);
+            gq_leds[i].g = leds_cue_color_curr[i].g +
+                led_delta_shift(leds_cue_color_delta[i].g * (int32_t) leds_cue_frame_ticks_elapsed);
+            gq_leds[i].b = leds_cue_color_curr[i].b +
+                led_delta_shift(leds_cue_color_delta[i].b * (int32_t) leds_cue_frame_ticks_elapsed);
+        }
+    }
+}
+
 void led_stop() {
     // Stop the animation flag.
     leds_animating = 0;
@@ -170,11 +205,38 @@ void led_stop() {
 void led_anim_done() {
     // If we just completed a non-background cue, and we have a background cue saved, restore it.
     if (leds_cue_bg_saved && !leds_cue.bgcue) {
-        leds_cue                     = leds_cue_bg;
-        leds_cue_frame_index         = leds_cue_bg_frame_index;
+        leds_cue             = leds_cue_bg;
+        leds_cue_frame_index = leds_cue_bg_frame_index;
+        leds_cue_bg_saved    = 0;
+        led_setup_frame(); // Zeroes leds_cue_frame_ticks_elapsed; restored below.
+        // Resume the bg cue's saved *intra-frame* progress, not a fresh
+        // frame start. led_setup_frame() above unconditionally zeroes
+        // leds_cue_frame_ticks_elapsed, so the saved value has to be written
+        // back afterward, not before: assigning it before the call (as this
+        // used to) was a dead store, silently discarded by the call, which
+        // made the bg cue restart the resumed frame from its beginning
+        // instead of resuming mid-frame (gamequeer#347).
         leds_cue_frame_ticks_elapsed = leds_cue_bg_frame_ticks_elapsed;
-        leds_cue_bg_saved            = 0;
-        led_setup_frame();
+        // Publish the resumed frame's actual colors right now, atomically
+        // with the state swap above, instead of leaving it to the generic
+        // "publish leds_cue_color_next" step in led_tick()'s caller (which
+        // by this point would be the *bg* cue's freshly-loaded next-frame
+        // colors -- not the fg cue's destination, and not the bg cue's
+        // resumed color either). That mismatch was gamequeer#347's
+        // wrong-palette glitch row. Rendering here makes the handback
+        // gap-free: the fg cue's final frame row is followed directly by
+        // the bg cue's correct, fully resumed (possibly mid-fade) color.
+        led_render_frame();
+        HAL_update_leds();
+        // Credit this display the same way led_tick()'s own per-subtick
+        // advance does (render, then bump leds_cue_frame_ticks_elapsed by
+        // LEDS_SUBTICKS): this render just showed the resumed elapsed value,
+        // so the *next* led_tick() call needs to move past it, not
+        // re-render the same color again -- otherwise the resumed frame
+        // would show one redundant repeated-color tick here, the exact same
+        // class of uncounted-subtick fencepost gamequeer#350 fixed for the
+        // ordinary frame-advance case.
+        leds_cue_frame_ticks_elapsed += LEDS_SUBTICKS;
     } else {
         // Otherwise, just stop the animation.
         led_stop();
@@ -310,58 +372,57 @@ void led_tick() {
         if (leds_cue_frame_ticks_elapsed >= leds_cue_frame_curr.duration) {
             // Current frame is done. Next frame!
             leds_cue_frame_index++;
-            if (leds_cue_frame_index >= leds_cue.frame_count) {
-                // If we're at the end of the cue, loop back to the start or stop.
-                if (leds_cue.loop) {
-                    leds_cue_frame_index = 0;
-                } else {
-                    led_anim_done();
-                }
-            }
-
-            // Either way, we need to display the destination color of the current transition.
-            for (uint8_t i = 0; i < 5; i++) {
-                gq_leds[i] = leds_cue_color_next[i];
-            }
-            need_to_redraw = 1;
-            led_setup_frame(); // leds_cue_frame_ticks_elapsed is reset inside the function.
-        } else {
-            // The current frame is _not_ done, so we need to display the current colors.
-            if (leds_cue_frame_ticks_elapsed == 0) {
-                // If this is the first tick of the frame, set the colors to the current frame's colors.
-                for (uint8_t i = 0; i < 5; i++) {
-                    gq_leds[i].r = leds_cue_color_curr[i].r;
-                    gq_leds[i].g = leds_cue_color_curr[i].g;
-                    gq_leds[i].b = leds_cue_color_curr[i].b;
-                }
-                need_to_redraw = 1;
-            } else if (leds_cue_frame_curr.transition_smooth) {
-                // If the frame is not done and is a smooth transition, interpolate the colors
-                // using the per-tick deltas precomputed in led_setup_frame(). No divide here:
-                // just a 32-bit intermediate multiply (hardware-assisted via MPY32) and a
-                // constant shift, instead of a 32-bit software divide per channel per subtick.
-                //
-                // This branch is only reachable with 0 < ticks_elapsed < duration (the
-                // ticks_elapsed == 0 case is handled above, and the >= duration case takes the
-                // frame-done branch instead), so delta * ticks_elapsed can't overflow int32_t:
-                // see led_delta_shift()'s comment for the bound.
-                for (uint8_t i = 0; i < 5; i++) {
-                    gq_leds[i].r = leds_cue_color_curr[i].r +
-                        led_delta_shift(leds_cue_color_delta[i].r * (int32_t) leds_cue_frame_ticks_elapsed);
-                    gq_leds[i].g = leds_cue_color_curr[i].g +
-                        led_delta_shift(leds_cue_color_delta[i].g * (int32_t) leds_cue_frame_ticks_elapsed);
-                    gq_leds[i].b = leds_cue_color_curr[i].b +
-                        led_delta_shift(leds_cue_color_delta[i].b * (int32_t) leds_cue_frame_ticks_elapsed);
-                }
-
-                need_to_redraw = 1;
+            if (leds_cue_frame_index >= leds_cue.frame_count && !leds_cue.loop) {
+                // End of a non-looping cue: led_anim_done() owns the entire
+                // handoff -- publishing the correct colors (bg restore or
+                // stop) and flushing them itself -- because it may swap in a
+                // completely different cue/frame instead of simply advancing
+                // within this one. Piling the generic "publish next, call
+                // led_setup_frame()" steps below on top of that (as this used
+                // to do unconditionally) was gamequeer#347's wrong-palette
+                // glitch: they'd run against the state led_anim_done() had
+                // just loaded for the *bg* cue, not the fg cue's own
+                // completion.
+                led_anim_done();
             } else {
-                // If the frame is not done and is not a smooth transition, do nothing, as we're
-                // already displaying the current frame's colors.
+                if (leds_cue_frame_index >= leds_cue.frame_count) {
+                    // End of a looping cue: wrap back to the start.
+                    leds_cue_frame_index = 0;
+                }
 
-                // No need to redraw.
+                // Either way, display the destination color of the completed
+                // transition -- already computed as "next" by the previous
+                // call to led_setup_frame().
+                for (uint8_t i = 0; i < 5; i++) {
+                    gq_leds[i] = leds_cue_color_next[i];
+                }
+                need_to_redraw = 1;
+                led_setup_frame(); // leds_cue_frame_ticks_elapsed is reset inside the function.
+                // Credit the boundary subtick displayed just above as the new
+                // frame's first counted subtick, instead of leaving it at
+                // led_setup_frame()'s internal 0. Left at 0, the very next
+                // active subtick would re-display these same colors -- a
+                // redundant tick counted nowhere, i.e. gamequeer#350's
+                // uncounted-boundary-subtick fencepost (every frame rendering
+                // for duration+LEDS_SUBTICKS ticks instead of duration).
+                // Contrast led_play_cue()'s own led_setup_frame() call, which
+                // deliberately leaves this at 0: a freshly played cue hasn't
+                // displayed anything yet, so its first frame still needs the
+                // ticks_elapsed==0 branch below to fire on the next tick.
+                leds_cue_frame_ticks_elapsed = LEDS_SUBTICKS;
             }
-            leds_cue_frame_ticks_elapsed += 4;
+        } else {
+            // The current frame is not done. Redraw only if something is
+            // actually changing: the first subtick of the frame, or an
+            // in-progress smooth transition (led_render_frame() handles both
+            // -- see its comment). A mid-frame hold transition is already
+            // displaying the right colors from a previous subtick, so there's
+            // nothing to redraw.
+            if (leds_cue_frame_ticks_elapsed == 0 || leds_cue_frame_curr.transition_smooth) {
+                led_render_frame();
+                need_to_redraw = 1;
+            }
+            leds_cue_frame_ticks_elapsed += LEDS_SUBTICKS;
         }
     }
 
