@@ -435,6 +435,15 @@ A user-friendly wrapper that automates padding, layout generation, and the
 flashrom invocation is tracked as
 [duplico/qc2024#62](https://github.com/duplico/qc2024/issues/62).
 
+The recipe above assumes the cart is pulled and seated directly in the
+CH341A. An **in-system** variant also exists: the cart stays seated in the
+badge's cart slot, with the CH341A driving it through a pass-through
+fixture while the badge itself is held in a debug-controlled reset (GPIOs
+high-impedance) via qc2024's `cart-bus-hold.sh` tooling, so the burn
+happens without unseating the cart between burn and play. See qc2024's
+[`docs/bench-workflow.md`](https://github.com/duplico/qc2024/blob/default/docs/bench-workflow.md)
+for the full in-system procedure.
+
 ## 8. Gotchas found
 
 - **Asset paths are CWD-relative** (`assets/animations/<file>`). Compile from
