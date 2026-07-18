@@ -6,8 +6,6 @@ terminal INT returns number: /\-?[0-9]+/;
 
 terminal STRING: /"(\\.|[^"\\])*"/;
 
-terminal INPUTBUTTON: '(A)' | '(B)' | '(<-)' | '(->)' | '(-)';
-
 hidden terminal ML_COMMENT: /\/\*[\s\S]*?\*\//;
 hidden terminal SL_COMMENT: /\/\/[^\n\r]*/;
 
@@ -29,7 +27,7 @@ GameStartingStageAssignment:
 GameAssignment:
     GameIdAssignment | GameTitleAssignment | GameAuthorAssignment | GameStartingStageAssignment;
 GameDefinitionSection:
-    'game' '{' games=GameAssignment* '}';
+    'game' '{' games+=GameAssignment* '}';
 
 // Variable definition section
 IntDefinition: 
@@ -49,7 +47,7 @@ FileAssignment:
 AnimationOption: 
     'frame_rate' '=' framerate=INT ';' | 'dithering' ':=' dithering=STRING ';' | 'w' '=' width=INT ';' | 'h' '=' height=INT ';' | 'duration' '=' duration=INT ';';
 AnimationAssignment:
-    FileAssignment (AnimationOption? ';' | '{' anim_options=AnimationOption* '}');
+    FileAssignment (';' | AnimationOption | '{' anim_options=AnimationOption* '}');
 AnimationDefinitionSection:
     'animations' (AnimationAssignment | '{' anims=AnimationAssignment* '}');
 
@@ -124,7 +122,7 @@ StageCommands:
 // Stage definitions
 
 EventType:
-    eventType='input' button=INPUTBUTTON | eventType='bgdone' | eventType='menu' | eventType='enter' | eventType='timer' | (eventType='fgdone' '(' index=INT ')');
+    eventType='input' '(' button=('A' | 'B' | '<-' | '->' | '-') ')' | eventType='bgdone' | eventType='menu' | eventType='enter' | eventType='timer' | (eventType='fgdone' '(' index=INT ')');
 StageEvent:
     'event' EventType StageCommands;
 StageMenu:
