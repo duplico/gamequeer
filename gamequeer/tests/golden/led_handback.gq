@@ -1,0 +1,116 @@
+/*
+ * led_handback.gq -- Golden-test fixture for the foreground-cue completion
+ * / background-cue handback path (gamequeer#347, gamequeer#350). The
+ * existing leds_dump_test.gq golden is bgcue-only (no fg cue ever plays, so
+ * led_anim_done()'s bg-restore branch is never reached); this is the
+ * dedicated fg-over-bg case.
+ *
+ * NOTE (commit history): the golden CSV committed alongside the *first*
+ * version of this fixture intentionally PINS the pre-fix behavior (glitch
+ * row on handback, saved bg progress discarded, +LEDS_SUBTICKS-per-frame
+ * fencepost) -- see the PR body for the line-by-line diff against the
+ * regenerated, post-fix golden. This header describes the POST-FIX timeline
+ * only; the pre-fix golden's own commit message explains how its rows
+ * differ and why.
+ *
+ * Cues (assets/lighting/):
+ *   led_handback_bg.gqcue -- looping ambient bgcue, 2 frames: red (hold,
+ *     duration 12) -> lime (smooth toward red, duration 40).
+ *   led_handback_fg.gqcue -- one-shot fgcue, 2 frames: blue (smooth toward
+ *     yellow, duration 16) -> yellow (hold, duration 8).
+ *
+ * Triggering the fg cue: `--input led_handback_trigger.txt` scripts 19
+ * unhandled `R` button presses (this stage defines no `event input(R)`, so
+ * each just consumes one HAL_event_poll() slot with zero game-visible
+ * effect) followed by one `A`, which fires `event input(A)`'s `cue flash;`.
+ * HAL_event_poll() drains exactly one scripted event per system_tick()
+ * iteration (see HAL.c), so this lands the trigger deterministically on
+ * iteration 19 -- NOT iteration 0. A true "wait, no input at all" idle delay
+ * isn't scriptable (gamequeer#348), but a recognized-and-simply-unhandled
+ * button press is: HAL_input_load()/HAL_event_poll() already fully support
+ * it, no new emulator feature needed. This -- not an immediate tick-0
+ * trigger -- is what makes the interruption land mid-frame (bg frame 1,
+ * partway through its 40-tick fade) instead of at bg-elapsed exactly 0,
+ * which is the only way to get a resume point that's numerically
+ * distinguishable from a restart at all: interrupting at elapsed 0 would
+ * make "resume" and "restart from frame start" look identical in the CSV
+ * even with the bug still present.
+ *
+ * Full tick-by-tick derivation (see leds.c's led_tick()/led_anim_done() for
+ * the state machine; ticks not listed produce no redraw, i.e. no CSV row --
+ * `need_to_redraw` gating, or a hold frame already displaying the right
+ * colors from a previous tick):
+ *
+ *   tick 0:  load_game()'s fixed boot color (16, 32, 0) -- see
+ *            gqc-golden-fixture-gotchas; not this fixture's concern.
+ *   tick 3:  bg frame 0 (red) first display (ticks_elapsed==0 branch).
+ *   tick 15: bg frame 0 done (elapsed 12 >= duration 12) -> advance to
+ *            frame 1 (lime); publishes lime, credits the boundary subtick
+ *            (elapsed = LEDS_SUBTICKS = 4 -- gamequeer#350's fix).
+ *   tick 19: bg frame 1 not done (elapsed 4 < 40), smooth -> interpolates
+ *            at elapsed=4 (10% toward red), redraws; elapsed -> 8.
+ *            *Same iteration*, after led_tick() but before HAL_sleep():
+ *            HAL_event_poll() delivers the scripted `A`; `event input(A)`
+ *            runs `cue flash;` -> led_play_cue() saves the bg's live state
+ *            (frame_index=1, ticks_elapsed=8 -- the value led_tick() just
+ *            set, above) and loads the fg cue fresh (elapsed=0). No redraw
+ *            happens from the cue switch itself (led_play_cue() never
+ *            touches gq_leds) -- nothing to see here at tick 19 beyond the
+ *            bg's own scheduled redraw that already happened this same
+ *            tick, before the switch.
+ *   tick 23: fg frame 0 (blue) first display (ticks_elapsed==0 branch).
+ *   tick 27: fg frame 0 smooth, elapsed=4/16 (25%) -> redraws.
+ *   tick 31: fg frame 0 smooth, elapsed=8/16 (50%) -> redraws.
+ *   tick 35: fg frame 0 smooth, elapsed=12/16 (75%) -> redraws.
+ *   tick 39: fg frame 0 done (elapsed 16 >= duration 16) -> advance to
+ *            frame 1 (yellow); publishes yellow, credits boundary subtick.
+ *   tick 47: fg frame 1 done (elapsed 8 >= duration 8) -> frame_count (2)
+ *            reached, non-looping -> led_anim_done(): restores the bg cue
+ *            (frame_index=1, ticks_elapsed=8 -- the *exact* value saved at
+ *            tick 19, gamequeer#347's dead-store fix), renders it
+ *            immediately at that elapsed (gamequeer#347's atomic-handback
+ *            fix), and credits this display's subtick (elapsed -> 12) so
+ *            the *next* bg tick doesn't redundantly redisplay the same
+ *            color. Interpolating at ticks_elapsed=8 here is exactly the
+ *            color bg frame 1 would have shown at its own next tick
+ *            (hypothetically tick 23) had it never been interrupted at
+ *            all -- no time lost, no restart, no wrong palette, no gap.
+ *            See the PR body for the actual captured RGB values.
+ *   tick 51: bg frame 1 continues normally, elapsed=12/40 -> redraws.
+ *
+ * TICKS=52 in the ctest call (tests/CMakeLists.txt) runs iterations 0..51,
+ * landing one tick past the tick-51 confirmation row above.
+ *
+ * gqc's linker requires at least one event with at least one statement
+ * (create_symbol_table() indexes event_statements[0] unconditionally) --
+ * `event input(A)`'s `cue flash;` already satisfies this, no dummy `enter`
+ * needed.
+ *
+ * How to reproduce the compiled fixture (led_handback.gqgame):
+ *
+ *   From the gamequeer repo root, using the builder container:
+ *     docker run --rm -v $(pwd):/workspaces/gamequeer --workdir /workspaces/gamequeer \
+ *         --user $(id -u):$(id -g) gamequeer-builder:latest \
+ *         /bin/bash -c "cd gamequeer/tests/golden && PYTHONPATH=/workspaces/gamequeer/gqc/src \
+ *             python -m gqc compile --no-mem-map -o . led_handback.gq"
+ */
+
+game {
+    id = 1;
+    title := "LedHandback";
+    author := "test";
+    starting_stage = glow;
+}
+
+lightcues {
+    ambient <- "led_handback_bg.gqcue";
+    flash <- "led_handback_fg.gqcue";
+}
+
+stage glow {
+    bgcue ambient;
+
+    event input(A) {
+        cue flash;
+    }
+}

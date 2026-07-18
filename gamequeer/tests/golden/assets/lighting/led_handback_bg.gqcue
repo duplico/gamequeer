@@ -1,0 +1,43 @@
+/*
+ * led_handback_bg.gqcue -- looping ambient (background) cue for
+ * led_handback.gq (gamequeer#347/#350). Two frames:
+ *
+ *   frame 0: red, hold (no transition), duration 12 (3 subticks) -- just
+ *            long enough to be its own distinct, hand-verifiable phase
+ *            before wrapping to frame 1.
+ *   frame 1: lime, SMOOTH toward frame 0's red (the loop wrap-around is
+ *            this cue's only "next" frame), duration 40 (10 subticks) --
+ *            deliberately long, so a one-shot foreground cue can interrupt
+ *            it well before it completes, and so the resulting mid-fade
+ *            color at the interruption point is visibly different from
+ *            both lime (elapsed 0) and red (elapsed >= duration): a wrong
+ *            "restart from frame start" resume is trivially distinguishable
+ *            from a correct "resume at the saved elapsed" one just by
+ *            comparing RGB columns in the CSV.
+ *
+ * See led_handback.gq's header comment for the full tick-by-tick timeline
+ * this produces, combined with led_handback_fg.gqcue.
+ */
+
+frame {
+    duration = 12;
+    colors {
+        red,
+        red,
+        red,
+        red,
+        red
+    }
+}
+
+frame {
+    duration = 40;
+    transition := "smooth";
+    colors {
+        lime,
+        lime,
+        lime,
+        lime,
+        lime
+    }
+}

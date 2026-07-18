@@ -262,14 +262,30 @@ add_test(NAME led_fade_delta COMMAND test_led_fade_delta)
 # NAME     — ctest test name
 # FIXTURE  — fixture base name (expects golden/<FIXTURE>.gqgame)
 # TICKS    — number of system_tick iterations to run
+# Optional keyword arg:
+#   INPUT — (optional) filename, relative to GOLDEN_DIR, of a scripted
+#           button-input file (see add_golden_test's INPUT doc above).
+#           Omit for fixtures that don't need scripted navigation (e.g.
+#           bgcue-only fixtures).
 #
 # Complements add_golden_test: LED state isn't part of the OLED
 # framebuffer, so no pixel golden exercises leds.c's redraw cadence or cue
 # frame-advance/loop behavior at all. See run_leds_dump_test.cmake.
 function(add_leds_dump_test NAME FIXTURE TICKS)
+    cmake_parse_arguments(LDT "" "INPUT" "" ${ARGN})
+
     set(fixture_cart "${GOLDEN_DIR}/${FIXTURE}.gqgame")
     set(golden_csv   "${GOLDEN_DIR}/${FIXTURE}_golden.csv")
     set(actual_csv   "${CMAKE_CURRENT_BINARY_DIR}/${NAME}_actual.csv")
+
+    if(LDT_INPUT)
+        set(input_script "${GOLDEN_DIR}/${LDT_INPUT}")
+        set(_test_input_arg -DINPUT=${input_script})
+        set(_regen_input_arg --input "${input_script}")
+    else()
+        set(_test_input_arg "")
+        set(_regen_input_arg "")
+    endif()
 
     add_test(
         NAME ${NAME}
@@ -280,6 +296,7 @@ function(add_leds_dump_test NAME FIXTURE TICKS)
             -DACTUAL=${actual_csv}
             -DGOLDEN=${golden_csv}
             -DTICKS=${TICKS}
+            ${_test_input_arg}
             -P "${CMAKE_CURRENT_SOURCE_DIR}/run_leds_dump_test.cmake"
     )
 
@@ -288,6 +305,7 @@ function(add_leds_dump_test NAME FIXTURE TICKS)
         COMMAND
             $<TARGET_FILE:gamequeer>
             --ticks ${TICKS}
+            ${_regen_input_arg}
             --dump-leds "${golden_csv}"
             "${fixture_cart}"
         DEPENDS gamequeer
@@ -303,6 +321,19 @@ endfunction()
 # TICKS=24 lands exactly on the tick-23 loop-wraparound row.
 
 add_leds_dump_test(golden_leds_dump_test leds_dump_test 24)
+
+# ---- golden_led_handback: fg-over-bg cue completion/handback CSV
+# regression (gamequeer#347/#350). Unlike golden_leds_dump_test above (a
+# looping bgcue only, never reaching led_anim_done()'s bg-restore branch),
+# this fixture scripts a one-shot foreground cue over a looping background
+# cue -- the path both issues' fixes touch. See led_handback.gq's header
+# comment for the full tick-by-tick derivation, including why the trigger
+# is scripted to land on tick 19 (not tick 0) via unhandled filler button
+# presses. TICKS=52 lands one confirmation tick past the bg cue's resumed,
+# handed-back frame.
+
+add_leds_dump_test(golden_led_handback led_handback 52
+    INPUT led_handback_trigger.txt)
 
 # ---- golden_framebuffer_anim_advance_{frame0,frame1,frame2}: animation
 # frame-metadata cache regression coverage for gamequeer#264/PR#282
