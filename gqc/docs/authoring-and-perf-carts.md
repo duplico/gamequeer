@@ -83,6 +83,47 @@ score_str := str(score);
 GQS_LABEL2 := "score=" + score_str;
 ```
 
+### Randomness
+
+There is no RNG builtin. Build one from two pieces: an entropy source sampled
+at a human input event, and a deterministic generator.
+
+**Entropy**: run a self-re-arming counter while waiting for the player, and
+sample it the moment they act:
+
+```
+event timer {
+    c = c + 1;
+    timer 1;
+}
+```
+
+The VM timer is a single global one-shot (see `timer_active` in
+`gamequeer.c`), so this pattern monopolizes it for as long as it runs — don't
+also rely on `timer` for anything else (e.g. an animation cadence) while this
+is armed.
+
+**Generation**: seed a Park-Miller LCG from the sampled counter (fold in
+`GQI_PLAYER_ID`, or another badge word, first if per-cart variation across
+badges is wanted, then clamp into `[1, 2147483646]`, e.g.
+`seed % 2147483646 + 1`), and step it with the **Schrage-form** update below.
+This is the only form to use: the VM's arithmetic is plain signed `int32` C
+arithmetic, and a naive LCG like `state = state * 1103515245 + 12345` relies
+on signed-overflow wraparound, which is undefined behavior in C and not
+guaranteed to produce identical results between the emulator (gcc/clang) and
+the badge (`cl430 --opt_level=3`).
+
+```
+// state must be a volatile int, seeded to 1..2147483646 before first use
+hi = state / 127773;
+lo = state % 127773;
+state = 16807 * lo - 2836 * hi;
+if (state <= 0) {
+    state = state + 2147483647;
+}
+// roll: r = state % N; for a 0..N-1 result
+```
+
 ## 2. Labels (on-screen text)
 
 Four label slots (`GQI_LABEL{1..4}_X/Y` position, `GQS_LABEL{1..4}` text,
@@ -403,6 +444,11 @@ flashrom invocation is tracked as
 - **A wide `<<`/`|` literal expression can exhaust the 4-register compiler
   pool** (`No free registers available`) — precompute a literal instead (see
   "Labels" above).
+- **Integer division/modulo by a zero divisor is unguarded.**
+  `run_arithmetic()`'s `GQ_OP_DIVBY`/`GQ_OP_MODBY` cases (`bytecode.c`) are
+  bare C `/` and `%` with no zero check — a zero divisor is undefined
+  behavior/a trap on both the emulator and the badge. Guard any divisor that
+  can be zero with an `if` before dividing.
 - **RLE4 is unreachable** via the public pipeline (commented out in `Frame`).
 - Encoding is decided **per frame**, not per animation — a mixed-content
   animation can contain both RLE7 and UNCOMPRESSED frames.
