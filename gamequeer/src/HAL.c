@@ -108,16 +108,21 @@ t_gq_int gq_load_int(t_gq_pointer src) {
 }
 
 // --dump-leds state (see HAL_leds_dump_open()/HAL_leds_dump_close() below).
-// NULL whenever --dump-leds wasn't given, which HAL_update_leds() uses to
-// skip the CSV row entirely -- the common case pays only that one branch.
+// NULL whenever --dump-leds wasn't given, which both HAL_update_leds()
+// (skip the CSV row) and HAL_sleep() (skip the tick-counter increment)
+// check -- the common case pays only those two cheap branches.
 static FILE *leds_dump_file = NULL;
 // Count of HAL_sleep() calls so far, i.e. the number of system_tick()
 // iterations completed *before* the current one (main()'s loop calls
 // system_tick() then HAL_sleep() then increments its own ticks_done, once
 // each per iteration -- see HAL_sleep() below for where this is
-// incremented). Used only to label CSV rows; not accurate once GQ_HEADLESS
-// is off and HAL_sleep() free-runs in real time, but the row's *contents*
-// are correct in every build, and this file is emulator-only regardless.
+// incremented, only while a --dump-leds file is open). This is an
+// iteration count, not a wall-clock time: it's equally meaningful in every
+// build (HAL_sleep() is called exactly once per iteration whether or not
+// GQ_HEADLESS is set), but only a headless build's iterations run back to
+// back with no real-time pacing -- an interactive build's HAL_sleep() paces
+// each iteration to ~10ms, so tick N there also corresponds to roughly
+// N*10ms of wall-clock time, which a headless run's tick N does not.
 // Caveat: because the counter only advances at end-of-iteration, tick 0
 // labels both load_game()'s pre-loop boot-color row (see load_game() in
 // gamequeer.c) *and* any redraw that happens to land during the first loop
@@ -303,7 +308,12 @@ void HAL_sleep() {
     // (headless or not), so this is the one place to count iterations for
     // --dump-leds's CSV `tick` column -- see leds_dump_tick_count above.
     // Placed before the #ifdef/return below so it's hit on every path.
-    leds_dump_tick_count++;
+    // Gated on leds_dump_file (like HAL_update_leds()'s row-write check) so
+    // a run without --dump-leds pays no per-iteration cost for a counter
+    // nothing reads.
+    if (leds_dump_file) {
+        leds_dump_tick_count++;
+    }
 #ifdef GQ_HEADLESS
     /* In headless mode, skip the 10ms timing loop entirely so that --ticks N
      * runs complete instantly without real-time delays. */
