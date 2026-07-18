@@ -158,8 +158,8 @@ opaque unset nothing paints the background, so black-on-black renders
 nothing (found while authoring `perf_text.gq`'s edge-case label — fixed by
 also setting the opaque bit).
 
-**A flat chain of same-precedence `<<`/`|` literal-shift terms compiles fine
-at any length** — codegen left-folds it into a single accumulator, so
+**A flat `|` chain of literal-shift (`1<<n`) terms compiles fine at any
+length** — codegen left-folds it into a single accumulator, so
 `(1<<0)|(1<<1)|(1<<9)|(1<<16)|(1<<17)` only ever needs ~2 of the 4 int
 registers (`GQ_REGISTERS_INT` in `structs.py`). **Deeply *nested*
 parenthesized subexpressions can still exhaust the pool** — each additional
@@ -461,10 +461,10 @@ flashrom invocation is tracked as
 - **Strings are 21 usable chars**; overlong values raise at compile time.
 - **`str(x)` casts can't be composed inline in a `+` chain** — cast into an
   intermediate str var first (see "Event-body statements" above).
-- **A deeply *nested* parenthesized `<<`/`|` expression can exhaust the
-  4-register compiler pool** (`No free registers available`) — a flat
-  same-precedence chain is fine at any length; restructure or precompute a
-  literal instead (see "Labels" above).
+- **A deeply *nested* parenthesized `|`-of-shifts expression can exhaust the
+  4-register compiler pool** (`No free registers available`) — a flat `|`
+  chain is fine at any length; restructure or precompute a literal instead
+  (see "Labels" above).
 - **Integer division/modulo by a zero divisor is unguarded.**
   `run_arithmetic()`'s `GQ_OP_DIVBY`/`GQ_OP_MODBY` cases (`bytecode.c`) are
   bare C `/` and `%` with no zero check — a zero divisor is undefined
