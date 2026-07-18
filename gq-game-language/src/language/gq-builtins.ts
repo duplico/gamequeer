@@ -9,7 +9,7 @@
  * the VM (`gamequeer/src/gamequeer.c`, `gamequeer/src/menu.c`,
  * `gamequeer/src/bytecode.c`) and the firmware HAL (`ccs_workspace/qc2024/HAL_badge.c`)
  * to see who writes each variable, plus real usage in
- * `gamequeer/tests/golden/*.gq` and `examples/games/**\/*.gq`. See the PR
+ * `gamequeer/tests/golden/` and `examples/games/` (recursively). See the PR
  * description for the per-variable rationale.
  */
 
