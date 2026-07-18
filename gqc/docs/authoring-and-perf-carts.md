@@ -162,7 +162,7 @@ also setting the opaque bit).
 compiler's register pool** — each level of `(term | (term | …))` nesting
 holds one more register live while codegen recurses into the next, and
 `IntExpression`'s allocator has only 4 int registers (`GQ_REGISTERS_INT` in
-`structs.py`), so a handful of nested levels fails with `No free registers
+`structs.py`), so a handful of nested levels fail with `No free registers
 available`. A flat chain like `(1<<0)|(1<<1)|(1<<9)|(1<<16)|(1<<17)`
 left-folds into a single accumulator (~2 registers) and is fine at any
 length. Restructure into a flat chain, or precompute a literal.
