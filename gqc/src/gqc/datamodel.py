@@ -336,7 +336,16 @@ class Variable:
     
     def to_bytes(self):
         if self.datatype == "int":
-            return self.value.to_bytes(structs.GQ_INT_SIZE, 'little')
+            # t_gq_int is a signed 32-bit int on-cart (see gamequeer.h), so a
+            # negative value must be encoded as signed two's complement --
+            # plain int.to_bytes(..., 'little') defaults to unsigned and
+            # raises OverflowError on a negative value (gamequeer#359).
+            # Non-negative values (including the linker's 0xFFFFFFFF padding
+            # sentinel, see linker.py) keep the unsigned encoding they
+            # already had, so this only changes behavior for negatives.
+            return self.value.to_bytes(
+                structs.GQ_INT_SIZE, 'little', signed=self.value < 0
+            )
         elif self.datatype == "str":
             strlen = len(self.value)
             if strlen > structs.GQ_STR_SIZE-1: # -1 for null terminator
