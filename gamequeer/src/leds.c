@@ -163,7 +163,33 @@ static inline int32_t led_delta_shift(int32_t product) {
 // drift apart the way they did before gamequeer#347 (the handback path used
 // to publish leds_cue_color_next, the *next* frame's colors, instead of
 // rendering the resumed frame's actual current state).
+//
+// led_tick()'s own per-subtick call site only ever reaches this with
+// leds_cue_frame_ticks_elapsed < duration (it's guarded by the frame-done
+// branch above it). led_anim_done()'s handback call site can't rely on
+// that: led_play_cue() can capture leds_cue_frame_ticks_elapsed mid-tick,
+// after led_tick() has already incremented it to exactly the saved frame's
+// duration but *before* led_tick()'s own next call would process that as
+// "frame done" and advance -- so the resumed elapsed can legitimately equal
+// (never exceed) duration. Handle that case explicitly rather than
+// re-displaying (or interpolating within) a frame that's actually already
+// over.
 static void led_render_frame() {
+    if (leds_cue_frame_ticks_elapsed >= leds_cue_frame_curr.duration) {
+        // The frame is already done as of the saved elapsed: show the
+        // completed transition's destination, exactly as led_tick()'s own
+        // frame-done branch would (leds_cue_color_next was computed for
+        // this outcome by whichever led_setup_frame() call loaded this
+        // frame). The real index advance/loop-wrap still happens on the
+        // *next* ordinary led_tick() call, once leds_cue_frame_ticks_elapsed
+        // (credited below) reaches duration again -- this only fixes what
+        // gets displayed in the meantime.
+        for (uint8_t i = 0; i < 5; i++) {
+            gq_leds[i] = leds_cue_color_next[i];
+        }
+        return;
+    }
+
     if (leds_cue_frame_ticks_elapsed == 0 || !leds_cue_frame_curr.transition_smooth) {
         // First subtick of the frame, or a hold (non-smooth) transition:
         // display the frame's starting colors outright.
