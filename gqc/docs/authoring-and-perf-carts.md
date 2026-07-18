@@ -48,7 +48,7 @@ str  name    := "ME";  // ':=' for strings
 ### Events
 
 `enter`, `bgdone`, `fgdone(N)` (foreground slot N finished), `timer`, `menu`,
-`refresh`, and `input(BTN)` where `BTN` ∈ `A`, `B`, `<-`, `->`, `-` (click).
+and `input(BTN)` where `BTN` ∈ `A`, `B`, `<-`, `->`, `-` (click).
 (`EventType` in `structs.py` is the on-cart ordering; must match the C VM's
 `gq_event_type`.)
 
@@ -189,7 +189,9 @@ An `animations{}` entry (`Animation` in `datamodel.py`) takes options:
 - **`frame_rate`** must be a factor of 100 (`ticks_per_frame = 100/rate`);
   non-factors are rounded with a warning. On the badge every frame is clamped
   to a **minimum 5 ticks (20 FPS)** duration (`GQ_MIN_FRAME_DURATION`), so
-  `frame_rate` above 20 buys nothing on hardware.
+  `frame_rate` above 20 buys nothing on hardware. Badges running older
+  shipped firmware clamp at 20 ticks (5 FPS) instead, so a cart authored
+  above 5 FPS degrades to that rate there.
 - A single-frame source uses `duration` (default 100) as its tick count.
 
 ### Frame encoding is chosen automatically by size
@@ -382,7 +384,8 @@ flashrom invocation is tracked as
   (Our 8-frame source GIFs land as 7 frames after resampling at 5 FPS — still
   multi-frame, but don't assume 1:1.)
 - **Frame duration is clamped to 5 ticks (20 FPS)** on the badge regardless of
-  `frame_rate`.
+  `frame_rate`. Badges running older shipped firmware clamp at 20 ticks
+  (5 FPS) instead — carts degrade to that rate there.
 - **A masked fg/mask pair must resample to the *same* frame count.**
   `gq_draw_image_with_mask()` only composites while both the sprite slot and
   its mask slot are `in_use` with matching width/height
