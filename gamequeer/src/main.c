@@ -139,16 +139,23 @@ int main(int argc, char *argv[]) {
      *   --input FILE         : replay button events from a script (see HAL_input_load)
      *   --draw-count-out PATH: write the draw_oled_stack() invocation count
      *                          (decimal, headless builds only)
+     *   --dump-leds PATH     : write PATH as a CSV, truncating any existing
+     *                          file, with one row appended per LED redraw
+     *                          over the run (available in every build --
+     *                          see HAL_leds_dump_open()/HAL_update_leds() in
+     *                          HAL.c for the row format and why this isn't
+     *                          gated on GQ_HEADLESS like --draw-count-out)
      *   --perf-dump PATH     : write gq_perf_stats as text (GQ_PERF_INSTRUMENT
      *                          builds only; see dump_perf_stats() above)
      * Defaults: unlimited ticks, no dump, no scripted input, no draw-count
-     * output, no perf dump (same as before).
+     * output, no LED dump, no perf dump (same as before).
      */
     long ticks_limit           = -1; /* -1 = run forever */
     const char *dump           = NULL;
     const char *input          = NULL;
     const char *cart           = NULL;
     const char *draw_count_out = NULL;
+    const char *dump_leds      = NULL;
 #ifdef GQ_PERF_INSTRUMENT
     const char *perf_dump = NULL;
 #endif
@@ -207,6 +214,15 @@ int main(int argc, char *argv[]) {
                 return 1;
             }
             draw_count_out = argv[++i];
+        } else if (strcmp(argv[i], "--dump-leds") == 0) {
+            /* Only require that a next argument exists; a path legitimately
+             * starting with '-' should not be rejected. */
+            if (i + 1 >= argc) {
+                fprintf(stderr, "main: --dump-leds requires a value\n");
+                free(hal_argv);
+                return 1;
+            }
+            dump_leds = argv[++i];
 #ifdef GQ_PERF_INSTRUMENT
         } else if (strcmp(argv[i], "--perf-dump") == 0) {
             /* Only require that a next argument exists; a path legitimately
@@ -240,6 +256,15 @@ int main(int argc, char *argv[]) {
         HAL_input_load(input);
     }
 
+    /* Unlike --dump/--draw-count-out/--perf-dump (which capture a snapshot
+     * after the run), --dump-leds streams one row per redraw as the run
+     * happens, so the file has to be open before the tick loop starts. */
+    if (dump_leds != NULL) {
+        if (!HAL_leds_dump_open(dump_leds)) {
+            return 1;
+        }
+    }
+
     init();
 
     load_game(GQ_PTR_NS_CART);
@@ -257,6 +282,8 @@ int main(int argc, char *argv[]) {
         HAL_sleep();
         ticks_done++;
     }
+
+    HAL_leds_dump_close();
 
     if (dump != NULL) {
         if (!dump_framebuffer(dump)) {

@@ -30,4 +30,20 @@ void HAL_new_game();
  */
 void HAL_input_load(const char *path);
 
+/*
+ * Open a CSV file that will receive one row per HAL_update_leds() call (i.e.
+ * every actual LED redraw) for the rest of the run -- see HAL_update_leds()
+ * in HAL.c for the row format. Called by main() only when --dump-leds is
+ * given, before the tick loop starts. Returns 1 on success, 0 if the file
+ * couldn't be opened (main() should treat that as fatal, like the other
+ * --dump*-family flags).
+ */
+int HAL_leds_dump_open(const char *path);
+
+/*
+ * Close and flush the CSV file opened by HAL_leds_dump_open(), if any.
+ * Called by main() once after the tick loop ends.
+ */
+void HAL_leds_dump_close();
+
 #endif

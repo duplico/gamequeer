@@ -1,0 +1,32 @@
+frame {
+    duration = 4;
+    colors {
+        red,
+        red,
+        red,
+        red,
+        red
+    }
+}
+
+frame {
+    duration = 4;
+    colors {
+        lime,
+        lime,
+        lime,
+        lime,
+        lime
+    }
+}
+
+frame {
+    duration = 4;
+    colors {
+        blue,
+        blue,
+        blue,
+        blue,
+        blue
+    }
+}

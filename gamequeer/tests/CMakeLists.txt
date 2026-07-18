@@ -258,6 +258,52 @@ target_compile_options(test_led_fade_delta PRIVATE -Wall -Wextra -Wpedantic)
 
 add_test(NAME led_fade_delta COMMAND test_led_fade_delta)
 
+# ---- helper: register a --dump-leds golden CSV test ----------------------
+# NAME     — ctest test name
+# FIXTURE  — fixture base name (expects golden/<FIXTURE>.gqgame)
+# TICKS    — number of system_tick iterations to run
+#
+# Complements add_golden_test: LED state isn't part of the OLED
+# framebuffer, so no pixel golden exercises leds.c's redraw cadence or cue
+# frame-advance/loop behavior at all. See run_leds_dump_test.cmake.
+function(add_leds_dump_test NAME FIXTURE TICKS)
+    set(fixture_cart "${GOLDEN_DIR}/${FIXTURE}.gqgame")
+    set(golden_csv   "${GOLDEN_DIR}/${FIXTURE}_golden.csv")
+    set(actual_csv   "${CMAKE_CURRENT_BINARY_DIR}/${NAME}_actual.csv")
+
+    add_test(
+        NAME ${NAME}
+        COMMAND
+            ${CMAKE_COMMAND}
+            -DEXE=$<TARGET_FILE:gamequeer>
+            -DFIXTURE=${fixture_cart}
+            -DACTUAL=${actual_csv}
+            -DGOLDEN=${golden_csv}
+            -DTICKS=${TICKS}
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/run_leds_dump_test.cmake"
+    )
+
+    add_custom_target(
+        update-golden-${NAME}
+        COMMAND
+            $<TARGET_FILE:gamequeer>
+            --ticks ${TICKS}
+            --dump-leds "${golden_csv}"
+            "${fixture_cart}"
+        DEPENDS gamequeer
+        COMMENT "Regenerating golden LED CSV: ${golden_csv}"
+        VERBATIM
+    )
+    add_dependencies(update-golden update-golden-${NAME})
+endfunction()
+
+# ---- golden_leds_dump_test: --dump-leds CSV regression (gamequeer#339) ---
+# See leds_dump_test.gq's header comment for the full tick-by-tick
+# derivation of this fixture's 3-frame (red/lime/blue) bgcue timeline.
+# TICKS=24 lands exactly on the tick-23 loop-wraparound row.
+
+add_leds_dump_test(golden_leds_dump_test leds_dump_test 24)
+
 # ---- golden_framebuffer_anim_advance_{frame0,frame1,frame2}: animation
 # frame-metadata cache regression coverage for gamequeer#264/PR#282
 # (draw_animation_stack() caches the current frame's gq_anim_frame instead of
