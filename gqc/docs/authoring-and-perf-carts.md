@@ -55,8 +55,10 @@ and `input(BTN)` where `BTN` ∈ `A`, `B`, `<-`, `->`, `-` (click).
 ### Event-body statements
 
 `play`, `cue`, `gostage`, `timer <expr>`, `if (…) … else …`, `loop { … }`
-with `continue` / `break`, `badge_set/badge_clear/badge_get`, and assignments
-(`x = expr;` int, `s := expr;` string with `+` concat and `str(int)` cast).
+with `continue` / `break`, `badge_set`/`badge_clear`, and assignments
+(`x = expr;` int, `s := expr;` string with `+` concat and `str(int)` cast);
+`badge_get` is not a statement but a unary operator usable inside int
+expressions (e.g. `x = badge_get(5) + 1;`).
 The `play` forms are:
 
 ```
