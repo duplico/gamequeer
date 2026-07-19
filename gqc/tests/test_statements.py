@@ -54,6 +54,18 @@ def gotoifn_line(cmds: str) -> str:
     return lines[0]
 
 
+def has_bare_goto_line(cmds: str) -> bool:
+    """True if any gqasm line's Command column (index 1 -- see the
+    "Address Command Op Flags arg1 arg2" header) is the plain `GOTO`
+    opcode. A substring check like `"GOTO " in cmds` would also match
+    `GOTOIFN` lines (`GOTOIFN` starts with `GOTO`), so compare the
+    whitespace-split token exactly instead."""
+    return any(
+        len(fields) > 1 and fields[1] == "GOTO"
+        for fields in (line.split() for line in cmds.splitlines())
+    )
+
+
 # --- bare literal conditions (the exact gamequeer#356 repro shape) ---------
 
 
@@ -97,7 +109,7 @@ def test_literal_true_condition_with_else_compiles_clean(compile_gq):
     # Both arms compile, joined by the true-arm's GOTO past the false arm.
     assert "QCSET" in cmds
     assert "QCCLR" in cmds
-    assert "GOTO " in cmds or "\nGOTO" in cmds
+    assert has_bare_goto_line(cmds)
 
 
 def test_literal_false_condition_with_else_compiles_clean(compile_gq):

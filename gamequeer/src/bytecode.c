@@ -308,7 +308,7 @@ void run_code(t_gq_pointer code_ptr) {
                 // garbage happens to live there.
                 t_gq_int cond;
                 if (cmd.flags & GQ_OPF_LITERAL_ARG2) {
-                    cond = cmd.arg2;
+                    cond = (t_gq_int) cmd.arg2;
                 } else {
                     cond = gq_load_int(cmd.arg2);
                 }

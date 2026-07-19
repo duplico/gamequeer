@@ -385,8 +385,7 @@ class CommandIf(CommandWithIntExpressionArgument):
             self.goto_cmd = CommandGoto(None, None)
 
         super().__init__(CommandType.GOTOIFN, instring, loc, condition)
-        self.resolve()
-    
+
     def resolve(self):
         if self.resolved:
             return True
