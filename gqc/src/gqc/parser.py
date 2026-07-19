@@ -230,6 +230,17 @@ def parse_int_expression(instring, loc, toks):
     toks = toks[0]
     if isinstance(toks, GqcIntOperand):
         return toks
+    if isinstance(toks, IntExpression):
+        # A fully-parenthesized (sub)expression used as a bare operand with
+        # no sibling operator at its own nesting level, e.g. the entire RHS
+        # of "x = (1 + 2);" or any of the parenthesized groups nested inside
+        # it, is already reduced to an IntExpression by the recursive parse
+        # of its own parens. pyparsing's infix_notation still re-invokes
+        # this parse action once more for the enclosing bare-atom match, so
+        # pass the already-built expression through unchanged instead of
+        # re-folding/re-constructing it (which would double-alloc its
+        # registers -- see gamequeer#345).
+        return toks
 
     # pyparsing's infix_notation hands us a flat token list [a, op1, b, op2,
     # c, ...] for a chain of same-precedence (opAssoc.LEFT) operators. Fold
@@ -255,6 +266,10 @@ def parse_str_literal(instring, loc, toks):
 def parse_str_expression(instring, loc, toks):
     toks = toks[0]
     if isinstance(toks, str):
+        return toks
+    if isinstance(toks, StrExpression):
+        # Same already-reduced-atom re-invocation as parse_int_expression;
+        # pass a fully-parenthesized (sub)expression through unchanged.
         return toks
 
     # Same left-fold as parse_int_expression. String `+` is associative
@@ -363,6 +378,18 @@ def parse(text):
         exit(1)
     except GqcParseError as ge:
         print(ge, file=sys.stderr)
+        exit(1)
+    except RecursionError:
+        # Deeply nested parenthesized expressions can exceed pyparsing's
+        # packrat-memoized recursive descent before codegen is ever reached
+        # (gamequeer#345). There's no source location to point at (the
+        # RecursionError can strike mid-raise, before pyparsing attaches
+        # one), so just fail cleanly instead of dumping a Python traceback.
+        print(
+            "Error: expression nesting is too deep for gqc to parse. "
+            "Split it into intermediate variables.",
+            file=sys.stderr,
+        )
         exit(1)
 
     return parsed
