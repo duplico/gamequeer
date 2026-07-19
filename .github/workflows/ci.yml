@@ -5,11 +5,25 @@ on:
     branches: ["default"]
   pull_request:
     branches: ["default"]
+  schedule:
+    # Nightly full golden-compile suite (gamequeer#333/#329): runs the
+    # ffmpeg-gated golden cases gqc-tests skips on its bare runner, inside
+    # the gamequeer-builder image whose pinned ffmpeg they were captured
+    # against, plus a source/cart drift check. 09:00 UTC is off-peak for
+    # both GitHub's shared runners and this project's contributors.
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+    # Lets a maintainer trigger golden-nightly on demand instead of waiting
+    # for the schedule, e.g. to validate a change to it.
 
 jobs:
   gqc-tests:
     name: gqc Python compiler tests
     runs-on: ubuntu-latest
+    # schedule/workflow_dispatch (added for golden-nightly below) would
+    # otherwise also trigger this and every other pre-existing job in this
+    # workflow, since those events apply at the workflow level.
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
 
     steps:
       - uses: actions/checkout@v4
@@ -26,6 +40,10 @@ jobs:
         # explicitly rather than relying on it already being present in the
         # runner image, matching how this workflow's other jobs install their
         # own build deps (cmake, libx11-dev) rather than assuming ambient tools.
+        # This apt package's version doesn't match the gamequeer-builder
+        # image's pinned ffmpeg (see golden-nightly below), so
+        # test_golden_compile.py's asset-bearing cases detect the mismatch
+        # and skip themselves here rather than byte-comparing against it.
         run: sudo apt-get update -q && sudo apt-get install -y ffmpeg
 
       - name: Install gqc (editable, with test deps)
@@ -41,6 +59,9 @@ jobs:
   gq-game-language-tests:
     name: gq-game-language vitest suite
     runs-on: ubuntu-latest
+    # See gqc-tests' matching `if:` above: keeps this job off the new
+    # schedule/workflow_dispatch triggers, which only golden-nightly needs.
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
 
     steps:
       - uses: actions/checkout@v4
@@ -77,6 +98,9 @@ jobs:
   gamequeer-vm-build:
     name: gamequeer C VM native build + headless golden suite
     runs-on: ubuntu-latest
+    # See gqc-tests' matching `if:` above: keeps this job off the new
+    # schedule/workflow_dispatch triggers, which only golden-nightly needs.
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
 
     steps:
       - uses: actions/checkout@v4
@@ -124,6 +148,9 @@ jobs:
   gamequeer-vm-build-instrumented:
     name: gamequeer C VM instrumented (GQ_PERF_INSTRUMENT_RUNS) golden suite
     runs-on: ubuntu-latest
+    # See gqc-tests' matching `if:` above: keeps this job off the new
+    # schedule/workflow_dispatch triggers, which only golden-nightly needs.
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
 
     steps:
       - uses: actions/checkout@v4
@@ -174,3 +201,66 @@ jobs:
         # advance how many there are.
         run: ctest --output-on-failure
         working-directory: gamequeer/build-headless
+
+  golden-nightly:
+    name: Nightly full golden-compile suite (gamequeer-builder image)
+    runs-on: ubuntu-latest
+    # Only the ffmpeg-gated golden cases (gqc/tests/test_golden_compile.py)
+    # need this job: they skip on gqc-tests' bare runner because its apt
+    # ffmpeg doesn't match the fixtures' pinned build. Gated to schedule/
+    # workflow_dispatch so it doesn't also run (redundantly, and slowly --
+    # it builds the whole builder image) on every push/pull_request.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build gamequeer-builder image
+        # Built in-job rather than pulled from a registry: gamequeer doesn't
+        # currently publish this image anywhere, and Docker's local layer
+        # cache keeps a same-runner rebuild cheap after the first nightly
+        # run pays the full cost. The tradeoff is a slower job (and no
+        # cross-runner cache reuse, since GitHub-hosted runners are
+        # ephemeral) versus standing up registry storage and credentials
+        # for an image that's otherwise only ever built and used locally.
+        run: make builder-build
+
+      - name: Run full gqc pytest suite in the builder image
+        # Runs every gqc test, including the ffmpeg-gated golden cases that
+        # gqc-tests (different, bare-runner ffmpeg build) skips. No `pip
+        # install` needed here: the image's requirements.txt already
+        # installs pytest (and gqc's other runtime deps), and its
+        # PYTHONPATH already includes gqc/src (see builder.Dockerfile) --
+        # an editable install would be redundant, and would additionally
+        # write egg-info into the bind-mounted checkout as this
+        # non-root `--user`.
+        run: |
+          docker run --rm --workdir /workspaces/gamequeer \
+            -v "$PWD":/workspaces/gamequeer --user "$(id -u)":"$(id -g)" \
+            gamequeer-builder:latest \
+            /bin/bash -c "cd gqc && python -m pytest tests"
+
+      - name: Regenerate golden fixtures
+        # `make golden-fixture` doesn't cover led_handback.gq or
+        # examples/games/tutorial_1.gq (neither is wired into that Makefile
+        # target), so those two are regenerated here directly, the same way
+        # the Makefile recipe compiles its own asset-bearing fixtures: cd
+        # into the fixture's own directory so gqc resolves its animation/
+        # lightcue asset paths relative to that CWD.
+        run: |
+          make golden-fixture
+          docker run --rm --workdir /workspaces/gamequeer/gamequeer/tests/golden \
+            -v "$PWD":/workspaces/gamequeer --user "$(id -u)":"$(id -g)" \
+            gamequeer-builder:latest \
+            /bin/bash -c "PYTHONPATH=/workspaces/gamequeer/gqc/src python -m gqc compile --no-mem-map -o . led_handback.gq"
+          docker run --rm --workdir /workspaces/gamequeer/examples \
+            -v "$PWD":/workspaces/gamequeer --user "$(id -u)":"$(id -g)" \
+            gamequeer-builder:latest \
+            /bin/bash -c "PYTHONPATH=/workspaces/gamequeer/gqc/src python -m gqc compile --no-mem-map -o games games/tutorial_1.gq"
+
+      - name: Fail on committed source/cart drift
+        # If any regenerated .gqgame differs from what's committed, either a
+        # .gq fixture was edited without regenerating its cart, or gqc's
+        # output changed -- either way the golden suite above just compared
+        # against a stale reference, and that should fail loudly here.
+        run: git diff --exit-code -- gamequeer/tests/golden examples/games/tutorial_1.gqgame
