@@ -32,6 +32,9 @@
         "typescript": "~5.1.6",
         "vitest": "~1.6.0"
     },
+    "overrides": {
+        "lodash": "^4.18.1"
+    },
     "displayName": "gq-game-language",
     "publisher": "duplico",
     "engines": {
