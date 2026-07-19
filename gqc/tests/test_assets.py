@@ -331,7 +331,11 @@ def test_still_image_digest_cache_invalidated_by_duration_change(tmp_path, monke
     # Companion to test_still_image_digest_cache_is_reused: a still image's
     # `duration` becomes self.ticks_per_frame, which the digest depends on,
     # so changing it must still invalidate the cache rather than being
-    # masked by the gamequeer#376 fix.
+    # masked by the gamequeer#376 fix. Spies on make_animation (as the other
+    # digest-cache tests do) rather than just checking the final
+    # ticks_per_frame value, since a wrongly-hit cache would leave
+    # ticks_per_frame correct too (it's set directly from `duration`,
+    # independent of whether the cache was consulted).
     assets_dir = tmp_path / "assets" / "animations"
     assets_dir.mkdir(parents=True)
     _make_still(assets_dir / "still.png")
@@ -340,8 +344,19 @@ def test_still_image_digest_cache_invalidated_by_duration_change(tmp_path, monke
     _parse_in_process(tmp_path, monkeypatch, decls)
     assert Animation.anim_table["a1"].ticks_per_frame == 77
 
+    calls = []
+    original_make_animation = anim.make_animation
+
+    def _spy(*args, **kwargs):
+        calls.append(1)
+        return original_make_animation(*args, **kwargs)
+
+    monkeypatch.setattr("gqc.datamodel.make_animation", _spy)
+
     decls = 'animations { a1 <- "still.png" { frame_rate = 5; duration = 200; } }'
     _parse_in_process(tmp_path, monkeypatch, decls)
+
+    assert calls, "digest cache should miss when duration changes"
     assert Animation.anim_table["a1"].ticks_per_frame == 200
 
 
