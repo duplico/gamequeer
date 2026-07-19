@@ -21,16 +21,16 @@
         "vscode-languageserver": "~9.0.1"
     },
     "devDependencies": {
-        "@types/node": "^18.0.0",
+        "@types/node": "^22.20.1",
         "@types/vscode": "~1.67.0",
         "@typescript-eslint/eslint-plugin": "~6.4.1",
         "@typescript-eslint/parser": "~6.4.1",
         "concurrently": "~8.2.1",
-        "esbuild": "^0.19.12",
+        "esbuild": "^0.28.1",
         "eslint": "~8.47.0",
         "langium-cli": "~3.0.0",
         "typescript": "~5.1.6",
-        "vitest": "~1.6.0"
+        "vitest": "^4.1.10"
     },
     "overrides": {
         "lodash": "^4.18.1"
