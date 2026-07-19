@@ -70,8 +70,10 @@ jobs:
         # Matches gq-game-language/install-langium-deps.sh's `nvm install 20`
         # (the version its Docker-based dev setup uses). Both float to the
         # latest 20.x patch, which already satisfies package.json's
-        # engines.node floor (^20.19.0 || >=22.12.0, driven by rolldown via
-        # vite/vitest) since Node 20's latest patch only ever moves forward.
+        # engines.node floor (^20.19.0 || ^22.12.0 || >=24.0.0 -- the
+        # intersection of rolldown's ^20.19.0 || >=22.12.0 and vitest's own
+        # stricter ^20.0.0 || ^22.0.0 || >=24.0.0, which excludes Node 23)
+        # since Node 20's latest patch only ever moves forward.
         uses: actions/setup-node@v4
         with:
           node-version: "20"
