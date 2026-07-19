@@ -300,15 +300,25 @@ void run_code(t_gq_pointer code_ptr) {
             case GQ_OP_QCGET:
                 run_arithmetic(&cmd);
                 break;
-            case GQ_OP_GOTOIFN:
-                // If the condition is false, either because it's a literal false or the variable is 0,
-                // jump to the specified address.
-                if ((cmd.flags & GQ_OPF_LITERAL_ARG2 && !cmd.arg2) || !gq_load_int(cmd.arg2)) {
+            case GQ_OP_GOTOIFN: {
+                // A literal arg2 *is* the condition value; a non-literal arg2 is
+                // a variable address whose int value is the condition. Only the
+                // latter goes through gq_load_int() -- treating a literal
+                // condition's value as a memory address instead reads whatever
+                // garbage happens to live there.
+                t_gq_int cond;
+                if (cmd.flags & GQ_OPF_LITERAL_ARG2) {
+                    cond = cmd.arg2;
+                } else {
+                    cond = gq_load_int(cmd.arg2);
+                }
+                if (!cond) {
                     code_ptr = cmd.arg1;
                     // Skip the rest of this loop, as we've already loaded the next command.
                     continue;
                 }
                 break;
+            }
             case GQ_OP_TIMER:
                 if (cmd.flags & GQ_OPF_LITERAL_ARG2) {
                     timer_interval = cmd.arg2;
