@@ -80,6 +80,14 @@ export function createCliProgram(): Command {
         .description('Parse and validate GameQueer .gq game-definition files headlessly (no VS Code required).')
         .argument('<patterns...>', 'files, directories, or glob patterns to lint, e.g. game.gq, games/, "games/**/*.gq"')
         .option('--strict', 'also exit non-zero when only warnings (no errors) were found', false)
+        // Commander's default error/--help/--version handling calls
+        // process.exit() directly, which would bypass main.ts's exit-code
+        // normalization below (and, for a genuine parse error like a missing
+        // <patterns...>, would exit 1 -- indistinguishable from "lint found
+        // errors" instead of runLint's documented "2" for a usage problem).
+        // exitOverride() makes commander throw a CommanderError instead, so
+        // main.ts can normalize it.
+        .exitOverride()
         .action(async (patterns: string[], options: { strict: boolean }) => {
             process.exitCode = await runLint(patterns, options);
         });

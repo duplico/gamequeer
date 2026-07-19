@@ -5,7 +5,9 @@ import * as fs from 'node:fs';
 const watch = process.argv.includes('--watch');
 const minify = process.argv.includes('--minify');
 
-const success = watch ? 'Watch build succeeded' : 'Build succeeded';
+function successMessage(label) {
+    return `${watch ? 'Watch build' : 'Build'} succeeded (${label})`;
+}
 
 function getTime() {
     const date = new Date();
@@ -21,7 +23,7 @@ const plugins = [{
     setup(build) {
         build.onEnd(result => {
             if (result.errors.length === 0) {
-                console.log(getTime() + success);
+                console.log(getTime() + successMessage('extension/server'));
             }
         });
     },
@@ -56,7 +58,7 @@ const cliPlugins = [{
         build.onEnd(result => {
             if (result.errors.length === 0) {
                 fs.chmodSync('out/cli/main.cjs', 0o755);
-                console.log(getTime() + success);
+                console.log(getTime() + successMessage('CLI'));
             }
         });
     },

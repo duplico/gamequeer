@@ -1,8 +1,9 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { CommanderError } from 'commander';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { runLint } from '../src/cli/program.js';
+import { createCliProgram, runLint } from '../src/cli/program.js';
 
 // A minimal, well-formed `game { ... }` block, matching test-utils.ts's
 // VALID_GAME_BLOCK -- parses and validates cleanly.
@@ -150,5 +151,62 @@ describe('runLint', () => {
         logLines.length = 0;
         const strictExitCode = await runLint([file], { strict: true });
         expect(strictExitCode).toBe(1);
+    });
+});
+
+describe('createCliProgram', () => {
+    // Regression coverage for a real bug this PR shipped and fixed before
+    // merge (per PR #391 review): commander's default error/help handling
+    // calls process.exit() directly, which both bypasses main.ts's exit-code
+    // normalization and (for a genuine parse error) exits 1 -- indistinguishable
+    // from "lint found errors" instead of the documented "2" for a usage
+    // problem. exitOverride() in createCliProgram() makes commander throw a
+    // CommanderError instead, so main.ts can normalize it; these tests pin
+    // that contract at the commander level (main.ts's own normalization
+    // logic isn't otherwise covered, being a thin, untested entry point like
+    // the rest of this package's `main.ts` files).
+    let stdoutSpy: ReturnType<typeof vi.spyOn>;
+    let stderrSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+        // Commander writes help/usage-error text straight to process.stdout
+        // /process.stderr, not console.log/console.error; silence it so the
+        // test run's own output stays clean.
+        stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+        stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    });
+
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    test('a missing <patterns...> argument throws a CommanderError (not process.exit)', async () => {
+        const program = createCliProgram();
+
+        await expect(program.parseAsync(['node', 'gq-lang-lint'])).rejects.toBeInstanceOf(CommanderError);
+    });
+
+    test('--help throws a CommanderError with exitCode 0', async () => {
+        const program = createCliProgram();
+
+        await expect(program.parseAsync(['node', 'gq-lang-lint', '--help']))
+            .rejects.toMatchObject({ exitCode: 0 });
+    });
+
+    test('an unknown option throws a CommanderError with a non-zero exitCode', async () => {
+        const program = createCliProgram();
+        let caught: unknown;
+
+        try {
+            await program.parseAsync(['node', 'gq-lang-lint', '--bogus', 'game.gq']);
+        } catch (error) {
+            caught = error;
+        }
+
+        expect(caught).toBeInstanceOf(CommanderError);
+        expect((caught as CommanderError).exitCode).not.toBe(0);
+        // sanity: commander did write its usage error somewhere (stderr, for
+        // an unrecognized option -- unlike --help, which goes to stdout)
+        expect(stdoutSpy.mock.calls.length + stderrSpy.mock.calls.length).toBeGreaterThan(0);
     });
 });
