@@ -207,19 +207,25 @@ def test_gostage_resolves_to_target_stage_address(compile_gq):
     # must be the *other* stage's own resolved address, not (e.g.) its
     # first event's address. Stages are addressed sequentially, right after
     # the fixed-size header, in declaration order (no animations here).
+    #
+    # Both events are of type ENTER, so a leading badge_set marker (1 vs. 2)
+    # is used to tell the two EventBlocks apart -- rather than relying on
+    # parse_gqasm() happening to return them in declaration order, which
+    # isn't a documented guarantee.
     source = (
         'game { id = 1; title := "T"; author := "A"; starting_stage = first; }\n'
-        "stage first { event enter { gostage second; } }\n"
-        "stage second { event enter { gostage first; } }\n"
+        "stage first { event enter { badge_set 1; gostage second; } }\n"
+        "stage second { event enter { badge_set 2; gostage first; } }\n"
     )
     exit_code, stderr, out_dir = compile_gq(source)
     assert exit_code == 0, stderr
 
     blocks = parse_gqasm((out_dir / "cmds.gqasm").read_text())
     assert len(blocks) == 2
-    first_gostage = blocks[0].ops[0]
-    second_gostage = blocks[1].ops[0]
-    assert first_gostage.name == "GOSTAGE" and second_gostage.name == "GOSTAGE"
+    first_block = next(b for b in blocks if b.ops[0].arg2 == 1)
+    second_block = next(b for b in blocks if b.ops[0].arg2 == 2)
+    first_gostage = next(op for op in first_block.ops if op.name == "GOSTAGE")
+    second_gostage = next(op for op in second_block.ops if op.name == "GOSTAGE")
 
     # "first" is declared first, so it's laid out immediately after the
     # header; "second" immediately after that.
