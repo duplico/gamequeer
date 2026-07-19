@@ -227,12 +227,18 @@ jobs:
 
       - name: Run full gqc pytest suite in the builder image
         # Runs every gqc test, including the ffmpeg-gated golden cases that
-        # gqc-tests (different, bare-runner ffmpeg build) skips.
+        # gqc-tests (different, bare-runner ffmpeg build) skips. No `pip
+        # install` needed here: the image's requirements.txt already
+        # installs pytest (and gqc's other runtime deps), and its
+        # PYTHONPATH already includes gqc/src (see builder.Dockerfile) --
+        # an editable install would be redundant, and would additionally
+        # write egg-info into the bind-mounted checkout as this
+        # non-root `--user`.
         run: |
           docker run --rm --workdir /workspaces/gamequeer \
             -v "$PWD":/workspaces/gamequeer --user "$(id -u)":"$(id -g)" \
             gamequeer-builder:latest \
-            /bin/bash -c "cd gqc && pip install -q -e '.[test]' && python -m pytest tests"
+            /bin/bash -c "cd gqc && python -m pytest tests"
 
       - name: Regenerate golden fixtures
         # `make golden-fixture` doesn't cover led_handback.gq or

@@ -48,6 +48,7 @@ ci.yml) runs entirely inside the gamequeer-builder image, so these cases
 execute -- and byte-compare -- there.
 """
 
+import functools
 import pathlib
 import re
 import shutil
@@ -79,9 +80,13 @@ def _references_ffmpeg_asset(gq_path: pathlib.Path) -> bool:
     return bool(_FFMPEG_ASSET_REF_RE.search(gq_path.read_text()))
 
 
+@functools.lru_cache(maxsize=1)
 def _ffmpeg_version() -> str | None:
     """The `ffmpeg -version` first-line version token for whatever ffmpeg
-    is on PATH, or None if there isn't one."""
+    is on PATH, or None if there isn't one. Cached: the ffmpeg on PATH
+    doesn't change mid-run, and this is called once per ffmpeg-referencing
+    fixture during collection (plus once more per case to build its skip
+    reason) -- no need to re-spawn `ffmpeg -version` each time."""
     ffmpeg_path = shutil.which("ffmpeg")
     if not ffmpeg_path:
         return None
