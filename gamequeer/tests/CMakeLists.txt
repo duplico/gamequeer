@@ -335,6 +335,20 @@ add_leds_dump_test(golden_leds_dump_test leds_dump_test 24)
 add_leds_dump_test(golden_led_handback led_handback 52
     INPUT led_handback_trigger.txt)
 
+# ---- golden_if_literal_condition: GOTOIFN literal-condition regression
+# (gamequeer#356, duplico/gamequeer#370). Automates the pass/fail gate cart
+# that PR verified by hand: `if (1) { cue lime; } else { cue red; }` (must
+# choose lime) sequenced by a timer into `if (0) { cue lime; } else { cue
+# red; }` (must choose red) in a second stage, so one golden CSV covers both
+# polarities. Catches both the gqc-side crash this issue was originally
+# filed for, and the VM-side GQ_OP_GOTOIFN bug that fix exposed (a literal
+# *true* condition used to fall through to gq_load_int(), reading garbage
+# memory instead of the literal value -- see if_literal_condition.gq's
+# header comment for the full tick-by-tick derivation and the before/after
+# evidence). TICKS=28 lands exactly on the second cue's dark-out row.
+
+add_leds_dump_test(golden_if_literal_condition if_literal_condition 28)
+
 # ---- golden_framebuffer_anim_advance_{frame0,frame1,frame2}: animation
 # frame-metadata cache regression coverage for gamequeer#264/PR#282
 # (draw_animation_stack() caches the current frame's gq_anim_frame instead of

@@ -360,7 +360,13 @@ class CommandSetInt(CommandWithIntExpressionArgument):
 
 class CommandIf(CommandWithIntExpressionArgument):
     def __init__(self, instring, loc, condition : GqcIntOperand | IntExpression, true_cmds : list, false_cmds : list = None):
-        super().__init__(CommandType.GOTOIFN, instring, loc, condition)
+        # These must be set before calling super().__init__(), since that
+        # unconditionally calls self.resolve() -- which dispatches to
+        # CommandIf.resolve() (below), which depends on them. This matters
+        # when `condition` is a bare literal: CommandWithIntExpressionArgument
+        # resolves it synchronously, so this first resolve() call can reach
+        # the true_cmds/false_cmds/goto_cmd loops immediately, rather than
+        # short-circuiting on an unresolved variable reference.
         self.true_cmds = true_cmds
         self.false_cmds = false_cmds
         self.goto_cmd = None
@@ -368,18 +374,18 @@ class CommandIf(CommandWithIntExpressionArgument):
         self.true_section_size = 0
         for cmd in self.true_cmds:
             self.true_section_size += cmd.size()
-        
+
         self.false_section_size = 0
         if self.false_cmds:
             for cmd in self.false_cmds:
                 self.false_section_size += cmd.size()
-        
+
         if self.false_section_size != 0:
             self.true_section_size += structs.GQ_OP_SIZE
             self.goto_cmd = CommandGoto(None, None)
 
-        self.resolve()
-    
+        super().__init__(CommandType.GOTOIFN, instring, loc, condition)
+
     def resolve(self):
         if self.resolved:
             return True

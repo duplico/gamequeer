@@ -1,0 +1,99 @@
+/*
+ * if_literal_condition.gq -- --dump-leds golden CSV fixture for gamequeer#356
+ * / duplico/gamequeer#370: an `if` statement whose condition is a bare
+ * integer literal (`if (1) { ... }` / `if (0) { ... }`), covering both
+ * polarities and pinning both the gqc-side fix (CommandIf/LightCue) and the
+ * VM-side fix (GQ_OP_GOTOIFN's literal-condition handling in bytecode.c).
+ *
+ * Before this fix, gqc crashed compiling `if (1) { ... }` at all (the
+ * literal-true condition resolved synchronously inside CommandIf's
+ * superclass __init__, reaching a true_cmds loop that didn't exist yet).
+ * Fixing that crash alone was not sufficient: the VM's GQ_OP_GOTOIFN only
+ * special-cased a literal *false* condition; a literal *true* condition fell
+ * through to gq_load_int(cmd.arg2), treating the literal value 1 as a
+ * memory address and reading garbage there -- which usually (silently)
+ * skipped the true branch at runtime even once gqc could compile it. See
+ * duplico/gamequeer#370's PR description for the manual/uncommitted
+ * before/after evidence this fixture now automates.
+ *
+ * Two stages, sequenced by a timer so a single golden CSV covers both
+ * polarities without needing scripted button input:
+ *
+ *   check_true:  `if (1) { cue lime; } else { cue red; }` -- a correct
+ *                interpreter must choose lime (the true branch).
+ *   check_false: `if (0) { cue lime; } else { cue red; }` -- a correct
+ *                interpreter must choose red (the false branch).
+ *
+ * Both cues (assets/lighting/if_literal_condition_{lime,red}.gqcue) are
+ * single-frame, non-looping, duration 4 (the minimum legal frame duration,
+ * LEDS_SUBTICKS) -- same shape as leds_dump_test.gqcue's frames. A
+ * non-looping single-frame foreground cue plays once (first redraw 3 ticks
+ * after it starts -- ticks_elapsed==0 branch, same cadence documented in
+ * leds_dump_test.gq's header) and then the LEDs go dark (frame_count
+ * reached, no bgcue to hand back to).
+ *
+ * Tick-by-tick (see leds.c's led_tick() for the state machine; confirmed by
+ * running the built emulator once and inspecting the output before
+ * committing it as the golden CSV, per this repo's established practice):
+ *
+ *   tick 0:  load_game()'s fixed boot color (16, 32, 0) -- not this
+ *            fixture's concern (see leds_dump_test.gq's header).
+ *   tick 3:  check_true's enter event has already run at tick 0 (`cue
+ *            lime;` -- the `if (1)` branch); first redraw shows lime.
+ *   tick 7:  lime's single frame is done (elapsed 4 >= duration 4);
+ *            non-looping, no bgcue -> LEDs go dark.
+ *   tick 20: check_true's `timer 20;` (set at tick 0) fires -> `event
+ *            timer { gostage check_false; }` -- check_false's enter event
+ *            runs immediately (`cue red;` -- the `if (0)` branch, since a
+ *            literal-false condition takes the else arm).
+ *   tick 23: red's first redraw (ticks_elapsed==0 branch, 3 ticks after it
+ *            started at tick 20 -- same +3 cadence as tick 3 above).
+ *   tick 27: red's single frame done -> LEDs go dark again.
+ *
+ * TICKS=28 in the ctest call (tests/CMakeLists.txt) runs iterations 0..27,
+ * landing exactly on the tick-27 dark-out confirmation row above.
+ *
+ * gqc's linker requires at least one event with at least one statement per
+ * stage (create_symbol_table() indexes event_statements[0] unconditionally)
+ * -- both stages' `enter` events already satisfy this.
+ *
+ * How to reproduce the compiled fixture (if_literal_condition.gqgame):
+ *
+ *   From the gamequeer repo root, using the builder container:
+ *     docker run --rm -v $(pwd):/workspaces/gamequeer --workdir /workspaces/gamequeer \
+ *         --user $(id -u):$(id -g) gamequeer-builder:latest \
+ *         /bin/bash -c "cd gamequeer/tests/golden && PYTHONPATH=/workspaces/gamequeer/gqc/src \
+ *             python -m gqc compile --no-mem-map -o . if_literal_condition.gq"
+ *
+ *   Or via the Makefile target:
+ *     make golden-fixture
+ */
+
+game {
+    id = 1;
+    title := "IfLiteralCondition";
+    author := "test";
+    starting_stage = check_true;
+}
+
+lightcues {
+    lime <- "if_literal_condition_lime.gqcue";
+    red <- "if_literal_condition_red.gqcue";
+}
+
+stage check_true {
+    event enter {
+        if (1) { cue lime; } else { cue red; }
+        timer 20;
+    }
+
+    event timer {
+        gostage check_false;
+    }
+}
+
+stage check_false {
+    event enter {
+        if (0) { cue lime; } else { cue red; }
+    }
+}

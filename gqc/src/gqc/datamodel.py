@@ -775,6 +775,7 @@ class LightCue:
         self.frames = []
         self.colors = dict()
         self.name = None
+        self.addr = 0x00000000 # Set at link time
 
         for color in colors:
             if color.name in self.colors:
