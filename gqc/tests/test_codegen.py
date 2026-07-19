@@ -187,6 +187,30 @@ def test_register_allocation_depth_5_exhausts_registers(compile_gq):
     assert "No free registers available" in stderr
 
 
+# --- setvar-int control-flow (gamequeer#338) -----------------------------------
+
+
+def test_parse_command_setvar_bare_int_returns_command_set_int():
+    # Not driven through compile_gq: parse_int_operand's own parse action
+    # (gqc/src/gqc/parser.py) wraps every bare int atom in a GqcIntOperand
+    # before parse_command ever sees it, so a plain Python `int` `src` for a
+    # non-str setvar is dead through the real grammar. Before gamequeer#338,
+    # that branch wrapped such a bare int in a GqcIntOperand and then fell
+    # off the end of parse_command with no return, silently dropping the
+    # statement (returning None) instead of the CommandSetInt it built the
+    # operand for. Call parse_command directly, bypassing the grammar, to
+    # exercise the fixed control flow as if a future grammar change let a
+    # bare int through.
+    reset_compiler_state()
+    linker.create_reserved_variables()
+    try:
+        cmd = parser.parse_command("", 0, [["setvar", "x", 5, "int"]])
+        assert isinstance(cmd, CommandSetInt)
+        assert cmd.dst_name == "x"
+    finally:
+        reset_compiler_state()
+
+
 # --- statement lowering --------------------------------------------------------
 
 

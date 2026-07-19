@@ -284,7 +284,14 @@ class Variable:
         self.storageclass = None
 
         if name in Variable.var_table:
-            if Variable.var_table[name].storageclass.startswith('builtin'):
+            existing_storageclass = Variable.var_table[name].storageclass
+            # existing_storageclass is None for a same-section duplicate
+            # (gamequeer#338): both definitions are constructed before
+            # either one has a storage class assigned, which happens once
+            # for the whole section afterwards via set_storageclass(). Treat
+            # that the same as any other non-builtin duplicate rather than
+            # crashing on None.startswith(...).
+            if existing_storageclass and existing_storageclass.startswith('builtin'):
                 raise ValueError(f"Cannot redefine builtin variable {name}")
             else:
                 raise ValueError(f"Duplicate definition of {name}")
@@ -413,11 +420,15 @@ class Animation:
         if self.height > 128:
             raise ValueError(f"Animation {name} height {self.height} exceeds maximum of 128")
 
+        if name in Animation.anim_table:
+            raise ValueError("Animation {} already defined".format(name))
+
+        # Only claim an id once the duplicate-name check has passed, so a
+        # rejected redefinition doesn't leak an id that no Animation ends up
+        # using (gamequeer#338).
         self.id = Animation.next_id
         Animation.next_id += 1
 
-        if name in Animation.anim_table:
-            raise ValueError("Animation {} already defined".format(name))
         Animation.anim_table[name] = self
 
         self.frames = []
@@ -615,6 +626,11 @@ class Frame:
 
     def deserialize(self, in_path : pathlib.Path):
         with open(in_path, 'rb') as file:
+            # pickle.load() trusts in_path's contents; this is a local
+            # build-cache file gqc itself wrote (see serialize(), above), not
+            # untrusted input. A poisoned build directory could still use
+            # this for arbitrary code execution -- not changing the format
+            # here (aligns #46, a separate decision).
             d = pickle.load(file)
             self.compression_type_name = d.compression_type_name
             self.compression_type_number = Frame.image_formats[self.compression_type_name]
@@ -797,6 +813,8 @@ class LightCue:
     
     def deserialize(self, in_path : pathlib.Path):
         with open(in_path, 'rb') as file:
+            # Same local-build-cache trust assumption as Frame.deserialize,
+            # above (not changing the pickle format here, aligns #46).
             c = pickle.load(file)
         self.frames = c.frames
         self.colors = c.colors

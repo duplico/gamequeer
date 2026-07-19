@@ -328,6 +328,36 @@ def test_still_image_digest_cache_is_never_reused(tmp_path, monkeypatch):
     )
 
 
+# --- Animation.id assignment (gamequeer#338) ---------------------------------
+
+
+def test_animation_duplicate_name_does_not_leak_id(tmp_path, monkeypatch):
+    # Before gamequeer#338, Animation.__init__ claimed Animation.next_id
+    # (incrementing the class-level counter) *before* its duplicate-name
+    # check, so a rejected redefinition still consumed an id -- the next
+    # legitimately-constructed Animation would skip one. Constructed
+    # directly (rather than through a full compile, which aborts the whole
+    # process on the very first GqcParseError, never reaching a subsequent
+    # animation) to observe both attempts in the same process.
+    monkeypatch.chdir(tmp_path)
+    reset_compiler_state()
+    linker.create_reserved_variables()
+    Game.game_name = "g"
+    assets_dir = tmp_path / "assets" / "animations"
+    assets_dir.mkdir(parents=True)
+    _make_still(assets_dir / "a.png")
+    _make_still(assets_dir / "b.png")
+
+    first = Animation("a1", "a.png")
+    assert first.id == 0
+
+    with pytest.raises(ValueError, match="Animation a1 already defined"):
+        Animation("a1", "a.png")
+
+    second = Animation("b1", "b.png")
+    assert second.id == 1
+
+
 # --- mkanim: CLI (black-box) --------------------------------------------------
 
 
