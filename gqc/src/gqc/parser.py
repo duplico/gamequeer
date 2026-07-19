@@ -171,13 +171,13 @@ def parse_variable_definition_storageclass(instring, loc, toks):
     storageclass = toks[0]
     
     if Variable.storageclass_table[storageclass]:
-        non_init_vars_present = False
+        non_init_var = None
         for var in Variable.storageclass_table[storageclass].values():
             if not var.name in structs.GQ_REGISTERS_INT and not var.name in structs.GQ_REGISTERS_STR and not var.name.endswith(".init") and not var.name.endswith(".strlit") and not var.name.endswith(".builtin"):
-                non_init_vars_present = True
+                non_init_var = var
                 break
-        if non_init_vars_present:
-            raise GqcParseError(f"Storage class {storageclass} already defined by {var.name}", instring, loc)
+        if non_init_var is not None:
+            raise GqcParseError(f"Storage class {storageclass} already defined by {non_init_var.name}", instring, loc)
     
     for var in toks[1]:
         var.set_storageclass(storageclass)
@@ -346,10 +346,16 @@ def parse_command(instring, loc, toks):
                     raise GqcParseError(f"Invalid source {src} for string variable {dst}", instring, loc)
             else:
                 if isinstance(src, int):
+                    # Not currently reachable: parse_int_operand's parse
+                    # action wraps every bare int atom in a GqcIntOperand
+                    # before it ever gets here, so `src` arrives as a
+                    # GqcIntOperand or IntExpression already. Kept explicit
+                    # (rather than silently falling through with no return,
+                    # gamequeer#338) so a future grammar change that lets a
+                    # bare int through doesn't drop the setvar statement.
                     src = GqcIntOperand(is_literal=True, value=src)
-                else:
-                    assert isinstance(src, GqcIntOperand) or isinstance(src, IntExpression)
-                    return CommandSetInt(instring, loc, dst, src)
+                assert isinstance(src, GqcIntOperand) or isinstance(src, IntExpression)
+                return CommandSetInt(instring, loc, dst, src)
         elif command == 'timer':
             return CommandTimer(instring, loc, toks[1])
         elif command in ['break', 'continue']:

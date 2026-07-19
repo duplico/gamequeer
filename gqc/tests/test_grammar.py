@@ -298,12 +298,10 @@ def test_duplicate_animation_name_rejects(compile_gq):
 def test_duplicate_variable_name_across_sections_rejects(compile_gq):
     # A variable name reused across two *different* storage-class sections
     # takes the clean diagnostic path (Variable.__init__ raises ValueError,
-    # caught and reported as a GqcParseError). Note: reusing a name *within
-    # the same* volatile/persistent block currently crashes with an
-    # unhandled AttributeError instead -- both definitions are constructed
-    # before either has a storageclass assigned, so the duplicate-name
-    # check's `.storageclass.startswith(...)` hits None. Not covered here;
-    # flagged for gamequeer#338 (latent traps).
+    # caught and reported as a GqcParseError). Reusing a name *within the
+    # same* volatile/persistent block takes the same clean path (fixed by
+    # gamequeer#338); see test_diagnostics.py's
+    # test_duplicate_variable_name_within_same_section_rejects_cleanly.
     source = (
         f"{GAME_HEADER}"
         "volatile { int x = 0; }\n"

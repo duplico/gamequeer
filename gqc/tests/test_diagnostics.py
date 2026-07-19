@@ -275,24 +275,24 @@ def test_persistent_section_overflow_exits_2_with_message(compile_gq):
     assert_no_traceback(stderr)
 
 
-# --- same-section duplicate variable name (gamequeer#338's known trap) ------
+# --- same-section duplicate variable name (gamequeer#338) -------------------
 
 
-def test_duplicate_variable_name_within_same_section_crashes_with_attributeerror(
+def test_duplicate_variable_name_within_same_section_rejects_cleanly(
     compile_gq,
 ):
-    # Pins current *broken* behavior, cross-ref gamequeer#338: reusing a
-    # variable name *within the same* volatile/persistent block crashes with
-    # an unhandled AttributeError instead of the clean "Duplicate definition
-    # of x" GqcParseError that the cross-section case gets (see
-    # test_grammar.py's test_duplicate_variable_name_across_sections_rejects).
-    # Both same-section definitions are constructed via parse_variable_definition
-    # before either has a storageclass assigned (that happens once for the
-    # whole block, afterwards, via parse_variable_definition_storageclass),
-    # so Variable.__init__'s duplicate-name check
-    # (`Variable.var_table[name].storageclass.startswith('builtin')`) hits
-    # `None.startswith(...)`. Fixing gamequeer#338 should flip this test to
-    # assert a clean GqcParseError instead.
+    # Flipped by gamequeer#338 (previously pinned the *broken* behavior:
+    # reusing a variable name *within the same* volatile/persistent block
+    # crashed with an unhandled AttributeError instead of a clean
+    # GqcParseError). Both same-section definitions are constructed via
+    # parse_variable_definition before either has a storageclass assigned
+    # (that happens once for the whole block, afterwards, via
+    # parse_variable_definition_storageclass), so
+    # Variable.__init__'s duplicate-name check used to dereference
+    # `.storageclass.startswith('builtin')` on a `None` storageclass.
+    # Guarding that check now produces the same clean "Duplicate definition
+    # of x" diagnostic as the cross-section case (see test_grammar.py's
+    # test_duplicate_variable_name_across_sections_rejects).
     source = (
         f"{GAME_HEADER}"
         "volatile { int x = 0; int x = 1; }\n"
@@ -300,7 +300,30 @@ def test_duplicate_variable_name_within_same_section_crashes_with_attributeerror
     )
     exit_code, stderr, _ = compile_gq(source)
     assert exit_code == 1
-    assert "Traceback (most recent call last):" in stderr
-    assert (
-        "AttributeError: 'NoneType' object has no attribute 'startswith'" in stderr
+    assert "Duplicate definition of x" in stderr
+    assert_no_traceback(stderr)
+
+
+# --- duplicate storage-class section (gamequeer#338) -------------------------
+
+
+def test_duplicate_storage_class_section_rejects_cleanly(compile_gq):
+    # Exercises parse_variable_definition_storageclass's "already defined"
+    # error path (a second `persistent { ... }` section reusing a storage
+    # class already claimed by a real, non-init/non-register variable from
+    # the first one). gamequeer#338 hardened this path's loop-variable
+    # handling (it used to reference the `for` loop's variable directly,
+    # which is only ever bound when the error condition is true today, but
+    # was one refactor away from a NameError instead of this GqcParseError
+    # if that stopped holding) -- this pins the fixed path's observable
+    # behavior unchanged.
+    source = (
+        f"{GAME_HEADER}"
+        "persistent { int a = 0; }\n"
+        "persistent { int b = 1; }\n"
+        "stage start { event enter { badge_set 1; } }\n"
     )
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 1
+    assert "Storage class persistent already defined by a" in stderr
+    assert_no_traceback(stderr)

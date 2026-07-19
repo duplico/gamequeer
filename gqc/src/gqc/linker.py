@@ -31,16 +31,19 @@ def create_reserved_variables():
         var = Variable('str', reg_name, '', 'volatile')
 
 def create_symbol_table(table_dest = sys.stdout, cmd_dest = sys.stdout):
-    # Output order:
+    # Output order (.game .anim .stage .frame .framedata .cues .cuedata
+    # .menu .event .init .var):
     # header (fixed size)
     # animations (fixed size by count)
     # stages (fixed size by count)
     # frames (fixed size by count)
     # frame data (variable size)
+    # light cues (fixed size by count)
+    # light cue data (variable size)
     # menus (variable size)
-    # variable area (variable size)
-    # initialization code (variable size)
     # events code (variable size)
+    # initialization code (variable size)
+    # variable area (variable size)
 
     frame_count = sum([len(anim.frames) for anim in Animation.anim_table.values()])
 

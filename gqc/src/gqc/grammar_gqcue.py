@@ -3,8 +3,6 @@ from pyparsing import pyparsing_common as ppc
 
 from .cues import parse_color_definition, parse_cue_frame, parse_lightcue_definition
 
-from .grammar import VAR_STRING_MAXLEN
-
 """
 Grammar for GQC light cues
 ==========================
