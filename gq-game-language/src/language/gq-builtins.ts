@@ -58,7 +58,7 @@ export const GQ_RESERVED_INTS: readonly GqBuiltin[] = [
 
 export const GQ_RESERVED_STRS: readonly GqBuiltin[] = [
     { name: 'GQS_GAME_NAME', kind: 'str', description: 'Name of the game', writable: false },
-    { name: 'GQS_PLAYER_HANDLE', kind: 'str', description: 'Player handle', writable: false },
+    { name: 'GQS_PLAYER_HANDLE', kind: 'str', description: 'Player handle', writable: true },
     { name: 'GQS_LABEL1', kind: 'str', description: 'Label 1', writable: true },
     { name: 'GQS_LABEL2', kind: 'str', description: 'Label 2', writable: true },
     { name: 'GQS_LABEL3', kind: 'str', description: 'Label 3', writable: true },
