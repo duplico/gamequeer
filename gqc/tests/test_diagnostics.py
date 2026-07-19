@@ -31,7 +31,11 @@ def game_with_stage(body: str, decls: str = "") -> str:
 
 
 def assert_no_traceback(stderr: str):
-    assert "Traceback (most recent call last):" not in stderr
+    # Matches test_expressions.py's convention: check the broader "Traceback"
+    # substring (not just the "(most recent call last):" header, which
+    # varies with chained/grouped exceptions) and include stderr in the
+    # assertion message so a failure is debuggable without rerunning.
+    assert "Traceback" not in stderr, f"raw Python traceback leaked to stderr:\n{stderr}"
 
 
 # --- undefined symbol references ---------------------------------------------
