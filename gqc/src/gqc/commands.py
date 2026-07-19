@@ -497,7 +497,17 @@ class CommandLoop(Command):
         self.resolved = False
         self.command_type = CommandType.LOOP_NOP
 
-        self.commands.append(CommandGoto(instring, loc, form='continue'))
+        # Every loop body implicitly repeats by jumping back to its own
+        # start. If the body's last top-level statement is already an
+        # explicit `continue;` (which targets this same loop, since
+        # set_goto_addrs() doesn't recurse into nested loops), that GOTO
+        # already does the job -- skip appending a second, unreachable,
+        # identically-targeted one (gamequeer#379). A `continue;` nested
+        # inside a trailing `if`/`else` doesn't count: it's conditional,
+        # so the unconditional repeat GOTO is still required.
+        last_cmd = self.commands[-1] if self.commands else None
+        if not (isinstance(last_cmd, CommandGoto) and last_cmd.form == 'continue'):
+            self.commands.append(CommandGoto(instring, loc, form='continue'))
     
     def size(self):
         size = 0

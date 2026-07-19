@@ -367,6 +367,10 @@ def test_break_and_continue_targets_in_nested_loop(compile_gq):
     #    the inner one.
     #  - continue (explicit or the implicit trailing per-loop repeat GOTO
     #    every `loop { ... }` gets) targets its *own* loop's start address.
+    #  - the inner loop's body is *only* an explicit `continue;`, so gqc
+    #    doesn't also emit its own implicit repeat GOTO behind it --
+    #    that would be a dead, identically-targeted duplicate
+    #    (gamequeer#379).
     source = game_with_stage(
         "loop { if (x == 3) { break; } loop { continue; } x = x + 1; }",
         "volatile { int x = 0; }",
@@ -376,18 +380,18 @@ def test_break_and_continue_targets_in_nested_loop(compile_gq):
 
     ops = one_event((out_dir / "cmds.gqasm").read_text()).ops
     names = [op.name for op in ops]
-    # SETVAR/EQ/GOTOIFN (if x==3), GOTO (break), GOTO (explicit continue),
-    # GOTO (inner loop's own implicit repeat), SETVAR/ADDBY/SETVAR (x+=1),
-    # GOTO (outer loop's own implicit repeat), DONE.
+    # SETVAR/EQ/GOTOIFN (if x==3), GOTO (break), GOTO (explicit continue --
+    # this *is* the inner loop's only repeat GOTO), SETVAR/ADDBY/SETVAR
+    # (x+=1), GOTO (outer loop's own implicit repeat), DONE.
     assert names == [
         "SETVAR", "EQ", "GOTOIFN", "GOTO",
-        "GOTO", "GOTO",
+        "GOTO",
         "SETVAR", "ADDBY", "SETVAR",
         "GOTO", "DONE",
     ]
     (
         _setvar_x, _eq, _gotoifn, break_goto,
-        inner_continue_goto, inner_repeat_goto,
+        inner_continue_goto,
         _setvar, _addby, _setvar_store,
         outer_repeat_goto, done,
     ) = ops
@@ -397,8 +401,85 @@ def test_break_and_continue_targets_in_nested_loop(compile_gq):
 
     assert break_goto.arg1 == done.addr  # right after the *outer* loop
     assert inner_continue_goto.arg1 == inner_loop_start
-    assert inner_repeat_goto.arg1 == inner_loop_start
     assert outer_repeat_goto.arg1 == outer_loop_start
+
+
+def test_loop_ending_in_bare_continue_emits_single_goto(compile_gq):
+    # gamequeer#379: `loop { continue; }` used to compile to two identical,
+    # consecutive, self-targeting GOTOs -- the user's explicit `continue;`
+    # plus gqc's own implicit trailing repeat GOTO (the second unreachable).
+    # A loop body whose last top-level statement is already an unconditional
+    # `continue;` should only ever emit that one GOTO.
+    source = game_with_stage("loop { continue; }")
+    exit_code, stderr, out_dir = compile_gq(source)
+    assert exit_code == 0, stderr
+
+    ops = one_event((out_dir / "cmds.gqasm").read_text()).ops
+    names = [op.name for op in ops]
+    assert names == ["GOTO", "DONE"]
+    goto, _done = ops
+    assert goto.arg1 == goto.addr  # self-targeting
+
+
+def test_loop_ending_in_conditional_continue_still_gets_repeat_goto(compile_gq):
+    # A `continue;` nested inside a trailing `if` is conditional -- it only
+    # fires when the branch is taken -- so it must NOT suppress the loop's
+    # own unconditional trailing repeat GOTO (that would drop the fallthrough
+    # path back to the loop start entirely). This guards the dedup added for
+    # gamequeer#379 against over-triggering.
+    source = game_with_stage(
+        "loop { if (x == 1) { continue; } x = x + 1; }",
+        "volatile { int x = 0; }",
+    )
+    exit_code, stderr, out_dir = compile_gq(source)
+    assert exit_code == 0, stderr
+
+    ops = one_event((out_dir / "cmds.gqasm").read_text()).ops
+    names = [op.name for op in ops]
+    # SETVAR/EQ/GOTOIFN (if x==1), GOTO (the `continue;` inside the if),
+    # SETVAR/ADDBY/SETVAR (x+=1), GOTO (loop's own implicit repeat), DONE.
+    assert names == [
+        "SETVAR", "EQ", "GOTOIFN", "GOTO",
+        "SETVAR", "ADDBY", "SETVAR",
+        "GOTO", "DONE",
+    ]
+    (
+        setvar_x, _eq, _gotoifn, conditional_continue_goto,
+        _setvar, _addby, _setvar_store,
+        repeat_goto, _done,
+    ) = ops
+
+    loop_start = setvar_x.addr
+    assert conditional_continue_goto.arg1 == loop_start
+    assert repeat_goto.arg1 == loop_start
+    # Two distinct GOTO ops, both targeting the loop start -- not
+    # deduplicated, since only one of them is guaranteed to execute.
+    assert conditional_continue_goto.addr != repeat_goto.addr
+
+
+def test_outer_loop_ending_in_bare_continue_dedups_only_its_own_goto(compile_gq):
+    # The gamequeer#379 dedup must key off each loop's *own* last top-level
+    # statement, independently, at every nesting level: an outer loop ending
+    # in a bare `continue;` drops its own duplicate repeat GOTO, and an inner
+    # loop nested earlier in its body -- also ending in a bare `continue;` --
+    # independently drops its own.
+    source = game_with_stage("loop { loop { continue; } continue; }")
+    exit_code, stderr, out_dir = compile_gq(source)
+    assert exit_code == 0, stderr
+
+    ops = one_event((out_dir / "cmds.gqasm").read_text()).ops
+    names = [op.name for op in ops]
+    # GOTO (inner loop's sole, explicit, self-targeting continue), GOTO
+    # (outer's sole, explicit, self-targeting continue), DONE.
+    assert names == ["GOTO", "GOTO", "DONE"]
+    inner_continue_goto, outer_continue_goto, _done = ops
+
+    outer_loop_start = inner_continue_goto.addr  # outer's first instruction
+    inner_loop_start = inner_continue_goto.addr  # == outer's, inner is first
+
+    assert inner_continue_goto.arg1 == inner_loop_start
+    assert outer_continue_goto.arg1 == outer_loop_start
+    assert inner_continue_goto.addr != outer_continue_goto.addr
 
 
 def test_implicit_done_termination(compile_gq):
