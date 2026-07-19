@@ -381,7 +381,8 @@ Software: distro `flashrom` (v1.3.0) and `usbutils`; run `flashrom` with
 padding, layout-file generation, and the flashrom invocations below —
 region-limited erase/program/verify by default (`--full` for a whole-chip
 write), with a `--dry-run` that prints the exact commands without touching
-hardware:
+hardware. Run it from the root of a `qc2024` checkout (a separate repo from
+`gamequeer`; the path below is relative to it):
 
 ```bash
 python3 flashing/cart_flash.py write <name>.gqgame
@@ -450,8 +451,8 @@ The burned cart boots and renders on a physical badge. A region-limited write
 leaves any data past the new image's end intact — harmless, since the VM
 follows the header's cart pointers and never reads past them, but if the cart
 previously held a larger game and you want the tail scrubbed, drop
-`--layout`/`--include`/`-N` and write the full 16 MiB `cart_padded.bin`
-(matching `cart_flash.py`'s own `--full`).
+`--layout`/`--include`/`-N` (keep `-c "W25Q128.V"`) and write the full
+16 MiB `cart_padded.bin` (matching `cart_flash.py`'s own `--full`).
 
 The recipe above assumes the cart is pulled and seated directly in the
 CH341A. An **in-system** variant also exists: the cart stays seated in the
