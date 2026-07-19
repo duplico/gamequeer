@@ -457,7 +457,23 @@ class Animation:
             self.src_path = pathlib.Path() / 'assets' / 'animations' / source
             self.dst_path = pathlib.Path() / 'build' / 'assets' / 'animations' / Game.game_name / name
             digest_path = self.dst_path / '.digest'
-            
+
+            # If a previous run already left build output in dst_path, use it
+            # to tentatively determine whether this is a single-still-image
+            # animation *before* the digest cache is checked, so
+            # self.ticks_per_frame - and therefore self.digest() - matches
+            # what was in effect when the stored digest was written. Without
+            # this, the single-still override further down (`if
+            # len(frame_paths) == 1: self.ticks_per_frame = duration`) only
+            # ever happens *after* the cache check, so the digest checked
+            # against the cache could never match the one that was stored,
+            # and the cache never hit for stills (gamequeer#376). The real
+            # frame count - and the corresponding permanent override - is
+            # (re)determined below once dst_path is known to be current.
+            original_ticks_per_frame = self.ticks_per_frame
+            if len(sorted(self.dst_path.glob('frame*.bmp'))) == 1:
+                self.ticks_per_frame = duration
+
             # Check if the dst_path has a file in it called .digest and compare it to self.digest()
             # If they match, skip the ffmpeg conversion step
             ffmpeged = False
@@ -470,6 +486,8 @@ class Animation:
                         animation_progress.update(anim_task, completed=1, total=1)
                         ffmpeged = True
                         animation_progress.update(hash_task, advance=1)
+
+            self.ticks_per_frame = original_ticks_per_frame
 
             # Reformat the animation source file into the build directory.
             if not ffmpeged:
