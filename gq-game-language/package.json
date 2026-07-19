@@ -14,6 +14,8 @@
         "esbuild-base": "esbuild ./src/extension/main.ts --bundle --outfile=out/main.js --external:vscode --format=cjs --platform=node"
     },
     "dependencies": {
+        "commander": "^11.1.0",
+        "fast-glob": "^3.3.3",
         "langium": "~3.0.0",
         "vscode-languageclient": "~9.0.1",
         "vscode-languageserver": "~9.0.1"
@@ -63,5 +65,8 @@
     "activationEvents": [
         "onLanguage:game-queer-game-language"
     ],
-    "main": "./out/extension/main.cjs"
+    "main": "./out/extension/main.cjs",
+    "bin": {
+        "gq-lang-lint": "./out/cli/main.cjs"
+    }
 }

@@ -10,9 +10,9 @@ This folder contains all necessary files for your language extension.
  * `src/language/main.ts` - the entry point of the language server process.
  * `src/language/game-queer-game-language-module.ts` - the dependency injection module of your language implementation. Use this to register overridden and added services.
  * `src/language/game-queer-game-language-validator.ts` - an example validator. You should change it to reflect the semantics of your language.
- * `src/cli/main.ts` - the entry point of the command line interface (CLI) of your language.
- * `src/cli/generator.ts` - the code generator used by the CLI to write output files from DSL documents.
- * `src/cli/cli-util.ts` - utility code for the CLI.
+ * `src/cli/main.ts` - the thin executable entry point of the CLI (bundled with a shebang; see `package.json`'s `bin` field).
+ * `src/cli/program.ts` - the CLI's actual logic: a headless lint wrapper (gamequeer#384) that runs the same parse + validation pipeline as the language server over `.gq` files/directories/globs, with no VS Code or LSP connection required. Split out from `main.ts` so tests can import it directly instead of spawning a subprocess.
+ * `src/cli/cli-util.ts` - utility code for the CLI (resolving files/globs, formatting diagnostics).
 
 ## Get up and running straight away
 
@@ -21,7 +21,7 @@ This folder contains all necessary files for your language extension.
  * Press `F5` to open a new window with your extension loaded.
  * Create a new file with a file name suffix matching your language.
  * Verify that syntax highlighting, validation, completion etc. are working as expected.
- * Run `node ./bin/cli` to see options for the CLI; `node ./bin/cli generate <file>` generates code for a given DSL file.
+ * Run `node ./out/cli/main.cjs <files-or-globs...>` (or `npx gq-lang-lint <files-or-globs...>` once this package is installed) to lint `.gq` files headlessly; see `--help` for options. Exits non-zero if any error diagnostics are found.
 
 ## Make changes
 
