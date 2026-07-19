@@ -33,7 +33,8 @@
         "vitest": "^4.1.10"
     },
     "overrides": {
-        "lodash": "^4.18.1"
+        "lodash": "^4.18.1",
+        "lodash-es": "^4.18.1"
     },
     "displayName": "gq-game-language",
     "publisher": "duplico",
