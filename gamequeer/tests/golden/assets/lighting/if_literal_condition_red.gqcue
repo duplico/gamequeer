@@ -1,0 +1,17 @@
+/*
+ * if_literal_condition_red.gqcue -- "false-branch chosen" indicator cue for
+ * if_literal_condition.gq (gamequeer#356). One hold frame, red, duration 4
+ * (1 subtick) -- see if_literal_condition_lime.gqcue's header comment for
+ * why this pair of single-frame, non-looping cues is shaped this way.
+ */
+
+frame {
+    duration = 4;
+    colors {
+        red,
+        red,
+        red,
+        red,
+        red
+    }
+}

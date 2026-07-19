@@ -1,0 +1,20 @@
+/*
+ * if_literal_condition_lime.gqcue -- "true-branch chosen" indicator cue for
+ * if_literal_condition.gq (gamequeer#356). One hold frame, lime, duration 4
+ * (1 subtick) -- the minimum legal frame duration (LEDS_SUBTICKS), same as
+ * leds_dump_test.gqcue's frames. Not looping (it's played via a foreground
+ * `cue` statement, which never forces loop=1 the way bgcue does), so it
+ * plays once and then the LEDs go dark -- see if_literal_condition.gq's
+ * header comment for the full tick-by-tick timeline this produces.
+ */
+
+frame {
+    duration = 4;
+    colors {
+        lime,
+        lime,
+        lime,
+        lime,
+        lime
+    }
+}
