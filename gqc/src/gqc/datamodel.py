@@ -1152,6 +1152,8 @@ class IntExpression:
             return subexpr
         elif len(subexpr) == 1:
             return subexpr[0]
+        elif len(subexpr) > 3:
+            raise ValueError(f"Invalid subexpression length {len(subexpr)}: should be [operand, operator, operand] or [operator operand]")
 
         # A literal-only subtree (e.g. the "2*3" in "2*3+x") -- fold it to a
         # single literal instead of allocating a register and emitting real
@@ -1162,8 +1164,6 @@ class IntExpression:
         folded = fold_constant_int_expression(subexpr)
         if folded is not None:
             return GqcIntOperand(is_literal=True, value=folded)
-        elif len(subexpr) > 3:
-            raise ValueError(f"Invalid subexpression length {len(subexpr)}: should be [operand, operator, operand] or [operator operand]")
 
         if len(subexpr) == 2:
             # Unary operation.
