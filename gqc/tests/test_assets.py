@@ -293,23 +293,23 @@ def test_digest_cache_invalidated_by_source_touch(tmp_path, monkeypatch):
     assert first_bytes != second_bytes
 
 
-def test_still_image_digest_cache_is_never_reused(tmp_path, monkeypatch):
-    # Pins a currently-observed bug (not fixed here -- this test suite is
-    # test-only; filed as gamequeer#376): Animation.digest() depends on
-    # self.ticks_per_frame, which is computed from `frame_rate` *before*
-    # frames are counted, then silently overwritten with `duration` right
-    # after (the single-still override) -- but *before* the digest is
-    # written to `.digest`. So the digest checked against the cache file on
-    # a later run (pre-override value) can never match the one that was
-    # stored (post-override value) for any still image, and the cache
-    # always misses. This doesn't need ffmpeg either way, since the still
-    # path never calls it regardless of cache outcome.
+def test_still_image_digest_cache_is_reused(tmp_path, monkeypatch):
+    # Regression test for gamequeer#376: Animation.digest() depends on
+    # self.ticks_per_frame, which is computed from `frame_rate` before
+    # frames are counted, then overwritten with `duration` for a
+    # single-still animation. The digest checked against the cache file on
+    # a later run must use the same (post-override) value as the one that
+    # was stored, or the cache can never hit for stills. This doesn't need
+    # ffmpeg either way, since the still path never calls it regardless of
+    # cache outcome -- the assertion is just that `make_animation_from_image`
+    # (routed to via `make_animation`) isn't re-invoked once cached.
     assets_dir = tmp_path / "assets" / "animations"
     assets_dir.mkdir(parents=True)
     _make_still(assets_dir / "still.png")
     decls = 'animations { a1 <- "still.png" { frame_rate = 5; duration = 77; } }'
 
     _parse_in_process(tmp_path, monkeypatch, decls)
+    first_bytes = [f.bytes for f in Animation.anim_table["a1"].frames]
 
     calls = []
     original_make_animation = anim.make_animation
@@ -321,11 +321,43 @@ def test_still_image_digest_cache_is_never_reused(tmp_path, monkeypatch):
     monkeypatch.setattr("gqc.datamodel.make_animation", _spy)
 
     _parse_in_process(tmp_path, monkeypatch, decls)
+    second_bytes = [f.bytes for f in Animation.anim_table["a1"].frames]
 
-    assert calls, (
-        "if this starts failing, the still-image digest-cache bug this "
-        "test pins has been fixed -- update/remove it accordingly"
-    )
+    assert not calls, "digest cache hit should skip re-running make_animation"
+    assert first_bytes == second_bytes
+
+
+def test_still_image_digest_cache_invalidated_by_duration_change(tmp_path, monkeypatch):
+    # Companion to test_still_image_digest_cache_is_reused: a still image's
+    # `duration` becomes self.ticks_per_frame, which the digest depends on,
+    # so changing it must still invalidate the cache rather than being
+    # masked by the gamequeer#376 fix. Spies on make_animation (as the other
+    # digest-cache tests do) rather than just checking the final
+    # ticks_per_frame value, since a wrongly-hit cache would leave
+    # ticks_per_frame correct too (it's set directly from `duration`,
+    # independent of whether the cache was consulted).
+    assets_dir = tmp_path / "assets" / "animations"
+    assets_dir.mkdir(parents=True)
+    _make_still(assets_dir / "still.png")
+
+    decls = 'animations { a1 <- "still.png" { frame_rate = 5; duration = 77; } }'
+    _parse_in_process(tmp_path, monkeypatch, decls)
+    assert Animation.anim_table["a1"].ticks_per_frame == 77
+
+    calls = []
+    original_make_animation = anim.make_animation
+
+    def _spy(*args, **kwargs):
+        calls.append(1)
+        return original_make_animation(*args, **kwargs)
+
+    monkeypatch.setattr("gqc.datamodel.make_animation", _spy)
+
+    decls = 'animations { a1 <- "still.png" { frame_rate = 5; duration = 200; } }'
+    _parse_in_process(tmp_path, monkeypatch, decls)
+
+    assert calls, "digest cache should miss when duration changes"
+    assert Animation.anim_table["a1"].ticks_per_frame == 200
 
 
 # --- Animation.id assignment (gamequeer#338) ---------------------------------
