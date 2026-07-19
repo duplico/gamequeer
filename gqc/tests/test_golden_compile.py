@@ -26,17 +26,19 @@ tutorial_1.gq's assets only resolve from `examples/`. Only the *output*
 directory is a tmp_path -- the committed `.gqgame` files themselves are
 never overwritten by a test run.
 
-ffmpeg-gating: about half of these fixtures reference a GIF/PNG animation
-asset, which routes through gqc's `ffmpeg-python` binding (see
-`gqc/src/gqc/anim.py`). The `.gqgame` bytes for those fixtures were captured
-against the gamequeer-builder image's pinned ffmpeg build (Debian
+ffmpeg-gating: `gqc/src/gqc/anim.py` only routes an animation source through
+its `ffmpeg-python` binding when the source isn't a still image (`.bmp`,
+`.png`, `.jpg`, `.jpeg`, handled by Pillow instead) -- in practice that means
+`.gif` sources. The `.gqgame` bytes for a `.gif`-sourced fixture were
+captured against the gamequeer-builder image's pinned ffmpeg build (Debian
 bullseye's apt package, 4.3.9-0+deb11u2 as of this writing) -- a different
 ffmpeg build (a bare CI runner's newer apt package, a developer's own
-workstation build) decodes/dithers those same source images slightly
-differently and produces a harmlessly different, but still byte-different,
-cart. Rather than have the per-PR CI leg's pytest invocation carry a
+workstation build) decodes/dithers that same source slightly differently
+and produces a harmlessly different, but still byte-different, cart. PNG
+(and other Pillow-handled) sources have no such dependency and always run.
+Rather than have the per-PR CI leg's pytest invocation carry a
 `-m "not (golden and ffmpeg)"` deselection someone has to remember to keep
-in sync with this file, each asset-bearing case here is individually
+in sync with this file, each `.gif`-sourced case here is individually
 `skipif`-gated on the ffmpeg build actually detected on PATH: it only runs
 the byte-compare when that build is bullseye's 4.3.x, and skips (rather than
 false-reds) everywhere else, including the existing per-PR `gqc-tests` CI
@@ -62,17 +64,19 @@ EXAMPLES_DIR = REPO_ROOT / "examples"
 
 COMPILE_TIMEOUT_S = 120
 
-# Matches gqc's animation-source syntax, e.g. `hearts <- "heart_anim.gif";`
-# or `sprite1 <- "solid_white.png" { ... }`. Lightcue sources (`<- "x.gqcue"`)
-# deliberately don't match: that pipeline never touches ffmpeg.
-_ANIM_ASSET_REF_RE = re.compile(r'<-\s*"[^"]+\.(?:gif|png)"', re.IGNORECASE)
+# Matches gqc's animation-source syntax when the source is a format
+# anim.py routes through ffmpeg rather than Pillow, e.g.
+# `hearts <- "heart_anim.gif";`. `.png`/`.jpg`/`.jpeg`/`.bmp` animation
+# sources and `.gqcue` lightcue sources deliberately don't match: neither
+# pipeline touches ffmpeg (see anim.py's `make_animation`).
+_FFMPEG_ASSET_REF_RE = re.compile(r'<-\s*"[^"]+\.gif"', re.IGNORECASE)
 
 _FFMPEG_VERSION_RE = re.compile(r"^ffmpeg version (\S+)")
 _BUILDER_FFMPEG_MAJOR_MINOR = "4.3"
 
 
-def _references_anim_asset(gq_path: pathlib.Path) -> bool:
-    return bool(_ANIM_ASSET_REF_RE.search(gq_path.read_text()))
+def _references_ffmpeg_asset(gq_path: pathlib.Path) -> bool:
+    return bool(_FFMPEG_ASSET_REF_RE.search(gq_path.read_text()))
 
 
 def _ffmpeg_version() -> str | None:
@@ -98,7 +102,7 @@ def _has_builder_ffmpeg() -> bool:
 
 def _fixture_param(gq_path: pathlib.Path, cwd: pathlib.Path):
     marks = [pytest.mark.golden]
-    if _references_anim_asset(gq_path):
+    if _references_ffmpeg_asset(gq_path):
         detected = _ffmpeg_version() or "no ffmpeg on PATH"
         marks += [
             pytest.mark.ffmpeg,

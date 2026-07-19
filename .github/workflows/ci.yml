@@ -20,6 +20,10 @@ jobs:
   gqc-tests:
     name: gqc Python compiler tests
     runs-on: ubuntu-latest
+    # schedule/workflow_dispatch (added for golden-nightly below) would
+    # otherwise also trigger this and every other pre-existing job in this
+    # workflow, since those events apply at the workflow level.
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
 
     steps:
       - uses: actions/checkout@v4
@@ -55,6 +59,9 @@ jobs:
   gq-game-language-tests:
     name: gq-game-language vitest suite
     runs-on: ubuntu-latest
+    # See gqc-tests' matching `if:` above: keeps this job off the new
+    # schedule/workflow_dispatch triggers, which only golden-nightly needs.
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
 
     steps:
       - uses: actions/checkout@v4
@@ -91,6 +98,9 @@ jobs:
   gamequeer-vm-build:
     name: gamequeer C VM native build + headless golden suite
     runs-on: ubuntu-latest
+    # See gqc-tests' matching `if:` above: keeps this job off the new
+    # schedule/workflow_dispatch triggers, which only golden-nightly needs.
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
 
     steps:
       - uses: actions/checkout@v4
@@ -138,6 +148,9 @@ jobs:
   gamequeer-vm-build-instrumented:
     name: gamequeer C VM instrumented (GQ_PERF_INSTRUMENT_RUNS) golden suite
     runs-on: ubuntu-latest
+    # See gqc-tests' matching `if:` above: keeps this job off the new
+    # schedule/workflow_dispatch triggers, which only golden-nightly needs.
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
 
     steps:
       - uses: actions/checkout@v4
