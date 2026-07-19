@@ -259,15 +259,31 @@ def test_addition_past_int32_max_does_not_fold(compile_gq):
 
 
 def test_subtraction_folds_exactly_at_int32_min(compile_gq):
-    # -2147483647 - 1 == -2147483648 (INT32_MIN) -- fits, folds. (Not
-    # written as the bare literal "-2147483648": gqc has a separate,
-    # pre-existing bug encoding that exact bare literal token unrelated to
-    # folding -- see this PR's description -- so this case is deliberately
-    # reached via subtraction instead, which folding itself computes and
-    # embeds correctly.)
+    # -2147483647 - 1 == -2147483648 (INT32_MIN) -- fits, folds.
     source = game_with_stage("x = -2147483647 - 1;", "volatile { int x = 0; }")
     exit_code, stderr, out_dir = compile_gq(source)
     assert exit_code == 0, stderr
+    cmds = (out_dir / "cmds.gqasm").read_text()
+    assert _folded_setvar_value(cmds) == -2147483648
+
+
+def test_bare_int32_min_literal_now_folds_cleanly(compile_gq):
+    # Regression guard for gamequeer#395: on `default` (pre-dating this PR),
+    # a bare "-2147483648" literal token independently crashes gqc at
+    # compile time with a raw struct.error -- pyparsing's infix_notation
+    # parses it as unary negation of the *positive* literal 2147483648
+    # (itself out of t_gq_int range), and the old unary-NEG codegen embeds
+    # that pre-negation operand directly without range-checking it. With
+    # folding, the negation is computed in Python first and the
+    # already-in-range result (-2147483648) is what gets embedded, so this
+    # exact shape no longer reaches that path -- confirm it stays fixed.
+    # (gamequeer#395 is still open: a bare literal that overflows even
+    # *after* negation, e.g. "-2147483649", isn't helped by folding and
+    # still hits the underlying bug -- out of scope here.)
+    source = game_with_stage("x = -2147483648;", "volatile { int x = 0; }")
+    exit_code, stderr, out_dir = compile_gq(source)
+    assert exit_code == 0, stderr
+    assert_no_traceback(stderr)
     cmds = (out_dir / "cmds.gqasm").read_text()
     assert _folded_setvar_value(cmds) == -2147483648
 
