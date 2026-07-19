@@ -202,12 +202,14 @@ void HAL_update_leds_nonblocking() {
     HAL_update_leds();
 }
 
-void HAL_critical_enter() {
+uint16_t HAL_critical_enter() {
     // No-op: the emulator is single-threaded with no interrupts to mask.
+    return 0;
 }
 
-void HAL_critical_exit() {
-    // No-op: see HAL_critical_enter().
+void HAL_critical_exit(uint16_t prev_state) {
+    // No-op: see HAL_critical_enter(). prev_state is unused.
+    (void) prev_state;
 }
 
 void HAL_new_game() {

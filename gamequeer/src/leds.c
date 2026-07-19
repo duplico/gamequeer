@@ -228,14 +228,15 @@ static void led_render_frame() {
 // led_anim_done() below).
 //
 // Tiny masked window (I9): from led_anim_done() this is already inside
-// RTC_ISR, so HAL_critical_enter()/HAL_critical_exit() correctly no-op
-// here (see HAL.h); from led_stop() (MAIN, GIE=1) it closes the same
-// ordering gap led_play_cue() does -- leds_animating = 0 must land before
+// RTC_ISR, so the HAL_critical_enter() token here just captures
+// "already disabled" and HAL_critical_exit() correctly restores that (see
+// HAL.h); from led_stop() (MAIN, GIE=1) it closes the same ordering gap
+// led_play_cue() does -- leds_animating = 0 must land before
 // leds_cue_bg_saved/gq_leds are cleared, or a tick landing between those
 // stores could still observe leds_animating == 1 with only some of this
 // state reset.
 static void led_stop_state() {
-    HAL_critical_enter();
+    uint16_t crit_state = HAL_critical_enter();
     // Stop the animation flag.
     leds_animating = 0;
     // Unsave any background cue.
@@ -245,7 +246,7 @@ static void led_stop_state() {
     for (uint8_t i = 0; i < 5; i++) {
         gq_leds[i] = (rgbcolor16_t) {.r = 0, .g = 0, .b = 0};
     }
-    HAL_critical_exit();
+    HAL_critical_exit(crit_state);
 }
 
 void led_stop() {
@@ -433,7 +434,7 @@ void led_play_cue(t_gq_pointer cue_ptr, uint8_t background) {
     uint16_t bg_frame_index         = 0;
     uint16_t bg_frame_ticks_elapsed = 0;
 
-    HAL_critical_enter();
+    uint16_t crit_state = HAL_critical_enter();
     if (leds_animating && !background && leds_cue.bgcue) {
         // Currently playing a background cue and this isn't itself a
         // background cue: save it for later before interrupting it.
@@ -443,7 +444,7 @@ void led_play_cue(t_gq_pointer cue_ptr, uint8_t background) {
         bg_frame_ticks_elapsed = leds_cue_frame_ticks_elapsed;
     }
     leds_animating = 0;
-    HAL_critical_exit();
+    HAL_critical_exit(crit_state);
 
     // --- 2. Stage (GIE on; the flash reads live here) ---
     if (save_bg) {
@@ -481,12 +482,12 @@ void led_play_cue(t_gq_pointer cue_ptr, uint8_t background) {
     }
 
     // --- 3. Commit (tiny masked window; RAM-only work, no I/O) ---
-    HAL_critical_enter();
+    crit_state           = HAL_critical_enter();
     leds_cue             = new_cue;
     leds_cue_frame_index = 0;
-    leds_animating       = 1; // Before led_setup_frame(): it early-returns on !leds_animating.
-    led_setup_frame();        // Consumes leds_cue/leds_cue_frame_index set just above.
-    HAL_critical_exit();      // Only past this point can RTC_ISR observe any of this state.
+    leds_animating       = 1;      // Before led_setup_frame(): it early-returns on !leds_animating.
+    led_setup_frame();             // Consumes leds_cue/leds_cue_frame_index set just above.
+    HAL_critical_exit(crit_state); // Only past this point can RTC_ISR observe any of this state.
 }
 
 // Runs from the RTC ISR in every build that defines GQ_SUPPRESS_LED_TICK
