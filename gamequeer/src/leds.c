@@ -65,7 +65,16 @@ rgbcolor16_t gq_leds[5] = {
 // frame completion, untouched by this PR) are unaffected.
 #define LED_DELTA_FRAC_BITS 14
 
-uint8_t leds_animating = 0;
+// volatile: layered on top of the HAL_critical_enter()/HAL_critical_exit()
+// masked windows below (matching this file's own gq_game_unload_flag in
+// gamequeer.c, and the badge firmware's analogous tlc_send_type/
+// rtc_ticks_pending -- see docs/led-tlc-concurrency.md's I5 in the qc2024
+// repo) so the leds_animating = 0 -> ... -> leds_animating = 1 ordering
+// those windows rely on (I11) doesn't depend on HAL_critical_enter()/
+// HAL_critical_exit() staying opaque to the compiler (e.g. under a future
+// whole-program-optimized build that inlines them across translation
+// units).
+volatile uint8_t leds_animating = 0;
 gq_ledcue_frame_t leds_cue_fg_frames[GQ_CUE_MAX_FRAMES];
 gq_ledcue_frame_t leds_cue_bg_frames[GQ_CUE_MAX_FRAMES];
 gq_ledcue_frame_t leds_cue_frame_curr;
@@ -217,7 +226,17 @@ static void led_render_frame() {
 // branch: clears animation/color state but doesn't flush -- callers decide
 // which HAL flush variant is safe for their context (see led_stop() vs.
 // led_anim_done() below).
+//
+// Tiny masked window (I9): from led_anim_done() this is already inside
+// RTC_ISR, so the HAL_critical_enter() token here just captures
+// "already disabled" and HAL_critical_exit() correctly restores that (see
+// HAL.h); from led_stop() (MAIN, GIE=1) it closes the same ordering gap
+// led_play_cue() does -- leds_animating = 0 must land before
+// leds_cue_bg_saved/gq_leds are cleared, or a tick landing between those
+// stores could still observe leds_animating == 1 with only some of this
+// state reset.
 static void led_stop_state() {
+    uint16_t crit_state = HAL_critical_enter();
     // Stop the animation flag.
     leds_animating = 0;
     // Unsave any background cue.
@@ -227,6 +246,7 @@ static void led_stop_state() {
     for (uint8_t i = 0; i < 5; i++) {
         gq_leds[i] = (rgbcolor16_t) {.r = 0, .g = 0, .b = 0};
     }
+    HAL_critical_exit(crit_state);
 }
 
 void led_stop() {
@@ -367,39 +387,107 @@ void led_setup_frame() {
     leds_cue_frame_ticks_elapsed = 0;
 }
 
+// Quiesce-stage-commit: led_play_cue() is the only main-loop mutator of the
+// cue-active group (leds_cue, leds_cue_fg_frames, leds_cue_bg_frames),
+// leds_animating, and the cue-bg-save group, but RTC_ISR's led_tick() /
+// led_anim_done() / led_setup_frame() read *and write* the same state
+// (gamequeer#366). The old version wrote leds_cue and leds_animating = 1
+// before the (multi-hundred-microsecond, flash-reading) frame-array copies
+// below had even started, so an RTC tick landing mid-copy could act on a
+// torn leds_cue -- including re-reading a torn frame_count *after* the
+// clamp below to size a gq_memcpy_to_ram, i.e. a possible RAM overflow past
+// leds_cue_fg_frames/leds_cue_bg_frames.
+//
+// Fixed by making every context an exclusive owner of this state at every
+// instant, gated by one flag (leds_animating), per
+// docs/led-tlc-concurrency.md (qc2024 repo) I9/§7 rule 5:
+//   1. Tiny masked window: snapshot the bg-save decision inputs (reading
+//      the *old* live cue, which RTC_ISR could otherwise still be
+//      advancing) and clear leds_animating -- RTC_ISR's consumer is now
+//      off: led_tick()/led_anim_done()/led_setup_frame() are all gated by
+//      `if (leds_animating)` (or, for led_setup_frame(), an early return),
+//      so nothing else touches the cue-active or cue-bg-save groups from
+//      here until step 3 turns leds_animating back on.
+//   2. GIE on: do the flash reads (gq_memcpy_to_ram) and the frame-count
+//      clamp into a *local* cue header (new_cue lives on this call's
+//      stack, so it can't be torn by anything else, and its clamped
+//      frame_count can't be re-read stale by a concurrent writer -- there
+//      isn't one). Also apply the bg-save snapshot from step 1: safe now
+//      that the consumer is quiesced. Deliberately not masked: these are
+//      the multi-hundred-microsecond flash reads, and masking around them
+//      would eat into main.c's 10 ms RTC single-pending-tick budget
+//      (qc2024#68).
+//   3. Tiny masked commit: publish the new cue header/frame index, turn
+//      leds_animating back on, and call led_setup_frame() -- all in the
+//      same window. led_setup_frame() only touches RAM already fully
+//      populated by step 2 (no flash I/O), the same work RTC_ISR already
+//      does unmasked-from-its-own-perspective every frame boundary via
+//      led_tick(), so folding it into this window is no more expensive
+//      than what already runs under GIE=0 today, and it closes the
+//      remaining hazard of RTC_ISR racing this call's own
+//      led_setup_frame() against its own led_tick()/led_anim_done() (the
+//      interpolation-state tearing described in gamequeer#366).
 void led_play_cue(t_gq_pointer cue_ptr, uint8_t background) {
+    // --- 1. Quiesce (tiny masked window; O(instructions), no I/O) ---
+    uint8_t save_bg                 = 0;
+    gq_ledcue_t bg_cue_snapshot     = {0};
+    uint16_t bg_frame_index         = 0;
+    uint16_t bg_frame_ticks_elapsed = 0;
+
+    uint16_t crit_state = HAL_critical_enter();
     if (leds_animating && !background && leds_cue.bgcue) {
-        // If we're currently playing a background cue, save it for later before interrupting it.
-        leds_cue_bg                     = leds_cue;
+        // Currently playing a background cue and this isn't itself a
+        // background cue: save it for later before interrupting it.
+        save_bg                = 1;
+        bg_cue_snapshot        = leds_cue;
+        bg_frame_index         = leds_cue_frame_index;
+        bg_frame_ticks_elapsed = leds_cue_frame_ticks_elapsed;
+    }
+    leds_animating = 0;
+    HAL_critical_exit(crit_state);
+
+    // --- 2. Stage (GIE on; the flash reads live here) ---
+    if (save_bg) {
+        // RTC_ISR's consumer is off (leds_animating == 0), so the
+        // cue-bg-save group is exclusively ours until step 3.
+        leds_cue_bg                     = bg_cue_snapshot;
         leds_cue_bg_saved               = 1;
-        leds_cue_bg_frame_index         = leds_cue_frame_index;
-        leds_cue_bg_frame_ticks_elapsed = leds_cue_frame_ticks_elapsed;
+        leds_cue_bg_frame_index         = bg_frame_index;
+        leds_cue_bg_frame_ticks_elapsed = bg_frame_ticks_elapsed;
     }
 
-    // Load the new cue into RAM.
-    gq_memcpy_to_ram((uint8_t *) &leds_cue, cue_ptr, sizeof(gq_ledcue_t));
-    leds_animating       = 1;
-    leds_cue_frame_index = 0;
+    // Load the new cue header into a local: nothing else can write this
+    // copy, so its frame_count can't be re-read torn or stale by anyone,
+    // clamped or not.
+    gq_ledcue_t new_cue;
+    gq_memcpy_to_ram((uint8_t *) &new_cue, cue_ptr, sizeof(gq_ledcue_t));
 
-    if (leds_cue.frame_count > GQ_CUE_MAX_FRAMES) {
+    uint16_t new_frame_count = new_cue.frame_count;
+    if (new_frame_count > GQ_CUE_MAX_FRAMES) {
         // If the cue has too many frames, truncate it.
-        leds_cue.frame_count = GQ_CUE_MAX_FRAMES;
+        new_frame_count = GQ_CUE_MAX_FRAMES;
     }
+    new_cue.frame_count = new_frame_count;
 
     // If this is a background cue, we set it to loop.
     if (background) {
-        leds_cue.bgcue = 1;
-        leds_cue.loop  = 1;
+        new_cue.bgcue = 1;
+        new_cue.loop  = 1;
 
-        // Load the frames into RAM.
-        gq_memcpy_to_ram(
-            (uint8_t *) leds_cue_bg_frames, leds_cue.frames, leds_cue.frame_count * sizeof(gq_ledcue_frame_t));
+        // Load the frames into RAM, sized from the local (already-clamped,
+        // untorn) count above -- never from the shared leds_cue.
+        gq_memcpy_to_ram((uint8_t *) leds_cue_bg_frames, new_cue.frames, new_frame_count * sizeof(gq_ledcue_frame_t));
     } else {
-        // Load the frames into RAM.
-        gq_memcpy_to_ram(
-            (uint8_t *) leds_cue_fg_frames, leds_cue.frames, leds_cue.frame_count * sizeof(gq_ledcue_frame_t));
+        gq_memcpy_to_ram((uint8_t *) leds_cue_fg_frames, new_cue.frames, new_frame_count * sizeof(gq_ledcue_frame_t));
     }
-    led_setup_frame();
+
+    // --- 3. Commit (tiny masked window; RAM-only work, no I/O) ---
+    crit_state           = HAL_critical_enter();
+    leds_cue             = new_cue;
+    leds_cue_frame_index = 0;
+    leds_animating       = 1;      // Before led_setup_frame(): it early-returns on !leds_animating.
+    led_setup_frame();             // Consumes leds_cue/leds_cue_frame_index set just above.
+    HAL_critical_exit(crit_state); // Only past this point can RTC_ISR observe any of this state.
 }
 
 // Runs from the RTC ISR in every build that defines GQ_SUPPRESS_LED_TICK

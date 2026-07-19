@@ -35,6 +35,39 @@ void HAL_update_leds();
  */
 void HAL_update_leds_nonblocking();
 
+/*
+ * Enter/exit a critical section against this target's single-writer-at-
+ * a-time ISR(s): on the badge, HAL_critical_enter() disables interrupts
+ * and returns a token capturing the interrupt-enable state that was in
+ * effect just before it disabled them; HAL_critical_exit() takes that
+ * token back and restores exactly that state (not an unconditional
+ * re-enable). On a single-threaded host with no interrupts (e.g. the
+ * emulator), HAL_critical_enter() returns 0 and HAL_critical_exit()
+ * ignores its argument -- both no-ops.
+ *
+ * Token-based by design, not a shared saved-state slot: each call's
+ * token lives on the caller's own stack (a local variable), so nested or
+ * interleaved enter/exit pairs -- including a call from MAIN racing an
+ * RTC-ISR call that preempts it mid-enter -- can never clobber each
+ * other's saved state. This is what actually makes the primitive safe to
+ * enter from inside another one (or from an ISR that preempts a MAIN
+ * call in progress); a single shared static for the saved state would
+ * not be (confirmed via review of an earlier, non-token-based version of
+ * this primitive: the shared slot could be overwritten mid-save by a
+ * preempting nested call, silently corrupting the outer caller's restore
+ * value and leaving interrupts masked forever).
+ *
+ * Every call must be paired, non-overlapping with any other synchronous
+ * control flow (no early return between enter/exit), and as short as
+ * possible: never wrap blocking I/O (flash reads, SPI waits) in a
+ * critical section (see docs/led-tlc-concurrency.md's I4/I9 in the
+ * qc2024 firmware repo). leds.c's led_play_cue() uses this to make its
+ * quiesce/commit windows around the cue-state layer atomic w.r.t. the
+ * RTC ISR.
+ */
+uint16_t HAL_critical_enter(void);
+void HAL_critical_exit(uint16_t prev_state);
+
 void HAL_event_poll();
 void HAL_sleep();
 t_gq_int HAL_get_player_id();
