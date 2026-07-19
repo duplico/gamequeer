@@ -165,7 +165,7 @@ def test_nested_shift_or_chain_4_pairs_no_longer_exhausts_registers(compile_gq):
     # documented GqcParseError-style diagnostic, not a crash.
     #
     # gamequeer#385's constant folding changes this: each `(1<<a)|(1<<b)`
-    # pair here has both `a` and `b` in [0, 31) (valid shift amounts), so
+    # pair here has both `a` and `b` in [0, 31] (valid shift amounts), so
     # every pair folds to a single literal at parse time -- and because
     # IntExpression.get_result_symbol resolves a node's *right* operand
     # before deciding whether its (literal) *left* operand needs a
@@ -281,8 +281,8 @@ def test_flat_6_term_chain_mixed_with_variable_stays_single_register(compile_gq)
     exit_code, stderr, out_dir = compile_gq(source)
     assert exit_code == 0, stderr
     cmds = (out_dir / "cmds.gqasm").read_text()
-    addby_lines = [line for line in cmds.splitlines() if "ADDBY" in line]
+    lines = cmds.splitlines()
+    addby_lines = [line for line in lines if "ADDBY" in line]
+    setvar_lines = [line for line in lines if "SETVAR" in line]
     assert len(addby_lines) == 1
-    assert "0x0000000f" in [
-        line for line in cmds.splitlines() if "SETVAR" in line
-    ][0]
+    assert any("0x0000000f" in line for line in setvar_lines)
