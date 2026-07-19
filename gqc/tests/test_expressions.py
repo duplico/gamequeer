@@ -33,8 +33,6 @@ result -> one lightcue, wrong result -> another) at nesting depths 1-3,
 including a negative control confirming the gate discriminates correctly.
 """
 
-import pathlib
-
 import pytest
 
 GAME_HEADER = 'game { id = 1; title := "T"; author := "A"; starting_stage = start; }\n'
@@ -86,7 +84,11 @@ def test_fully_parenthesized_chain_compiles_with_correct_value(compile_gq):
     assert "0x00000002" in addby_lines[0]
     assert "0x00000003" in addby_lines[1]
     assert "0x00000004" in addby_lines[2]
-    dest_regs = {line.split()[3] for line in addby_lines}
+    # Column layout is "Address Command Op Flags arg1 arg2" (see
+    # linker.create_symbol_table's gqasm header) -- arg1 (index 4) is the
+    # destination register; index 3 is Flags, which is constant across
+    # these lines and wouldn't catch a register-reuse regression.
+    dest_regs = {line.split()[4] for line in addby_lines}
     assert len(dest_regs) == 1
 
 
@@ -181,5 +183,7 @@ def test_flat_6_term_chain_stays_single_register(compile_gq):
     cmds = (out_dir / "cmds.gqasm").read_text()
     addby_lines = [line for line in cmds.splitlines() if "ADDBY" in line]
     assert len(addby_lines) == 5
-    dest_regs = {line.split()[3] for line in addby_lines}
+    # arg1 (index 4) is the destination register; see the column-layout
+    # note in test_fully_parenthesized_chain_compiles_with_correct_value.
+    dest_regs = {line.split()[4] for line in addby_lines}
     assert len(dest_regs) == 1
