@@ -400,8 +400,8 @@ Windows shell, `usbipd bind --busid <id>` once, then
 `1a86:5512` (verify with `lsusb`).
 
 **Manual fallback**, for when the wrapper isn't available. This is the exact
-sequence `cart_flash.py` automates — its flashrom invocations use `-c
-"W25Q128.V"` to pin the expected chip on every call, and `-N`
+sequence `cart_flash.py` automates — its flashrom invocations use
+`-c "W25Q128.V"` to pin the expected chip on every call, and `-N`
 (`--noverify-all`) on region-limited writes so `-w`'s own auto-verify reads
 back only the written region instead of the whole 16 MiB chip:
 
