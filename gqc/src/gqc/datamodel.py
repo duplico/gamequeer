@@ -939,6 +939,178 @@ class LightCueFrame:
     def __repr__(self):
         return f"LightCueFrame({self.colors}, {self.duration}, {self.transition})"
 
+# --- compile-time constant folding for int expressions (gamequeer#385) ------
+# t_gq_int is a signed 32-bit int on-cart (see gamequeer.h), and
+# run_arithmetic() (gamequeer/src/bytecode.c) evaluates every arithmetic op
+# using plain C semantics on that type -- folding must match that exactly,
+# not Python's own operator semantics, which diverge from C for `//`/`%`
+# whenever the operands' signs differ.
+
+_T_GQ_INT_MIN = -(2 ** 31)
+_T_GQ_INT_MAX = 2 ** 31 - 1
+
+
+def _fits_t_gq_int(value: int) -> bool:
+    return _T_GQ_INT_MIN <= value <= _T_GQ_INT_MAX
+
+
+def _c_truncating_divmod(a: int, b: int) -> tuple[int, int]:
+    """C's truncating `/` and `%` (quotient rounds toward zero, remainder
+    takes the sign of the dividend) -- NOT Python's own `//`/`%`, which
+    round toward negative infinity instead and disagree with C whenever
+    exactly one operand is negative."""
+    quotient = abs(a) // abs(b)
+    if (a < 0) != (b < 0):
+        quotient = -quotient
+    remainder = a - quotient * b
+    return quotient, remainder
+
+
+def fold_constant_int_expression(node):
+    """Attempt to evaluate an int-expression parse-tree node (a
+    `GqcIntOperand`, an already-lowered `IntExpression`, or a raw
+    `[operand, op, operand]` / `[op, operand]` token list as produced by
+    pyparsing's `infix_notation` -- see `parser.parse_int_expression`) as a
+    compile-time constant.
+
+    Returns the folded `t_gq_int` value, or `None` if `node` isn't a pure
+    compile-time constant. This is the single entry point both
+    `parser.parse_int_expression` (for a whole, e.g. fully-parenthesized,
+    expression) and `IntExpression.get_result_symbol` (for a literal-only
+    subtree nested inside an otherwise non-constant expression) fold
+    through, so future sugar built on top of it (gamequeer#386, #387) has
+    one place to hook rather than two.
+
+    Folding declines (returns `None`, falling back to ordinary runtime
+    codegen) in every case where computing an answer here could diverge
+    from the VM's actual runtime behavior:
+      - any operand references a variable or a register, rather than being
+        a literal;
+      - the operator is `badge_get` -- it reads live badge state, not a
+        constant, regardless of whether its operand is a literal;
+      - a `/` or `%` whose literal divisor is 0 -- the VM leaves this
+        unguarded at runtime (see `run_arithmetic`), so folding it would
+        turn a runtime behavior into either a compile-time crash or a
+        silently wrong constant;
+      - a `<<`/`>>` shift amount outside `[0, 31]`, or a `<<` of a negative
+        left-hand value -- both undefined behavior in C, so not something
+        gqc should compute a specific answer for at compile time (this
+        matches the existing `1<<50` shapes in test_expressions.py, which
+        already only assert that compilation succeeds, never a specific
+        value);
+      - any result that wouldn't fit in `t_gq_int` (signed 32-bit) -- gqc
+        does not replicate the target compiler's signed-overflow behavior,
+        so an expression that would overflow at runtime is simply left
+        unfolded (and still overflows the same way it always did).
+    """
+    from .commands import CommandArithmetic
+
+    if isinstance(node, IntExpression):
+        # Already resolved by an earlier fold attempt (e.g. a parenthesized
+        # sub-expression, folded when parser.parse_int_expression built it).
+        # If that left it with no emitted commands and a literal result,
+        # reuse that result; otherwise it's a real (non-foldable) expression
+        # and re-deriving from its raw tokens here would just repeat the
+        # same "not foldable" conclusion.
+        if not node.commands and node.result_symbol.is_literal:
+            return node.result_symbol.value
+        return None
+
+    if isinstance(node, GqcIntOperand):
+        return node.value if node.is_literal else None
+
+    # The remaining shape is a raw `[operand, op, operand]` / `[op, operand]`
+    # token group -- a plain `list` when built by this module's own
+    # left-fold recursion (parser.parse_int_expression), or a pyparsing
+    # `ParseResults` when it's a nested (non-outermost) precedence group
+    # straight from `infix_notation`. Duck-type on length rather than
+    # isinstance-checking both, since ParseResults isn't a `list` subclass.
+    if isinstance(node, str):
+        return None
+    try:
+        node_len = len(node)
+    except TypeError:
+        return None
+    if node_len not in (2, 3):
+        # Covers bare single-token groups (len 1, handled by the recursive
+        # unwrap above one level up) and >3-token same-precedence chains
+        # nested inside a non-outermost operator level, which
+        # IntExpression.get_result_symbol doesn't support lowering either
+        # (a pre-existing limitation, not something gamequeer#385 is
+        # responsible for fixing) -- decline to fold rather than guess.
+        return None
+
+    if len(node) == 2:
+        operator, operand = node
+        if operator not in CommandArithmetic.UNARY_OPERATORS or operator == 'badge_get':
+            return None
+        value = fold_constant_int_expression(operand)
+        if value is None:
+            return None
+        if operator == '!':
+            result = int(value == 0)
+        elif operator == '-':
+            result = -value
+        elif operator == '~':
+            result = ~value
+        else:
+            return None
+        return result if _fits_t_gq_int(result) else None
+
+    operand0, operator, operand1 = node
+    if operator not in CommandArithmetic.OPERATORS:
+        return None
+    left = fold_constant_int_expression(operand0)
+    right = fold_constant_int_expression(operand1)
+    if left is None or right is None:
+        return None
+
+    if operator in ('/', '%'):
+        if right == 0:
+            return None
+        quotient, remainder = _c_truncating_divmod(left, right)
+        result = quotient if operator == '/' else remainder
+    elif operator == '+':
+        result = left + right
+    elif operator == '-':
+        result = left - right
+    elif operator == '*':
+        result = left * right
+    elif operator == '==':
+        result = int(left == right)
+    elif operator == '!=':
+        result = int(left != right)
+    elif operator == '>':
+        result = int(left > right)
+    elif operator == '<':
+        result = int(left < right)
+    elif operator == '>=':
+        result = int(left >= right)
+    elif operator == '<=':
+        result = int(left <= right)
+    elif operator == '&&':
+        result = int(left != 0 and right != 0)
+    elif operator == '||':
+        result = int(left != 0 or right != 0)
+    elif operator == '&':
+        result = left & right
+    elif operator == '|':
+        result = left | right
+    elif operator == '^':
+        result = left ^ right
+    elif operator == '<<':
+        if not (0 <= right <= 31) or left < 0:
+            return None
+        result = left << right
+    elif operator == '>>':
+        if not (0 <= right <= 31):
+            return None
+        result = left >> right
+    else:
+        return None
+
+    return result if _fits_t_gq_int(result) else None
+
 class IntExpression:
     def __init__(self, expression_toks : list[GqcIntOperand], instring, loc):
         self.expression_toks = expression_toks
@@ -980,6 +1152,16 @@ class IntExpression:
             return subexpr
         elif len(subexpr) == 1:
             return subexpr[0]
+
+        # A literal-only subtree (e.g. the "2*3" in "2*3+x") -- fold it to a
+        # single literal instead of allocating a register and emitting real
+        # arithmetic ops for it. Nested precedence groups like this one
+        # never pass back through parser.parse_int_expression's own fold
+        # attempt (only a fully-parenthesized -- or the outermost -- group
+        # does), so this is the only place that sees them.
+        folded = fold_constant_int_expression(subexpr)
+        if folded is not None:
+            return GqcIntOperand(is_literal=True, value=folded)
         elif len(subexpr) > 3:
             raise ValueError(f"Invalid subexpression length {len(subexpr)}: should be [operand, operator, operand] or [operator operand]")
 

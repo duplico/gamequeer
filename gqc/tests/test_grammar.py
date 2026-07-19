@@ -207,28 +207,42 @@ def test_game_block_shuffled_order_accepts(compile_gq):
 def test_unspaced_minus_parses_as_binary_subtraction(compile_gq):
     # `10 -5` (no space before the 5) must still parse as `10 - 5`, not as
     # the two operands `10` and a negative literal `-5` with no operator
-    # between them.
+    # between them -- the latter would be a grammar-level parse error (two
+    # adjacent operands with nothing joining them), not a silently wrong
+    # value, so a correct fold to 5 is proof enough it parsed as intended.
+    # Both operands are literals, so gamequeer#385 folds this to a single
+    # literal 5 at parse time; before gamequeer#385 this asserted a SUBBY
+    # op was present, but that alone never actually checked the computed
+    # value was correct.
     source = game_with_stage("x = 10 -5;", "volatile { int x = 0; }")
     exit_code, stderr, out_dir = compile_gq(source)
     assert exit_code == 0, stderr
     cmds = (out_dir / "cmds.gqasm").read_text()
-    assert "SUBBY" in cmds
+    assert "SUBBY" not in cmds
+    setvar_lines = [line for line in cmds.splitlines() if "SETVAR" in line]
+    assert len(setvar_lines) == 1
+    assert "0x00000005" in setvar_lines[0]
 
 
 def test_left_assoc_chain_evaluates_left_to_right(compile_gq):
     # Regression coverage for gamequeer#330/#341: `10 - 5 - 2` must compile
-    # as (10 - 5) - 2 = 3, not 10 - (5 - 2) = 7. Asserted cheaply from the
-    # emitted gqasm listing (two SUBBY ops against immediates 5 then 2, in
-    # that order) rather than a full bytecode/VM run -- see gamequeer#334
-    # for the dedicated codegen suite.
+    # as (10 - 5) - 2 = 3, not 10 - (5 - 2) = 7. All three operands are
+    # literals, so gamequeer#385 folds the whole expression to that single
+    # literal 3 at parse time -- a naive right-to-left fold would wrongly
+    # give 7, so this remains a real left-associativity regression guard,
+    # just checking the folded *value* instead of the (now absent) SUBBY op
+    # stream. See gamequeer#334's dedicated codegen suite
+    # (test_codegen.py::test_left_assoc_subtraction_chain_mixed_with_
+    # variable_folds_left) for this same left-fold order still pinned via a
+    # non-foldable trailing operand.
     source = game_with_stage("x = 10 - 5 - 2;", "volatile { int x = 0; }")
     exit_code, stderr, out_dir = compile_gq(source)
     assert exit_code == 0, stderr
     cmds = (out_dir / "cmds.gqasm").read_text()
-    subby_lines = [line for line in cmds.splitlines() if "SUBBY" in line]
-    assert len(subby_lines) == 2
-    assert "0x00000005" in subby_lines[0]
-    assert "0x00000002" in subby_lines[1]
+    assert "SUBBY" not in cmds
+    setvar_lines = [line for line in cmds.splitlines() if "SETVAR" in line]
+    assert len(setvar_lines) == 1
+    assert "0x00000003" in setvar_lines[0]
 
 
 # --- comments and empty event bodies ----------------------------------------

@@ -62,53 +62,81 @@ def _int_register_addrs() -> set:
 
 
 def test_precedence_multiply_before_add(compile_gq):
-    # 2 + 3 * 4: '*' binds tighter than '+', so the "3 * 4" subexpression
-    # must be fully evaluated (and folded to a single register) before the
-    # outer addition -- MULBY has to appear before ADDBY in the op stream,
-    # regardless of the operators' left-to-right order in the source.
+    # 2 + 3 * 4: both operands of both operators are literals, so
+    # gamequeer#385's constant folding collapses the entire expression to a
+    # single literal (14, respecting '*' binding tighter than '+' -- a
+    # naive left-to-right fold would wrongly give (2+3)*4 = 20) instead of
+    # emitting any MULBY/ADDBY at all. Before gamequeer#385, this compiled
+    # to a 6-op SETVAR/MULBY/SETVAR/ADDBY/SETVAR/DONE sequence; see
+    # test_precedence_multiply_before_add_mixed_with_variable below for that
+    # shape's still-live register-based-precedence coverage.
     source = game_with_stage("x = 2 + 3 * 4;", "volatile { int x = 0; }")
     exit_code, stderr, out_dir = compile_gq(source)
     assert exit_code == 0, stderr
 
     ops = one_event((out_dir / "cmds.gqasm").read_text()).ops
-    assert [op.name for op in ops] == [
-        "SETVAR", "MULBY", "SETVAR", "ADDBY", "SETVAR", "DONE",
-    ]
+    assert [op.name for op in ops] == ["SETVAR", "DONE"]
+    setvar_x, _done = ops
+    assert setvar_x.flags & structs.OpFlags.LITERAL_ARG2
+    assert setvar_x.arg2 == 14
 
-    setvar3, mulby, setvar2, addby, setvar_x, _done = ops
 
-    # "3" is loaded into a register and multiplied by literal 4 in place.
-    assert setvar3.arg2 == 3
-    assert mulby.flags & structs.OpFlags.LITERAL_ARG2
-    assert mulby.arg2 == 4
-    assert mulby.arg1 == setvar3.arg1  # same accumulator register
+def test_precedence_multiply_before_add_mixed_with_variable(compile_gq):
+    # Same precedence shape as above, but with a non-literal left operand
+    # (y) so the expression can't fold away entirely -- '*' still binds
+    # tighter than '+', so the literal-only "3 * 4" subtree folds to a
+    # single literal 12 first (MULBY never appears in the op stream), and
+    # only the outer "y + 12" survives as a real runtime add.
+    source = game_with_stage("x = y + 3 * 4;", "volatile { int x = 0; int y = 0; }")
+    exit_code, stderr, out_dir = compile_gq(source)
+    assert exit_code == 0, stderr
 
-    # "2" is loaded into a second register, which then accumulates the
-    # (already-computed) product -- not a literal add.
-    assert setvar2.arg2 == 2
-    assert not (addby.flags & structs.OpFlags.LITERAL_ARG2)
-    assert addby.arg1 == setvar2.arg1
-    assert addby.arg2 == mulby.arg1  # the product's register
+    ops = one_event((out_dir / "cmds.gqasm").read_text()).ops
+    assert [op.name for op in ops] == ["SETVAR", "ADDBY", "SETVAR", "DONE"]
 
+    setvar_y, addby, setvar_x, _done = ops
+    assert not (setvar_y.flags & structs.OpFlags.LITERAL_ARG2)  # loads y
+    assert addby.flags & structs.OpFlags.LITERAL_ARG2
+    assert addby.arg2 == 12  # the folded "3 * 4"
+    assert addby.arg1 == setvar_y.arg1  # accumulates into y's own register
     assert setvar_x.arg2 == addby.arg1
 
 
 def test_left_assoc_subtraction_chain_folds_left(compile_gq):
-    # "10 - 5 - 2" must compile as (10 - 5) - 2 = 3, not 10 - (5 - 2) = 7:
-    # a flat 3-op SETVAR/SUBBY/SUBBY shape against a single accumulator,
-    # not a right-recursive tree needing a second register.
+    # "10 - 5 - 2" is entirely literal, so gamequeer#385 folds it to a
+    # single literal 3 -- (10 - 5) - 2, not the wrong right-assoc
+    # 10 - (5 - 2) = 7 a naive fold could produce. Before gamequeer#385,
+    # this compiled to a 4-op SETVAR/SUBBY/SUBBY/SETVAR/DONE sequence; see
+    # test_left_assoc_subtraction_chain_mixed_with_variable_folds_left below
+    # for that shape's still-live left-associativity coverage.
     source = game_with_stage("x = 10 - 5 - 2;", "volatile { int x = 0; }")
     exit_code, stderr, out_dir = compile_gq(source)
     assert exit_code == 0, stderr
 
     ops = one_event((out_dir / "cmds.gqasm").read_text()).ops
-    assert [op.name for op in ops] == ["SETVAR", "SUBBY", "SUBBY", "SETVAR", "DONE"]
+    assert [op.name for op in ops] == ["SETVAR", "DONE"]
+    setvar_x, _done = ops
+    assert setvar_x.flags & structs.OpFlags.LITERAL_ARG2
+    assert setvar_x.arg2 == 3
 
-    setvar10, subby5, subby2, setvar_x, _done = ops
-    assert setvar10.arg2 == 10
-    assert subby5.arg1 == setvar10.arg1 and subby5.arg2 == 5
-    assert subby2.arg1 == setvar10.arg1 and subby2.arg2 == 2
-    assert setvar_x.arg2 == setvar10.arg1  # single accumulator throughout
+
+def test_left_assoc_subtraction_chain_mixed_with_variable_folds_left(compile_gq):
+    # "10 - 5 - y" left-folds as (10 - 5) - y: the leftmost literal-only
+    # pair ("10 - 5") folds to a single literal 5 first, and only the
+    # trailing "5 - y" survives as a real runtime subtraction -- not
+    # 10 - (5 - y), which would need a second register.
+    source = game_with_stage("x = 10 - 5 - y;", "volatile { int x = 0; int y = 0; }")
+    exit_code, stderr, out_dir = compile_gq(source)
+    assert exit_code == 0, stderr
+
+    ops = one_event((out_dir / "cmds.gqasm").read_text()).ops
+    assert [op.name for op in ops] == ["SETVAR", "SUBBY", "SETVAR", "DONE"]
+
+    setvar5, subby_y, setvar_x, _done = ops
+    assert setvar5.flags & structs.OpFlags.LITERAL_ARG2 and setvar5.arg2 == 5
+    assert not (subby_y.flags & structs.OpFlags.LITERAL_ARG2)  # subtracts y itself
+    assert subby_y.arg1 == setvar5.arg1  # single accumulator throughout
+    assert setvar_x.arg2 == setvar5.arg1
 
 
 # --- unary operators ---------------------------------------------------------
@@ -140,17 +168,24 @@ def test_unary_neg_and_badge_get_qcget(compile_gq):
 # --- register allocation ------------------------------------------------------
 
 
-def _balanced_sum_tree(depth: int) -> str:
+def _balanced_sum_tree(depth: int, leaf: str = "1") -> str:
     """A fully-balanced binary tree of `+` operations, `depth` levels deep
-    (e.g. depth 2 -> "((1+1)+(1+1))"). Each level of nesting needs one more
+    (e.g. depth 2, leaf "1" -> "((1+1)+(1+1))"). With a non-foldable `leaf`
+    (a variable reference), each level of nesting needs one more
     concurrently-live register than the last (the left subtree's result
     register stays allocated across the right subtree's own evaluation), so
     this is a clean way to dial up register pressure independently of
     gamequeer#345's nested shift/or chains (see test_expressions.py) -- gqc
-    has exactly 4 int registers (GQ_REGISTERS_INT)."""
+    has exactly 4 int registers (GQ_REGISTERS_INT).
+
+    `leaf` defaults to a literal for gamequeer#385's own fold-away
+    demonstration (see test_register_allocation_depth_5_literal_tree_folds_
+    away_entirely below): register-pressure tests that want this shape's
+    *register* behavior, not its foldability, must pass a variable name
+    instead (e.g. `leaf="v"`)."""
     if depth == 0:
-        return "1"
-    half = _balanced_sum_tree(depth - 1)
+        return leaf
+    half = _balanced_sum_tree(depth - 1, leaf)
     return f"({half}+{half})"
 
 
@@ -158,9 +193,13 @@ def test_register_allocation_depth_4_balanced_tree_compiles(compile_gq):
     # A depth-4 balanced tree has 2**4 - 1 = 15 '+' nodes, and exactly fits
     # gqc's 4-register int file at its peak (see
     # test_register_allocation_depth_5_exhausts_registers for one level
-    # deeper, which doesn't fit).
+    # deeper, which doesn't fit). Uses a variable leaf, not a literal one --
+    # gamequeer#385 folds an all-literal version of this shape away
+    # entirely (see test_register_allocation_depth_5_literal_tree_folds_
+    # away_entirely), which would defeat the point of a register-pressure
+    # test.
     source = game_with_stage(
-        f"x = {_balanced_sum_tree(4)};", "volatile { int x = 0; }"
+        f"x = {_balanced_sum_tree(4, leaf='v')};", "volatile { int x = 0; int v = 1; }"
     )
     exit_code, stderr, out_dir = compile_gq(source)
     assert exit_code == 0, stderr
@@ -177,14 +216,34 @@ def test_register_allocation_depth_4_balanced_tree_compiles(compile_gq):
 
 def test_register_allocation_depth_5_exhausts_registers(compile_gq):
     # One level deeper needs a 5th concurrently-live register, which
-    # gqc doesn't have -- a clean diagnostic, not a crash.
+    # gqc doesn't have -- a clean diagnostic, not a crash. Variable leaf,
+    # same reasoning as test_register_allocation_depth_4_balanced_tree_
+    # compiles above.
     source = game_with_stage(
-        f"x = {_balanced_sum_tree(5)};", "volatile { int x = 0; }"
+        f"x = {_balanced_sum_tree(5, leaf='v')};", "volatile { int x = 0; int v = 1; }"
     )
     exit_code, stderr, _ = compile_gq(source)
     assert exit_code != 0
     assert_no_traceback(stderr)
     assert "No free registers available" in stderr
+
+
+def test_register_allocation_depth_5_literal_tree_folds_away_entirely(compile_gq):
+    # gamequeer#385's register-pressure win, demonstrated directly: the
+    # exact depth-5 all-literal shape that used to exhaust gqc's 4-register
+    # int file (see test_register_allocation_depth_5_exhausts_registers,
+    # which pins that same shape's *variable*-leaf equivalent still doing
+    # so) now folds to a single literal at parse time, with no registers,
+    # no ADDBY, and no compile error at all. 2**5 == 32.
+    source = game_with_stage(f"x = {_balanced_sum_tree(5)};", "volatile { int x = 0; }")
+    exit_code, stderr, out_dir = compile_gq(source)
+    assert exit_code == 0, stderr
+
+    ops = one_event((out_dir / "cmds.gqasm").read_text()).ops
+    assert [op.name for op in ops] == ["SETVAR", "DONE"]
+    setvar_x, _done = ops
+    assert setvar_x.flags & structs.OpFlags.LITERAL_ARG2
+    assert setvar_x.arg2 == 32
 
 
 # --- setvar-int control-flow (gamequeer#338) -----------------------------------
