@@ -401,8 +401,11 @@ def test_volatile_init_code_shape():
     symbol_table = linker.create_symbol_table(table_dest=io.StringIO(), cmd_dest=io.StringIO())
     init_cmds = list(symbol_table[".init"].values())
 
+    n_int_regs = len(structs.GQ_REGISTERS_INT)
+    n_str_regs = len(structs.GQ_REGISTERS_STR)
+
     # Reserved int registers first, literal-initialized to 0:
-    for cmd in init_cmds[:4]:
+    for cmd in init_cmds[:n_int_regs]:
         assert isinstance(cmd, CommandSetInt)
         assert cmd.dst_name in structs.GQ_REGISTERS_INT
         assert cmd.command_flags & structs.OpFlags.LITERAL_ARG2
@@ -410,13 +413,14 @@ def test_volatile_init_code_shape():
 
     # Then the reserved string registers, initialized from a paired
     # persistent `.init` copy (not a literal -- strings can't be).
-    for cmd in init_cmds[4:8]:
+    for cmd in init_cmds[n_int_regs : n_int_regs + n_str_regs]:
         assert isinstance(cmd, CommandSetStr)
         assert cmd.dst_name in structs.GQ_REGISTERS_STR
         assert not (cmd.command_flags & structs.OpFlags.LITERAL_ARG2)
 
     # Then the user's own declared volatile variables, in declaration order.
-    x_init, s_init = init_cmds[8], init_cmds[9]
+    x_init = init_cmds[n_int_regs + n_str_regs]
+    s_init = init_cmds[n_int_regs + n_str_regs + 1]
     assert isinstance(x_init, CommandSetInt) and x_init.dst_name == "x"
     assert x_init.command_flags & structs.OpFlags.LITERAL_ARG2 and x_init.arg2 == 7
     assert isinstance(s_init, CommandSetStr) and s_init.dst_name == "s"
