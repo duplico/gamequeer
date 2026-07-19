@@ -47,6 +47,17 @@ def assert_no_traceback(stderr: str):
     assert "Traceback" not in stderr, f"raw Python traceback leaked to stderr:\n{stderr}"
 
 
+def _int_register_addrs() -> set:
+    """The on-cart (heap-namespaced) addresses of gqc's `GQ_REGISTERS_INT`
+    -- `structs.GQ_REGISTERS_INT` itself is a list of register *names*, not
+    addresses, so op-stream assertions that compare against an `arg1`/`arg2`
+    address need this instead."""
+    return {
+        structs.gq_ptr_apply_ns(structs.GQ_PTR_NS_HEAP, i * structs.GQ_INT_SIZE)
+        for i in range(len(structs.GQ_REGISTERS_INT))
+    }
+
+
 # --- precedence and associativity -------------------------------------------
 
 
@@ -123,7 +134,7 @@ def test_unary_neg_and_badge_get_qcget(compile_gq):
     assert not (neg.flags & structs.OpFlags.LITERAL_ARG2)
     # NEG's arg1 is the destination register; arg2 is y's own address, not
     # a register -- unary ops don't need to pre-load their sole operand.
-    assert neg.arg2 not in structs.GQ_REGISTERS_INT and neg.arg2 != 0
+    assert neg.arg2 not in _int_register_addrs() and neg.arg2 != 0
 
 
 # --- register allocation ------------------------------------------------------
@@ -157,15 +168,11 @@ def test_register_allocation_depth_4_balanced_tree_compiles(compile_gq):
     ops = one_event((out_dir / "cmds.gqasm").read_text()).ops
     assert sum(1 for op in ops if op.name == "ADDBY") == 15
 
-    all_int_register_addrs = {
-        structs.gq_ptr_apply_ns(structs.GQ_PTR_NS_HEAP, i * structs.GQ_INT_SIZE)
-        for i in range(len(structs.GQ_REGISTERS_INT))
-    }
     touched_addrs = {op.arg1 for op in ops if op.name in ("SETVAR", "ADDBY")}
     # All 4 registers get touched somewhere in the course of the tree (the
     # final SETVAR stores the result into `x` itself, not a register, so
     # this is a subset check rather than equality).
-    assert all_int_register_addrs <= touched_addrs
+    assert _int_register_addrs() <= touched_addrs
 
 
 def test_register_allocation_depth_5_exhausts_registers(compile_gq):
