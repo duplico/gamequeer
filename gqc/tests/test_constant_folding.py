@@ -24,7 +24,8 @@ Folding policy, pinned here:
     folding it would turn a runtime behavior into either a compile-time
     crash or a silently wrong constant);
   - `badge_get` never folds, regardless of its operand -- it reads live
-    badge state, not a constant;
+    badge state, not a constant; `badge_count()` (gamequeer#387), which has
+    no operand at all, never folds for the same reason;
   - a result that wouldn't fit `t_gq_int` (signed 32-bit) is left unfolded
     (gqc does not replicate the target compiler's signed-overflow
     behavior), as is a `<<`/`>>` shift amount outside `[0, 31]` or a `<<`
@@ -370,3 +371,26 @@ def test_badge_get_never_folds_even_with_a_literal_operand(compile_gq):
     addby = next(op for op in ops if op.name == "ADDBY")
     assert addby.flags & structs.OpFlags.LITERAL_ARG2
     assert addby.arg2 == 1
+
+
+# --- badge_count() never folds (gamequeer#387) -------------------------------
+
+
+def test_badge_count_never_folds(compile_gq):
+    # badge_count() reads live badge state, not a constant, even though it
+    # (unlike badge_get) has no operand at all to tempt a naive fold check
+    # -- combined with a literal `+ 1` so a bug that treated it as foldable
+    # would visibly collapse the whole expression to a single SETVAR
+    # instead of a real loop + ADDBY.
+    source = game_with_stage("x = badge_count() + 1;", "volatile { int x = 0; }")
+    exit_code, stderr, out_dir = compile_gq(source)
+    assert exit_code == 0, stderr
+    cmds = (out_dir / "cmds.gqasm").read_text()
+    ops = one_event(cmds).ops
+    assert any(op.name == "QCGET" for op in ops)
+    addby_ops = [op for op in ops if op.name == "ADDBY"]
+    # One ADDBY inside the popcount loop (acc += bit) and one for the "+ 1"
+    # itself, with the literal on the outer one.
+    assert len(addby_ops) == 2
+    addby_literal = next(op for op in addby_ops if op.flags & structs.OpFlags.LITERAL_ARG2)
+    assert addby_literal.arg2 == 1

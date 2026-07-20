@@ -6,6 +6,7 @@ from .parser import parse_event_definition, parse_command, parse_assignment, par
 from .parser import parse_menu_definition, parse_bound_menu, parse_play
 from .parser import parse_int_expression, parse_int_operand, parse_str_literal, parse_if
 from .parser import parse_str_expression, parse_string_cast_operand
+from .parser import parse_badge_count_operand
 
 """
 Grammar for GQC language
@@ -76,9 +77,17 @@ int_assignment = identifier "=" int_expression ";"
 # including str(x) appearing inside a "+" chain (gamequeer#386).
 string_assignment = identifier ":=" ((string_cast &";") | string_expression) ";"
 
-int_operand = identifier | integer
+int_operand = badge_count_call | identifier | integer
 string_cast = 'str' '(' int_expression ')'
 string_operand = identifier | string | string_cast
+
+# badge_count() is a nullary popcount intrinsic over the 320-bit
+# badges-seen bitfield (gamequeer#387): "how many distinct badges has this
+# badge seen?" It always lowers to a runtime loop over the existing
+# badge_get opcode (QCGET) -- there's no argument to type-check, so unlike
+# badge_get it takes an empty, mandatory parameter list, not a bare operand
+# form.
+badge_count_call = "badge_count" "(" ")"
 
 # Shorthand; see https://stackoverflow.com/a/23956778
 # badge_get is a right-associative unary prefix operator, e.g. badge_get(x).
@@ -167,7 +176,18 @@ def build_game_parser():
     event_statements = pp.Forward()
     
     # Assignments and expressions
-    int_operand = identifier | integer
+    # badge_count() -- a nullary popcount intrinsic over the badges-seen
+    # bitfield (gamequeer#387). Keyword("badge_count"), not a bare string,
+    # so it doesn't swallow a `badge_count`-prefixed identifier
+    # (gamequeer#354's badge_get/badge_getter fix, same reasoning). The `-`
+    # after the Keyword commits once "badge_count" itself has matched, so
+    # e.g. `badge_count(5)` fails with a clean, source-located
+    # ParseSyntaxException at the unexpected "5" rather than silently
+    # falling through to some other (wrong) interpretation.
+    badge_count_call = pp.Group(pp.Keyword("badge_count") - pp.Suppress("(") - pp.Suppress(")")).set_name("badge_count_call")
+    badge_count_call.set_parse_action(parse_badge_count_operand)
+
+    int_operand = badge_count_call | identifier | integer
     int_operand.set_parse_action(parse_int_operand)
     int_expression = pp.infix_notation(int_operand, [
         (pp.Keyword('badge_get') | pp.one_of('! - ~'), 1, pp.opAssoc.RIGHT),

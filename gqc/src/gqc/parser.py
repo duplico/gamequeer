@@ -6,7 +6,8 @@ import pyparsing as pp
 from rich import print
 
 from .datamodel import Animation, Game, Stage, Variable, Event, Menu, LightCue, StrExpression
-from .datamodel import IntExpression, GqcIntOperand, GqcStrCastOperand, fold_constant_int_expression
+from .datamodel import IntExpression, GqcIntOperand, GqcStrCastOperand, GqcBadgeCountOperand
+from .datamodel import fold_constant_int_expression
 from .commands import CommandPlay, CommandGoStage, CommandCue, CommandCastStr
 from .commands import CommandSetStr, CommandSetInt, CommandWithIntExpressionArgument
 from .commands import CommandTimer, CommandIf, CommandGoto, CommandLoop, Command, CommandType
@@ -218,8 +219,16 @@ def parse_assignment(instring, loc, toks):
 
     return [['setvar', dst, src, datatype]]
 
+def parse_badge_count_operand(instring, loc, toks):
+    # badge_count() (gamequeer#387) never carries any data of its own -- it
+    # always lowers to the same fixed loop-over-badge_get shape (see
+    # IntExpression._emit_badge_count) -- so the sentinel returned here is
+    # just a marker for parse_int_operand/parse_int_expression/
+    # IntExpression.get_result_symbol to recognize, not a value container.
+    return GqcBadgeCountOperand()
+
 def parse_int_operand(instring, loc, toks):
-    if isinstance(toks[0], GqcIntOperand):
+    if isinstance(toks[0], (GqcIntOperand, GqcBadgeCountOperand)):
         return toks[0]
     elif isinstance(toks[0], int):
         return GqcIntOperand(True, toks[0])
@@ -241,6 +250,19 @@ def parse_int_expression(instring, loc, toks):
         # re-folding/re-constructing it (which would double-alloc its
         # registers -- see gamequeer#345).
         return toks
+    if isinstance(toks, GqcBadgeCountOperand):
+        # badge_count() as the *entire* RHS, e.g. "x = badge_count();" --
+        # with no sibling operator at this nesting level, infix_notation
+        # hands this back as a bare atom rather than a
+        # [operand, op, operand] token group. Unlike a bare variable
+        # reference, badge_count() always emits real commands (its
+        # popcount loop), so it needs an IntExpression wrapper even here;
+        # get_result_symbol recognizes the same sentinel to build that
+        # loop (see IntExpression._emit_badge_count).
+        try:
+            return IntExpression([toks], instring, loc)
+        except ValueError as ve:
+            raise GqcParseError(str(ve), instring, loc)
 
     # pyparsing's infix_notation hands us a flat token list [a, op1, b, op2,
     # c, ...] for a chain of same-precedence (opAssoc.LEFT) operators. Fold
