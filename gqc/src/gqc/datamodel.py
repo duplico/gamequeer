@@ -1267,13 +1267,15 @@ class IntExpression:
         popcount loop over the *existing* `badge_get` opcode (`QCGET`) --
         the FROZEN VM CONTRACT rules out both a new dedicated opcode and a
         new register. The alternative would be to unroll `BADGES_ALLOWED`
-        (320) `QCGET`+`ADDBY` pairs inline; that's ~2x fewer *runtime* ops
-        (no per-iteration `GOTOIFN`/`GOTO` overhead) but ~7x more
-        *bytecode* (320 * 2 = 640 ops vs. this loop's fixed 9, regardless of
-        `BADGES_ALLOWED`) for every call site -- a bad trade for something
-        meant to be sugar. The issue (gamequeer#387) also specifies the
-        loop form directly ("the hand-rolled loop-over-badge_get(i)
-        bytecode").
+        (320) `QCGET`+`ADDBY` pairs inline; that's ~3x fewer *runtime* ops
+        per call (no per-iteration `GOTOIFN`/`GOTO` overhead: ~642 for an
+        unrolled sequence vs. ~1924 for this loop -- 2 init ops, then 320
+        iterations of a 6-op `GOTOIFN`+3-op-body+`GOTO`x2 truthy pass, plus
+        one final falsy pass) but ~70x more *bytecode* (320 * 2 = 640 ops
+        vs. this loop's fixed 9, regardless of `BADGES_ALLOWED`) for every
+        call site -- a bad trade for something meant to be sugar. The issue
+        (gamequeer#387) also specifies the loop form directly ("the
+        hand-rolled loop-over-badge_get(i) bytecode").
 
         Counts the loop variable *down* from `BADGES_ALLOWED` to 0, so the
         continue-test is a bare truthiness check on the counter register
