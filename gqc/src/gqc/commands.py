@@ -592,6 +592,63 @@ class CommandLoop(Command):
 
         return f"LOOP {self.commands}"
 
+def unregister_orphaned_commands(cmds: list):
+    """Remove `cmds` -- and anything nested inside a `CommandIf`'s
+    true/false branches or a `CommandLoop`'s own body -- from the global
+    `Command.command_list` bookkeeping list.
+
+    `IntExpression.get_result_symbol` (`datamodel.py`) discards an
+    already-built `IntExpression` -- a genuinely parenthesized
+    sub-expression, or one side of a same-precedence chain
+    `parser.parse_int_expression`'s left-fold pre-built in isolation -- and
+    re-derives its subtree from raw tokens under the *outer* expression's
+    own shared register pool instead. That's the only way to safely
+    combine two independently-register-allocated command sequences (a
+    naive splice-the-final-result-register-in instead of rebuilding isn't
+    safe in general: two sibling pre-built sub-expressions, e.g.
+    `(badge_count()) + (badge_count())`, each started from an *empty*
+    register pool in isolation and so can easily have picked the *same*
+    register name for their own internal work -- splicing both command
+    sequences back to back would let the second one's internal register
+    reuse clobber the first one's still-unconsumed result).
+
+    Discarding an already-built `IntExpression` like this is harmless for
+    every leaf/operator that existed before gamequeer#387: their
+    `resolve()` only ever depends on a `Variable`/`Stage` symbol-table
+    lookup, which still succeeds regardless of whether the orphaned copy
+    ever gets attached to the real program tree. It is NOT harmless for a
+    `badge_count()` (gamequeer#387) -- the first feature to put a
+    `CommandLoop`/`CommandIf`/break-or-continue-form `CommandGoto` inside
+    int-expression codegen: `CommandGoto.resolve()` doesn't consult
+    `unresolved_symbols` at all -- it just tests whether *some* owning
+    `CommandLoop.set_addr()` tree-walk has patched its real jump target
+    into `arg1`, which only happens for commands actually attached to the
+    final Event/Stage tree. An orphaned copy is discarded specifically
+    because its containing `CommandLoop` never gets `set_addr()` called on
+    it, so without this cleanup its `arg1` -- and therefore `resolve()` --
+    would stay permanently 0/`False`, and `linker.py`'s final "is
+    everything resolved?" sweep over `Command.command_list` (which doesn't
+    distinguish "genuinely dangling" from "safely discarded and rebuilt
+    elsewhere") would report a fatal unresolved-command error despite
+    nothing in the actual compiled program ever referencing it.
+    """
+    for cmd in cmds:
+        try:
+            Command.command_list.remove(cmd)
+        except ValueError:
+            # Already removed (reachable via more than one nested path) or
+            # never registered -- either way, nothing left to do.
+            pass
+
+        if isinstance(cmd, CommandIf):
+            unregister_orphaned_commands(cmd.true_cmds)
+            if cmd.false_cmds:
+                unregister_orphaned_commands(cmd.false_cmds)
+            if cmd.goto_cmd:
+                unregister_orphaned_commands([cmd.goto_cmd])
+        elif isinstance(cmd, CommandLoop):
+            unregister_orphaned_commands(cmd.commands)
+
 class CommandTimer(CommandWithIntExpressionArgument):
     def __init__(self, instring, loc, interval : GqcIntOperand | IntExpression):
         super().__init__(CommandType.TIMER, instring, loc, interval)

@@ -64,6 +64,74 @@ def test_badge_get_standalone_statement_rejects(compile_gq):
     assert "ParseSyntaxException" in stderr
 
 
+# --- badge_count() (gamequeer#387) -------------------------------------------
+# Unlike badge_get, badge_count() is a nullary *call* -- no bare-operand
+# form, and its parens are mandatory (empty) rather than wrapping an
+# argument.
+
+
+def test_badge_count_call_accepts(compile_gq):
+    source = game_with_stage("x = badge_count();", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_badge_count_combined_with_binary_op_accepts(compile_gq):
+    source = game_with_stage("x = badge_count() + 1;", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_badge_count_in_if_condition_accepts(compile_gq):
+    # The realistic threshold-unlock idiom from the gamequeer#387 issue.
+    source = game_with_stage(
+        "if (badge_count() >= 5) { badge_set 42; }", "volatile { int x = 0; }"
+    )
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_badge_count_with_argument_rejects(compile_gq):
+    # badge_count() is nullary -- Keyword("badge_count") commits (via the
+    # grammar's `-`) as soon as "badge_count" itself matches, so a spurious
+    # argument fails with a clean, source-located ParseSyntaxException
+    # rather than silently being ignored or falling through to some other
+    # (wrong) grammar interpretation.
+    source = game_with_stage("x = badge_count(5);", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+    assert "ParseSyntaxException" in stderr
+
+
+def test_badge_count_standalone_statement_rejects(compile_gq):
+    # Like badge_get, badge_count() only appears inside an int_expression --
+    # it's not a statement on its own.
+    source = game_with_stage("badge_count();")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+
+
+def test_badge_count_prefixed_identifier_in_expression_accepts(compile_gq):
+    # "badge_count" is matched via Keyword(), so it doesn't swallow a
+    # badge_count-*prefixed* identifier -- same reasoning as
+    # test_badge_get_prefixed_identifier_in_expression_accepts above
+    # (gamequeer#354).
+    source = game_with_stage(
+        "y = badge_counter + 1;",
+        "volatile { int badge_counter = 0; int y = 0; }",
+    )
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_badge_count_bare_no_parens_rejects(compile_gq):
+    # Unlike badge_get, badge_count has no bare-operand form -- the parens
+    # (even though empty) are mandatory.
+    source = game_with_stage("x = badge_count;", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+
+
 # --- str() cast: whole-RHS and inline (gamequeer#386) ------------------------
 
 

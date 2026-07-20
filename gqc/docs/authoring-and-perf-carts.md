@@ -58,7 +58,19 @@ and `input(BTN)` where `BTN` ∈ `A`, `B`, `<-`, `->`, `-` (click).
 with `continue` / `break`, `badge_set`/`badge_clear`, and assignments
 (`x = expr;` int, `s := expr;` string with `+` concat and `str(int)` cast);
 `badge_get` is not a statement but a unary operator usable inside int
-expressions (e.g. `x = badge_get(5) + 1;`).
+expressions (e.g. `x = badge_get(5) + 1;`); `badge_count()` (nullary,
+parens mandatory) is a popcount over the whole badges-seen bitfield, e.g.
+`if (badge_count() >= 5) { ... }`.
+
+**`badge_count()` is heavy -- a ~9-op runtime loop over all 320 badge
+slots, not an O(1) lookup.** Call it once (e.g. on a stage's `enter` event)
+and cache the result in a variable rather than re-evaluating it from a
+per-tick or per-frame handler. It also holds 3 of gqc's 4 int registers
+(`GQ_REGISTERS_INT`) for the duration of that loop -- an enclosing
+expression has at most 1 register free while it's evaluating (3 again once
+it returns); a second `badge_count()` in the *same* expression (or any
+other expression that needs 2+ registers concurrently with the first
+one's still-live result) can hit `No free registers available`.
 The `play` forms are:
 
 ```

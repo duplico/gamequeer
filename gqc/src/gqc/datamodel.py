@@ -33,6 +33,17 @@ GqcIntOperand = namedtuple('GqcIntOperand', 'is_literal value')
 # other operand that needs to be loaded into a register.
 GqcStrCastOperand = namedtuple('GqcStrCastOperand', 'int_expr')
 
+# `badge_count()` -- a nullary popcount intrinsic over the 320-bit
+# badges-seen bitfield (gamequeer#387). It carries no data of its own (no
+# argument, no variable/literal backing it), so -- unlike `GqcIntOperand` --
+# it can never be returned as-is as a subexpression's result; it always has
+# to be lowered into a runtime loop first (see
+# `IntExpression._emit_badge_count`). This is just the marker
+# `parser.parse_badge_count_operand`/`parse_int_operand`/
+# `IntExpression.get_result_symbol` recognize to trigger that lowering, the
+# same role `GqcStrCastOperand` plays for an inline `str(x)` cast.
+GqcBadgeCountOperand = namedtuple('GqcBadgeCountOperand', [])
+
 class Game:
     link_table = dict() # OrderedDict not needed to remember order since Python 3.7
     game_name : str = None
@@ -997,8 +1008,10 @@ def fold_constant_int_expression(node):
     from the VM's actual runtime behavior:
       - any operand references a variable or a register, rather than being
         a literal;
-      - the operator is `badge_get` -- it reads live badge state, not a
-        constant, regardless of whether its operand is a literal;
+      - the operator is `badge_get`, or the node is a `badge_count()` call
+        -- both read live badge state, not a constant, regardless of
+        whether `badge_get`'s own operand is a literal (`badge_count()`
+        never has one);
       - a `/` or `%` whose literal divisor is 0 -- the VM leaves this
         unguarded at runtime (see `run_arithmetic`), so folding it would
         turn a runtime behavior into either a compile-time crash or a
@@ -1029,6 +1042,15 @@ def fold_constant_int_expression(node):
 
     if isinstance(node, GqcIntOperand):
         return node.value if node.is_literal else None
+
+    if isinstance(node, GqcBadgeCountOperand):
+        # badge_count() reads live badge state, not a constant -- same
+        # reasoning as badge_get below, just with no operand of its own to
+        # even consider (gamequeer#387). `node_len not in (2, 3)` a few
+        # lines down would decline this anyway (a 0-field namedtuple has
+        # `len() == 0`), but that's incidental; this is the intentional,
+        # explicit no-fold.
+        return None
 
     # The remaining shape is a raw `[operand, op, operand]` / `[op, operand]`
     # token group -- a plain `list` when built by this module's own
@@ -1154,15 +1176,36 @@ class IntExpression:
         self.used_registers.remove(reg)
 
     def get_result_symbol(self, subexpr : list) -> GqcIntOperand:
-        from .commands import CommandSetInt, CommandArithmetic
+        from .commands import CommandSetInt, CommandArithmetic, unregister_orphaned_commands
 
         if isinstance(subexpr, IntExpression):
+            # About to discard subexpr's own pre-built commands and
+            # re-derive its subtree from raw tokens under *this*
+            # expression's own register pool instead (see
+            # unregister_orphaned_commands's docstring for why that's the
+            # only safe way to combine two independently-allocated
+            # register pools, and why the discard needs this cleanup step
+            # -- gamequeer#387).
+            unregister_orphaned_commands(subexpr.commands)
             subexpr = subexpr.expression_toks
+
+        if isinstance(subexpr, GqcBadgeCountOperand):
+            # A badge_count() leaf reached directly, e.g. as one operand of
+            # a binary op ("badge_count() + 1" hands this get_result_symbol
+            # call subexpr[0] bare, not wrapped in a list) -- gamequeer#387.
+            return self._emit_badge_count()
 
         if isinstance(subexpr, GqcIntOperand):
             return subexpr
         elif len(subexpr) == 1:
-            return subexpr[0]
+            # subexpr[0] may itself be a bare GqcBadgeCountOperand -- e.g.
+            # the sole atom of "x = badge_count();", which
+            # parser.parse_int_expression wraps as
+            # IntExpression([GqcBadgeCountOperand()], ...). Recurse instead
+            # of handing it back unresolved; every other len-1 shape here is
+            # already a GqcIntOperand (or an IntExpression to unwrap), so
+            # this recursion is a no-op passthrough for them.
+            return self.get_result_symbol(subexpr[0])
         elif len(subexpr) > 3:
             raise ValueError(f"Invalid subexpression length {len(subexpr)}: should be [operand, operator, operand] or [operator operand]")
 
@@ -1218,6 +1261,80 @@ class IntExpression:
         # All GQ arithmetic commands are actually accumulators, so the result is always stored in the left operand.
         #  So, we can return the left operand as the result of this subexpression.
         return operand0
+
+    def _emit_badge_count(self) -> GqcIntOperand:
+        """Lower a `badge_count()` leaf (gamequeer#387) to a runtime
+        popcount loop over the *existing* `badge_get` opcode (`QCGET`) --
+        the FROZEN VM CONTRACT rules out both a new dedicated opcode and a
+        new register. The alternative would be to unroll `BADGES_ALLOWED`
+        (320) `QCGET`+`ADDBY` pairs inline; that's ~2x fewer *runtime* ops
+        (no per-iteration `GOTOIFN`/`GOTO` overhead) but ~7x more
+        *bytecode* (320 * 2 = 640 ops vs. this loop's fixed 9, regardless of
+        `BADGES_ALLOWED`) for every call site -- a bad trade for something
+        meant to be sugar. The issue (gamequeer#387) also specifies the
+        loop form directly ("the hand-rolled loop-over-badge_get(i)
+        bytecode").
+
+        Counts the loop variable *down* from `BADGES_ALLOWED` to 0, so the
+        continue-test is a bare truthiness check on the counter register
+        itself (`CommandIf` with that register as its own condition) --
+        not a `>=`/`>` comparison, which would need yet another register:
+        every `CommandArithmetic` op (comparisons included) overwrites its
+        own destination, so comparing the counter directly against a bound
+        would clobber it.
+
+        Register cost: allocates 3 of gqc's 4 `GQ_REGISTERS_INT` for the
+        duration of the loop (accumulator, counter, per-iteration
+        `badge_get` result); only the accumulator survives past this method
+        as the returned result. An enclosing expression that evaluates a
+        second `badge_count()` -- or otherwise needs 2+ registers -- while
+        the first's accumulator is still live can exhaust the register file
+        (`No free registers available`, the same pre-existing diagnostic
+        `test_register_allocation_depth_5_exhausts_registers` covers for
+        deeply nested arithmetic). See docs/authoring-and-perf-carts.md.
+        """
+        from .commands import CommandSetInt, CommandArithmetic, CommandIf, CommandGoto, CommandLoop
+
+        acc_reg = self.alloc_register()
+        idx_reg = self.alloc_register()
+        acc_operand = GqcIntOperand(is_literal=False, value=acc_reg)
+        idx_operand = GqcIntOperand(is_literal=False, value=idx_reg)
+
+        self.commands.append(CommandSetInt(self.instring, self.loc, acc_reg, GqcIntOperand(is_literal=True, value=0)))
+        self.commands.append(CommandSetInt(self.instring, self.loc, idx_reg, GqcIntOperand(is_literal=True, value=structs.BADGES_ALLOWED)))
+
+        bit_reg = self.alloc_register()
+        bit_operand = GqcIntOperand(is_literal=False, value=bit_reg)
+
+        # while (idx) { idx -= 1; bit = badge_get(idx); acc += bit; }
+        # -- idx is decremented *before* use, so it visits BADGES_ALLOWED-1
+        # down to 0 inclusive (BADGES_ALLOWED distinct badge indices), never
+        # BADGES_ALLOWED itself (which get_badge_bit() would reject as
+        # out-of-range and return 0 for anyway -- see gamequeer.c -- but
+        # this keeps the index space exactly [0, BADGES_ALLOWED) with no
+        # reliance on that guard).
+        decrement_and_accumulate = [
+            CommandArithmetic(structs.OpCode.SUBBY, self.instring, self.loc, idx_operand, GqcIntOperand(is_literal=True, value=1)),
+            CommandArithmetic(structs.OpCode.QCGET, self.instring, self.loc, bit_operand, idx_operand),
+            CommandArithmetic(structs.OpCode.ADDBY, self.instring, self.loc, acc_operand, bit_operand),
+        ]
+        guarded_body = [
+            CommandIf(
+                self.instring, self.loc, idx_operand,
+                decrement_and_accumulate,
+                [CommandGoto(self.instring, self.loc, form='break')],
+            )
+        ]
+        self.commands.append(CommandLoop(self.instring, self.loc, guarded_body))
+
+        # idx/bit are pure loop scratch, done for good once the loop is
+        # built; acc is this method's result and stays allocated, exactly
+        # like a unary op's freshly-allocated destination register does at
+        # this same point in the len(subexpr) == 2 branch above.
+        self.free_register(bit_reg)
+        self.free_register(idx_reg)
+
+        return acc_operand
 
     def resolve(self):
         if self.resolved:
