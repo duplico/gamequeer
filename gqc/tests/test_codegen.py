@@ -628,3 +628,183 @@ def test_event_table_pointers_enum_order_unused_slots_zero(compile_gq):
             assert slot == blocks[event_type.name].addr
         else:
             assert slot == 0
+
+
+# --- inline str() casts within concat chains (gamequeer#386) ---------------
+# str(x) used to only be legal as the entire RHS of a `:=`; it's now also
+# legal as one operand of a `+` concatenation chain. Lowering reuses the
+# existing SETVAR(TYPE_STR|TYPE_INT)/STRCAT ops unchanged (no new bytecode)
+# -- an inline str(x) becomes a CommandCastStr into a freshly-allocated
+# string register (SETVAR flags 0x03: TYPE_INT|TYPE_STR), which then
+# participates in the surrounding chain's STRCAT accumulation exactly like
+# any other register-resident operand.
+
+
+def _str_register_addrs() -> set:
+    """The on-cart (heap-namespaced) addresses of `structs.GQ_REGISTERS_STR`.
+    `create_reserved_variables` (gqc/src/gqc/linker.py) declares all of
+    GQ_REGISTERS_INT before any of GQ_REGISTERS_STR, and volatile heap
+    addresses are assigned in declaration order, so the string registers'
+    base offset is the int registers' total footprint."""
+    base = len(structs.GQ_REGISTERS_INT) * structs.GQ_INT_SIZE
+    return {
+        structs.gq_ptr_apply_ns(structs.GQ_PTR_NS_HEAP, base + i * structs.GQ_STR_SIZE)
+        for i in range(len(structs.GQ_REGISTERS_STR))
+    }
+
+
+def test_inline_str_cast_at_chain_head_stays_single_register(compile_gq):
+    # str(x) as the *first* operand: it's already register-resident once
+    # cast, so it doubles as the chain's accumulator -- no separate "load
+    # into a register" SETVAR, just CAST then STRCAT, STRCAT.
+    source = game_with_stage(
+        's := str(x) + "b" + player;',
+        'volatile { int x = 0; str s := ""; str player := "p"; }',
+    )
+    exit_code, stderr, out_dir = compile_gq(source)
+    assert exit_code == 0, stderr
+
+    ops = one_event((out_dir / "cmds.gqasm").read_text()).ops
+    assert [op.name for op in ops] == ["SETVAR", "STRCAT", "STRCAT", "SETVAR", "DONE"]
+    cast, strcat_b, strcat_player, setvar_s, _done = ops
+
+    str_regs = _str_register_addrs()
+    assert cast.flags == structs.OpFlags.TYPE_INT | structs.OpFlags.TYPE_STR
+    assert cast.arg1 in str_regs
+    accumulator = cast.arg1
+
+    assert strcat_b.arg1 == accumulator
+    assert strcat_player.arg1 == accumulator
+    assert setvar_s.arg2 == accumulator
+
+
+def test_inline_str_cast_at_chain_tail_pins_deferred_register_load_order(compile_gq):
+    # str(x) as the *last* operand of a 3-term chain: StrExpression's
+    # get_result_symbol resolves the right operand (here, the cast) before
+    # deciding the left operand ("a") needs loading into a register -- a
+    # pre-existing ordering quirk (see the analogous, already-documented one
+    # in IntExpression.get_result_symbol), not something gamequeer#386
+    # introduces. The *emitted op order* therefore casts x before loading
+    # "a", even though "a" reads left-to-right first in the source; the
+    # *string value* is still built up left-to-right via the STRCAT
+    # sequence below, which is the guarantee that actually matters. Pinned
+    # here so a future change to that resolution order shows up as a
+    # deliberate diff in this test, not a silent behavior change.
+    source = game_with_stage(
+        's := "a" + str(x) + "b";',
+        'volatile { int x = 0; str s := ""; }',
+    )
+    exit_code, stderr, out_dir = compile_gq(source)
+    assert exit_code == 0, stderr
+
+    ops = one_event((out_dir / "cmds.gqasm").read_text()).ops
+    assert [op.name for op in ops] == [
+        "SETVAR", "SETVAR", "STRCAT", "STRCAT", "SETVAR", "DONE",
+    ]
+    cast, load_a, strcat_cast, strcat_b, setvar_s, _done = ops
+
+    str_regs = _str_register_addrs()
+    # The cast (str(x)) runs first, into its own register...
+    assert cast.flags == structs.OpFlags.TYPE_INT | structs.OpFlags.TYPE_STR
+    assert cast.arg1 in str_regs
+    cast_reg = cast.arg1
+
+    # ...then "a" loads into a *different* register, which becomes the
+    # accumulator for the rest of the chain.
+    assert load_a.flags == structs.OpFlags.TYPE_STR
+    assert load_a.arg1 in str_regs
+    accumulator = load_a.arg1
+    assert accumulator != cast_reg
+
+    # Value order is still left-to-right: accumulator ("a") += cast (x)
+    # first, then += "b".
+    assert strcat_cast.arg1 == accumulator and strcat_cast.arg2 == cast_reg
+    assert strcat_b.arg1 == accumulator
+    assert setvar_s.arg2 == accumulator
+
+
+def test_inline_str_cast_mid_chain_and_multiple_in_one_chain(compile_gq):
+    # Two inline casts in the same chain, neither at the head or tail --
+    # also confirms a per-cast register is freed for reuse once its STRCAT
+    # lands (only 2 of the 4 GQ_REGISTERS_STR are ever concurrently live
+    # for any single concat chain, no matter how many str() casts it
+    # contains -- string concatenation is always a flat left-associative
+    # accumulator, never a nested tree, so there's no register-exhaustion
+    # case analogous to the int side's balanced-tree one).
+    source = game_with_stage(
+        's := "[" + str(x) + "-" + str(y) + "]";',
+        'volatile { int x = 0; int y = 0; str s := ""; }',
+    )
+    exit_code, stderr, out_dir = compile_gq(source)
+    assert exit_code == 0, stderr
+
+    ops = one_event((out_dir / "cmds.gqasm").read_text()).ops
+    names = [op.name for op in ops]
+    assert names == [
+        "SETVAR", "SETVAR", "STRCAT", "STRCAT", "SETVAR", "STRCAT", "STRCAT", "SETVAR", "DONE",
+    ]
+    casts = [op for op in ops if op.flags == (structs.OpFlags.TYPE_INT | structs.OpFlags.TYPE_STR)]
+    assert len(casts) == 2
+
+    str_regs = _str_register_addrs()
+    assert all(op.arg1 in str_regs for op in casts)
+    # Each cast lands in a fresh register, distinct from the accumulator.
+    setvar_s = ops[-2]
+    assert setvar_s.name == "SETVAR"
+    accumulator = setvar_s.arg2
+    for cast in casts:
+        assert cast.arg1 != accumulator
+
+
+def test_standalone_str_cast_of_variable_regression_unchanged(compile_gq):
+    # The whole-RHS `str(x)` form (x a variable, not a compile-time
+    # constant) keeps its pre-gamequeer#386 direct-to-dst lowering: a single
+    # SETVAR(TYPE_INT|TYPE_STR) with x's address embedded as arg2, no
+    # intermediate register and no STRCAT.
+    source = game_with_stage(
+        's := str(x);', "volatile { int x = 0; str s := \"\"; }"
+    )
+    exit_code, stderr, out_dir = compile_gq(source)
+    assert exit_code == 0, stderr
+
+    ops = one_event((out_dir / "cmds.gqasm").read_text()).ops
+    assert [op.name for op in ops] == ["SETVAR", "DONE"]
+    cast, _done = ops
+    assert cast.flags == structs.OpFlags.TYPE_INT | structs.OpFlags.TYPE_STR
+    assert cast.arg1 not in _str_register_addrs()  # dst is `s`, not a register
+
+
+def test_standalone_str_cast_of_literal_folds_to_plain_setvar(compile_gq):
+    # Interplay with gamequeer#385: str() of a compile-time-constant
+    # argument is folded to an ordinary string literal at parse time (see
+    # parser.parse_string_cast_operand), so the whole-RHS form now compiles
+    # to a plain string SETVAR (TYPE_STR only, referencing the literal's
+    # address) instead of a runtime CommandCastStr -- zero runtime ops for
+    # the cast itself.
+    source = game_with_stage(
+        's := str(-12345);', "volatile { str s := \"\"; }"
+    )
+    exit_code, stderr, out_dir = compile_gq(source)
+    assert exit_code == 0, stderr
+
+    ops = one_event((out_dir / "cmds.gqasm").read_text()).ops
+    assert [op.name for op in ops] == ["SETVAR", "DONE"]
+    setvar_s, _done = ops
+    assert setvar_s.flags == structs.OpFlags.TYPE_STR  # not TYPE_INT: no cast
+
+
+def test_inline_str_cast_of_literal_folds_no_cast_op_emitted(compile_gq):
+    # Same folding, inline inside a concat chain: str(5) contributes a
+    # plain string-literal operand, so the chain never allocates a register
+    # or emits a CAST for it -- only the ordinary SETVAR/STRCAT accumulation
+    # shape a two-literal-operand `+` chain would produce anyway.
+    source = game_with_stage(
+        's := str(5) + "x";', "volatile { str s := \"\"; }"
+    )
+    exit_code, stderr, out_dir = compile_gq(source)
+    assert exit_code == 0, stderr
+
+    ops = one_event((out_dir / "cmds.gqasm").read_text()).ops
+    assert [op.name for op in ops] == ["SETVAR", "STRCAT", "SETVAR", "DONE"]
+    load_5, strcat_x, setvar_s, _done = ops
+    assert load_5.flags == structs.OpFlags.TYPE_STR  # not TYPE_INT: no cast op

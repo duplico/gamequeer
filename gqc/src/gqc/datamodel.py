@@ -22,6 +22,17 @@ FrameOnDisk = namedtuple('FrameOnDisk', ['compression_type_name', 'width', 'heig
 CueColor = namedtuple('CueColor', ['name', 'r', 'g', 'b'])
 GqcIntOperand = namedtuple('GqcIntOperand', 'is_literal value')
 
+# A `str(<int_expression>)` cast appearing as one operand of a `+`
+# string-concatenation chain (gamequeer#386), as opposed to the whole RHS of
+# a `:=` (which stays on the `CommandCastStr`-direct-to-dst path it always
+# used -- see `parser.parse_assignment`). `int_expr` is whatever
+# `int_expression`'s own parse action already produced: a `GqcIntOperand` or
+# an `IntExpression`. `StrExpression.get_result_symbol` lowers this to a
+# `CommandCastStr` writing into a freshly-allocated string register, reusing
+# the same register pool (and the same free-after-use bookkeeping) as any
+# other operand that needs to be loaded into a register.
+GqcStrCastOperand = namedtuple('GqcStrCastOperand', 'int_expr')
+
 class Game:
     link_table = dict() # OrderedDict not needed to remember order since Python 3.7
     game_name : str = None
@@ -1270,10 +1281,19 @@ class StrExpression:
         self.used_registers.remove(reg)
 
     def get_result_symbol(self, subexpr : list) -> str:
-        from .commands import CommandSetStr, CommandStrModify
+        from .commands import CommandSetStr, CommandStrModify, CommandCastStr
 
         if isinstance(subexpr, StrExpression):
             subexpr = subexpr.expression_toks
+
+        if isinstance(subexpr, GqcStrCastOperand):
+            # An inline `str(x)` operand (gamequeer#386): there's no existing
+            # variable to just reference, so cast into a fresh string
+            # register -- same register pool, same free-after-use lifecycle
+            # as loading any other operand into a register below.
+            reg = self.alloc_register()
+            self.commands.append(CommandCastStr(self.instring, self.loc, reg, subexpr.int_expr))
+            return reg
 
         if isinstance(subexpr, str):
             return subexpr
