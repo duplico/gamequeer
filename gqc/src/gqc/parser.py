@@ -6,7 +6,7 @@ import pyparsing as pp
 from rich import print
 
 from .datamodel import Animation, Game, Stage, Variable, Event, Menu, LightCue, StrExpression
-from .datamodel import IntExpression, GqcIntOperand
+from .datamodel import IntExpression, GqcIntOperand, fold_constant_int_expression
 from .commands import CommandPlay, CommandGoStage, CommandCue, CommandCastStr
 from .commands import CommandSetStr, CommandSetInt, CommandWithIntExpressionArgument
 from .commands import CommandTimer, CommandIf, CommandGoto, CommandLoop, Command, CommandType
@@ -251,6 +251,19 @@ def parse_int_expression(instring, loc, toks):
         last_op = toks[-2]
         last_operand = toks[-1]
         toks = [parse_int_expression(instring, loc, ltoks), last_op, last_operand]
+
+    # A compile-time-constant (sub)expression -- e.g. the entire RHS of
+    # "x = (1 + 2);", or "(1 + 2 + 3 + 4)" after the left-fold above --
+    # folds to a single literal instead of an IntExpression, matching the
+    # bare-atom shape a plain "x = 3;" would already produce (gamequeer#385).
+    # Mirrors the IntExpression passthrough above: this only ever sees a
+    # fully-parenthesized or outermost group, since a non-parenthesized
+    # nested precedence group (e.g. the "2*3" in "2*3+x") never reaches
+    # parse_int_expression as its own invocation -- that case is folded by
+    # IntExpression.get_result_symbol instead.
+    folded = fold_constant_int_expression(toks)
+    if folded is not None:
+        return GqcIntOperand(is_literal=True, value=folded)
 
     try:
         return IntExpression(toks, instring, loc)

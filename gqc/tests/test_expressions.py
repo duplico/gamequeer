@@ -31,6 +31,19 @@ verified end to end against the headless emulator during development (see
 the gamequeer#345 PR description) with a pass/fail gate cart (correct
 result -> one lightcue, wrong result -> another) at nesting depths 1-3,
 including a negative control confirming the gate discriminates correctly.
+
+gamequeer#385 added compile-time constant folding for int expressions whose
+operands are all literals. Several cases below are entirely literal (that
+was the easiest way to pin gamequeer#345's parenthesization/associativity
+fixes independently of variable resolution), so they now fold away to a
+single literal rather than emitting real ADDBY/SUBBY ops -- their
+assertions were updated (not just re-pinned) to check the *folded value* is
+still correct, per gamequeer#385's own stated policy of deliberately
+flipping baselines that a literal-only expression used to reach. Where a
+case's original intent was to pin *codegen shape* (single-accumulator
+register reuse, left-associativity) rather than a specific literal value,
+a `_mixed_with_variable` sibling using a non-foldable operand preserves
+that coverage instead.
 """
 
 import pytest
@@ -57,39 +70,66 @@ def assert_no_traceback(stderr: str):
 
 
 def test_fully_parenthesized_pair_compiles_with_correct_value(compile_gq):
+    # Entirely literal -- gamequeer#385 folds this to a single literal 3 at
+    # parse time, so no ADDBY (or any register) is emitted at all. Before
+    # gamequeer#385, this was one ADDBY against immediate 2.
     source = game_with_stage("x = (1 + 2);", "volatile { int x = 0; }")
     exit_code, stderr, out_dir = compile_gq(source)
     assert exit_code == 0, stderr
     assert_no_traceback(stderr)
     cmds = (out_dir / "cmds.gqasm").read_text()
-    addby_lines = [line for line in cmds.splitlines() if "ADDBY" in line]
-    assert len(addby_lines) == 1
-    assert "0x00000002" in addby_lines[0]
+    assert "ADDBY" not in cmds
+    setvar_lines = [line for line in cmds.splitlines() if "SETVAR" in line]
+    assert len(setvar_lines) == 1
+    assert "0x00000003" in setvar_lines[0]
 
 
 def test_fully_parenthesized_chain_compiles_with_correct_value(compile_gq):
-    # The parenthesized RHS is itself a >3-token left-fold chain, so this
-    # exercises both bugs at once: the fold first reduces "1+2+3+4" to a
-    # single IntExpression, and then the outer bare-atom re-invocation used
-    # to crash trying to len() that already-built IntExpression.
+    # The parenthesized RHS is itself a >3-token left-fold chain (exercising
+    # gamequeer#345's fix, which built an IntExpression for it before the
+    # outer bare-atom re-invocation saw it), but it's also entirely literal,
+    # so gamequeer#385 folds the whole thing to a single literal 10 instead
+    # of the 3-ADDBY single-accumulator sequence this used to emit.
     source = game_with_stage("x = (1 + 2 + 3 + 4);", "volatile { int x = 0; }")
     exit_code, stderr, out_dir = compile_gq(source)
     assert exit_code == 0, stderr
     assert_no_traceback(stderr)
     cmds = (out_dir / "cmds.gqasm").read_text()
-    addby_lines = [line for line in cmds.splitlines() if "ADDBY" in line]
-    # Single accumulator register throughout -- same left-fold guarantee as
-    # the unparenthesized chain (gamequeer#341).
-    assert len(addby_lines) == 3
-    assert "0x00000002" in addby_lines[0]
-    assert "0x00000003" in addby_lines[1]
-    assert "0x00000004" in addby_lines[2]
-    # Column layout is "Address Command Op Flags arg1 arg2" (see
-    # linker.create_symbol_table's gqasm header) -- arg1 (index 4) is the
-    # destination register; index 3 is Flags, which is constant across
-    # these lines and wouldn't catch a register-reuse regression.
-    dest_regs = {line.split()[4] for line in addby_lines}
-    assert len(dest_regs) == 1
+    assert "ADDBY" not in cmds
+    setvar_lines = [line for line in cmds.splitlines() if "SETVAR" in line]
+    assert len(setvar_lines) == 1
+    assert "0x0000000a" in setvar_lines[0]  # 10
+
+
+def test_fully_parenthesized_chain_mixed_with_variable_stays_single_register(compile_gq):
+    # Same >3-token left-fold chain and parenthesization as above, but with
+    # a trailing variable so it can't fold away entirely: "1+2+3+y" left-
+    # folds as ((1+2)+3)+y. The purely-literal leading pair "1+2" folds to a
+    # single literal 3 first, then "3+3" (still literal) folds to 6, and
+    # only the final "+y" survives as a real accumulator add -- preserving
+    # the single-accumulator-register guarantee gamequeer#341/#345 pinned
+    # for the fully-literal version of this shape before gamequeer#385.
+    source = game_with_stage(
+        "x = (1 + 2 + 3 + y);", "volatile { int x = 0; int y = 0; }"
+    )
+    exit_code, stderr, out_dir = compile_gq(source)
+    assert exit_code == 0, stderr
+    assert_no_traceback(stderr)
+    cmds = (out_dir / "cmds.gqasm").read_text()
+    lines = cmds.splitlines()
+    addby_lines = [line for line in lines if "ADDBY" in line]
+    setvar_lines = [line for line in lines if "SETVAR" in line]
+    assert len(addby_lines) == 1
+    # The folded "1+2+3" (6) is loaded as ADDBY's accumulator operand, not
+    # ADDBY's own arg2 -- ADDBY itself adds y's (non-literal) address.
+    assert any("0x00000006" in line for line in setvar_lines)
+    # Column layout is "Address Command Op Flags arg1 arg2" -- arg1 (index
+    # 4) is the destination register; confirm ADDBY accumulates into the
+    # same register the folded literal 6 was loaded into.
+    dest_reg = addby_lines[0].split()[4]
+    assert any(
+        "0x00000006" in line and line.split()[4] == dest_reg for line in setvar_lines
+    )
 
 
 # --- exact gamequeer#345 repro shapes: nested (1<<a | 1<<b) | (...) chains --
@@ -118,19 +158,33 @@ def test_nested_shift_or_chain_previously_typeerror_now_compiles(compile_gq, pai
     assert_no_traceback(stderr)
 
 
-def test_nested_shift_or_chain_4_pairs_register_exhaustion_boundary(compile_gq):
-    # Pin the current (post-fix) 4-register-exhaustion boundary: gqc has
-    # exactly 4 int registers (GQ_REGISTERS_INT), and this shape's 4 nested
-    # `(1<<a)|(1<<b)` groups each need a register alive concurrently with
-    # its enclosing OR, exhausting the pool. This is a clean, documented
-    # GqcParseError-style diagnostic, not a crash.
+def test_nested_shift_or_chain_4_pairs_no_longer_exhausts_registers(compile_gq):
+    # Before gamequeer#385, this shape's 4 nested `(1<<a)|(1<<b)` groups
+    # each needed a register alive concurrently with its enclosing OR,
+    # exhausting gqc's 4-register int file (GQ_REGISTERS_INT) -- a clean,
+    # documented GqcParseError-style diagnostic, not a crash.
+    #
+    # gamequeer#385's constant folding changes this: each `(1<<a)|(1<<b)`
+    # pair here has both `a` and `b` in [0, 31] (valid shift amounts), so
+    # every pair folds to a single literal at parse time -- and because
+    # IntExpression.get_result_symbol resolves a node's *right* operand
+    # before deciding whether its (literal) *left* operand needs a
+    # register, a folded literal's register load is deferred until after
+    # the whole right-hand recursion (down to the one real, unfoldable
+    # `1<<50` at the base) has already run and freed its own temporaries.
+    # Concurrent register pressure no longer grows with nesting depth, so
+    # this pair count -- and, empirically, every pair count reachable
+    # before pyparsing's own parse-depth limit kicks in at 5 (see
+    # test_nested_shift_or_chain_5_pairs_previously_recursionerror_now_
+    # clean) -- compiles cleanly instead. General 4-register-exhaustion
+    # coverage that isn't foldable away lives in test_codegen.py's
+    # `_balanced_sum_tree(depth, leaf="v")` tests instead.
     source = game_with_stage(
         f"mask = {nested_shift_or_chain(4)};", "volatile { int mask = 0; }"
     )
     exit_code, stderr, _ = compile_gq(source)
-    assert exit_code != 0
+    assert exit_code == 0, stderr
     assert_no_traceback(stderr)
-    assert "No free registers available" in stderr
 
 
 def test_nested_shift_or_chain_5_pairs_previously_recursionerror_now_clean(compile_gq):
@@ -152,11 +206,32 @@ def test_nested_shift_or_chain_5_pairs_previously_recursionerror_now_clean(compi
 
 def test_nested_subtraction_evaluates_nonassociatively(compile_gq):
     # 10 - (5 - (2 - 1)) = 10 - (5 - 1) = 10 - 4 = 6, not the flat left-fold
-    # result. Was already correct pre-#345-fix (the outer expression isn't a
-    # bare parenthesized atom, so the buggy re-invocation path wasn't hit)
-    # -- pinned here as a regression guard now that parse_int_expression's
-    # atom-passthrough logic has changed.
+    # result -- and, being entirely literal, gamequeer#385 folds the whole
+    # thing to that single literal 6 at parse time, with no SUBBY at all.
+    # Before gamequeer#385, this was 3 SUBBY ops; see
+    # test_nested_subtraction_evaluates_nonassociatively_mixed_with_variable
+    # below for that shape's still-live non-associativity coverage.
     source = game_with_stage("x = 10 - (5 - (2 - 1));", "volatile { int x = 0; }")
+    exit_code, stderr, out_dir = compile_gq(source)
+    assert exit_code == 0, stderr
+    cmds = (out_dir / "cmds.gqasm").read_text()
+    assert "SUBBY" not in cmds
+    setvar_lines = [line for line in cmds.splitlines() if "SETVAR" in line]
+    assert len(setvar_lines) == 1
+    assert "0x00000006" in setvar_lines[0]
+
+
+def test_nested_subtraction_evaluates_nonassociatively_mixed_with_variable(compile_gq):
+    # Same nesting as above, but the innermost operand is a variable so the
+    # expression can't fold away entirely: 10 - (5 - (2 - y)), evaluated
+    # from the inside out via register reuse (not the flat left-fold
+    # 10 - (5 - 2) - y would give). Each level's literal (2, 5, then 10)
+    # arrives via its own SETVAR, and SUBBY operates register-to-register
+    # at each step -- pinning the same non-associative codegen shape the
+    # original all-literal test covered before gamequeer#385.
+    source = game_with_stage(
+        "x = 10 - (5 - (2 - y));", "volatile { int x = 0; int y = 0; }"
+    )
     exit_code, stderr, out_dir = compile_gq(source)
     assert exit_code == 0, stderr
     cmds = (out_dir / "cmds.gqasm").read_text()
@@ -164,10 +239,12 @@ def test_nested_subtraction_evaluates_nonassociatively(compile_gq):
     subby_lines = [line for line in lines if "SUBBY" in line]
     setvar_lines = [line for line in lines if "SETVAR" in line]
     assert len(subby_lines) == 3
-    # Innermost "2 - 1" is the only SUBBY against an immediate; the outer two
-    # subtract a previously-computed register result (5 and 10 arrive as
-    # SETVAR-loaded literals, then SUBBY operates register-to-register).
-    assert "0x00000001" in subby_lines[0]  # 2 - 1
+    # Column layout is "Address Command Op Flags arg1 arg2" -- Flags (index
+    # 3) carries LITERAL_ARG2 (0x08) only when arg2 is an embedded literal.
+    # Innermost "2 - y" subtracts y's own (non-literal) address, unlike the
+    # outer two, which subtract a previously-computed register result (5
+    # and 10 arrive as SETVAR-loaded literals first).
+    assert subby_lines[0].split()[3] == "0x00"
     assert any("0x00000002" in line for line in setvar_lines)  # literal 2
     assert any("0x00000005" in line for line in setvar_lines)  # literal 5
     assert any("0x0000000a" in line for line in setvar_lines)  # literal 10 (0x0a)
@@ -177,13 +254,35 @@ def test_nested_subtraction_evaluates_nonassociatively(compile_gq):
 
 
 def test_flat_6_term_chain_stays_single_register(compile_gq):
+    # Entirely literal -- gamequeer#385 folds this to a single literal 21
+    # (0x15) at parse time, with no ADDBY at all. Before gamequeer#385, this
+    # was 5 ADDBY ops against a single accumulator register; see
+    # test_flat_6_term_chain_mixed_with_variable_stays_single_register below
+    # for that shape's still-live single-register coverage.
     source = game_with_stage("x = 1+2+3+4+5+6;", "volatile { int x = 0; }")
     exit_code, stderr, out_dir = compile_gq(source)
     assert exit_code == 0, stderr
     cmds = (out_dir / "cmds.gqasm").read_text()
-    addby_lines = [line for line in cmds.splitlines() if "ADDBY" in line]
-    assert len(addby_lines) == 5
-    # arg1 (index 4) is the destination register; see the column-layout
-    # note in test_fully_parenthesized_chain_compiles_with_correct_value.
-    dest_regs = {line.split()[4] for line in addby_lines}
-    assert len(dest_regs) == 1
+    assert "ADDBY" not in cmds
+    setvar_lines = [line for line in cmds.splitlines() if "SETVAR" in line]
+    assert len(setvar_lines) == 1
+    assert "0x00000015" in setvar_lines[0]  # 21
+
+
+def test_flat_6_term_chain_mixed_with_variable_stays_single_register(compile_gq):
+    # Same 6-term left-fold chain, but with a trailing variable so it can't
+    # fold away entirely: "1+2+3+4+5+y" left-folds its purely-literal
+    # leading run ("1+2+3+4+5") to a single literal 15 (0x0f) first, and
+    # only the final "+y" survives as a real accumulator add against a
+    # single register.
+    source = game_with_stage(
+        "x = 1+2+3+4+5+y;", "volatile { int x = 0; int y = 0; }"
+    )
+    exit_code, stderr, out_dir = compile_gq(source)
+    assert exit_code == 0, stderr
+    cmds = (out_dir / "cmds.gqasm").read_text()
+    lines = cmds.splitlines()
+    addby_lines = [line for line in lines if "ADDBY" in line]
+    setvar_lines = [line for line in lines if "SETVAR" in line]
+    assert len(addby_lines) == 1
+    assert any("0x0000000f" in line for line in setvar_lines)
