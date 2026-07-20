@@ -5,7 +5,7 @@ from .parser import parse_animation_definition, parse_stage_definition, parse_ga
 from .parser import parse_event_definition, parse_command, parse_assignment, parse_lightcue_definition_section
 from .parser import parse_menu_definition, parse_bound_menu, parse_play
 from .parser import parse_int_expression, parse_int_operand, parse_str_literal, parse_if
-from .parser import parse_str_expression
+from .parser import parse_str_expression, parse_string_cast_operand
 
 """
 Grammar for GQC language
@@ -69,10 +69,16 @@ badge_clear = "badge_clear" int_expression ";"
 
 assignment_statement = int_assignment | string_assignment
 int_assignment = identifier "=" int_expression ";"
-string_assignment = identifier ":=" (string_cast | string_expression) ";"
+# Tried whole-RHS-cast-first (only when immediately followed by ";", i.e.
+# str(x) is the *entire* RHS) so a bare "s := str(x);" keeps its direct,
+# no-intermediate-register lowering; falls back to string_expression
+# (whose string_operand also accepts string_cast) for anything else,
+# including str(x) appearing inside a "+" chain (gamequeer#386).
+string_assignment = identifier ":=" ((string_cast &";") | string_expression) ";"
 
 int_operand = identifier | integer
-string_operand = identifier | string
+string_cast = 'str' '(' int_expression ')'
+string_operand = identifier | string | string_cast
 
 # Shorthand; see https://stackoverflow.com/a/23956778
 # badge_get is a right-associative unary prefix operator, e.g. badge_get(x).
@@ -88,8 +94,6 @@ int_expression = pp.infixNotation(int_operand, [
     (pp.oneOf('== !='), 2, pp.opAssoc.LEFT),
     (pp.oneOf('&& ||'), 2, pp.opAssoc.LEFT),
 ])
-
-string_cast = 'str' '(' int_expression ')'
 
 string_expression = string_operand | string_operand '+' string_expression
 
@@ -182,14 +186,28 @@ def build_game_parser():
 
     string_literal = pp.QuotedString('"').setName("string_literal")
     string_literal.set_parse_action(parse_str_literal)
+    # `str(<int_expression>)`, valid both as the entire RHS of a `:=` (see
+    # string_assignment below) and, since gamequeer#386, as one operand of a
+    # `+` concatenation chain (via string_operand). Keyword("str") -- not a
+    # bare "str" literal -- so a `str`-prefixed identifier like `str_scratch`
+    # isn't swallowed (gamequeer#354).
     string_cast = pp.Group(pp.Suppress(pp.Keyword("str")) - pp.Suppress("(") - int_expression - pp.Suppress(")"))
-    string_operand = identifier | string_literal
+    string_cast.set_parse_action(parse_string_cast_operand)
+    string_operand = string_cast | identifier | string_literal
     string_expression = pp.infix_notation(string_operand, [
         ('+', 2, pp.opAssoc.LEFT),
     ])
     string_expression.set_parse_action(parse_str_expression)
 
-    string_assignment = pp.Keyword(":=") - (string_cast | string_expression) - pp.Suppress(";")
+    # Try the whole-RHS cast form first (only followed by ";", never a `+`)
+    # so a bare `s := str(x);` keeps its existing direct-to-`dst` lowering
+    # (CommandCastStr with no intermediate register -- see
+    # parser.parse_assignment) instead of always routing through
+    # string_expression's register-allocating machinery. If str(...) isn't
+    # the entire RHS (e.g. it's followed by `+`), FollowedBy(";") fails and
+    # this MatchFirst falls back to string_expression, whose string_operand
+    # now accepts string_cast inline.
+    string_assignment = pp.Keyword(":=") - ((string_cast + pp.FollowedBy(";")) | string_expression) - pp.Suppress(";")
 
     assignment_statement = pp.Group(identifier - (string_assignment | int_assignment))
     assignment_statement.add_parse_action(parse_assignment)

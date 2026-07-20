@@ -64,7 +64,7 @@ def test_badge_get_standalone_statement_rejects(compile_gq):
     assert "ParseSyntaxException" in stderr
 
 
-# --- str() cast: whole-RHS only ---------------------------------------------
+# --- str() cast: whole-RHS and inline (gamequeer#386) ------------------------
 
 
 def test_str_cast_whole_rhs_accepts(compile_gq):
@@ -75,15 +75,75 @@ def test_str_cast_whole_rhs_accepts(compile_gq):
     assert exit_code == 0, stderr
 
 
-def test_str_cast_partial_rhs_rejects(compile_gq):
-    # str(x) is only valid as the entire RHS of a string assignment, not as
-    # one operand of a `+` concatenation expression.
+def test_str_cast_inline_in_concat_chain_accepts(compile_gq):
+    # gamequeer#386: str(x) is no longer restricted to the entire RHS of a
+    # string assignment -- it can appear as one operand of a `+`
+    # concatenation chain too.
     source = game_with_stage(
         's := str(x) + "b";', "volatile { int x = 0; str s := \"\"; }"
     )
     exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_str_cast_inline_at_head_of_chain_accepts(compile_gq):
+    source = game_with_stage(
+        's := str(x) + "b" + "c";', "volatile { int x = 0; str s := \"\"; }"
+    )
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_str_cast_inline_multiple_in_one_chain_accepts(compile_gq):
+    source = game_with_stage(
+        's := str(x) + "-" + str(y);',
+        "volatile { int x = 0; int y = 0; str s := \"\"; }",
+    )
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_str_cast_of_literal_expression_inline_accepts(compile_gq):
+    # Interplay with gamequeer#385: the cast's argument doesn't need to be
+    # a bare literal, just fold to one -- an arithmetic expression works
+    # the same way it does for a whole-RHS str().
+    source = game_with_stage(
+        's := "n=" + str(2 + 3);', "volatile { str s := \"\"; }"
+    )
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_str_cast_nested_str_of_str_rejects_cleanly(compile_gq):
+    # str()'s argument is an int_expression; another str(...) isn't a valid
+    # int_expression operand, so this is a plain grammar rejection, not a
+    # crash.
+    source = game_with_stage(
+        's := str(str(x));', "volatile { int x = 0; str s := \"\"; }"
+    )
+    exit_code, stderr, _ = compile_gq(source)
     assert exit_code != 0
-    assert "Expected ';'" in stderr
+    assert "Traceback" not in stderr
+
+
+def test_str_cast_of_string_literal_rejects_cleanly(compile_gq):
+    # str()'s argument must be an int_expression -- a quoted string isn't
+    # one.
+    source = game_with_stage(
+        's := str("5");', "volatile { str s := \"\"; }"
+    )
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+    assert "Traceback" not in stderr
+
+
+def test_str_cast_as_standalone_statement_rejects_cleanly(compile_gq):
+    # str(x) is only ever valid as an operand -- of `:=` (whole-RHS) or of
+    # `+` (inline) -- never as a bare statement on its own.
+    source = game_with_stage("str(x);", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+    assert "Traceback" not in stderr
 
 
 # --- animation option forms --------------------------------------------------

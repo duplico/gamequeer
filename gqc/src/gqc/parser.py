@@ -6,7 +6,7 @@ import pyparsing as pp
 from rich import print
 
 from .datamodel import Animation, Game, Stage, Variable, Event, Menu, LightCue, StrExpression
-from .datamodel import IntExpression, GqcIntOperand, fold_constant_int_expression
+from .datamodel import IntExpression, GqcIntOperand, GqcStrCastOperand, fold_constant_int_expression
 from .commands import CommandPlay, CommandGoStage, CommandCue, CommandCastStr
 from .commands import CommandSetStr, CommandSetInt, CommandWithIntExpressionArgument
 from .commands import CommandTimer, CommandIf, CommandGoto, CommandLoop, Command, CommandType
@@ -276,6 +276,29 @@ def parse_str_literal(instring, loc, toks):
     except ValueError as ve:
         raise GqcParseError(str(ve), instring, loc)
 
+def parse_string_cast_operand(instring, loc, toks):
+    # toks[0] is string_cast's own pp.Group, wrapping exactly the parsed
+    # int_expression (a GqcIntOperand or IntExpression -- int_expression's
+    # own parse action, parse_int_expression, has already run and already
+    # folded a compile-time-constant argument to a literal GqcIntOperand,
+    # gamequeer#385).
+    int_expr = toks[0][0]
+
+    if isinstance(int_expr, GqcIntOperand) and int_expr.is_literal:
+        # str() of a compile-time-constant argument is itself a compile-time
+        # constant (gamequeer#386): emit it as an ordinary string literal
+        # instead of a runtime cast. Python's str(int) matches the VM's
+        # gq_itoa decimal formatting (sign + digits, no leading zeros) for
+        # the whole t_gq_int range, and the longest possible result
+        # ("-2147483648", 11 chars) is always well under the
+        # GQ_STR_SIZE-1 = 21 char literal limit, so this can't raise.
+        try:
+            return Variable.get_str_literal(str(int_expr.value))
+        except ValueError as ve:
+            raise GqcParseError(str(ve), instring, loc)
+
+    return GqcStrCastOperand(int_expr)
+
 def parse_str_expression(instring, loc, toks):
     toks = toks[0]
     if isinstance(toks, str):
@@ -351,10 +374,12 @@ def parse_command(instring, loc, toks):
             if datatype == 'str':
                 if isinstance(src, str) or isinstance(src, StrExpression):
                     return CommandSetStr(instring, loc, dst, src)
-                else:
-                    src = src[0]
-                if isinstance(src, GqcIntOperand) or isinstance(src, IntExpression):
-                    return CommandCastStr(instring, loc, dst, src)
+                elif isinstance(src, GqcStrCastOperand):
+                    # The whole-RHS `str(x)` form (parse_string_cast_operand
+                    # only returns this wrapper for a non-foldable argument;
+                    # a literal one is already a plain str above) -- cast
+                    # straight into dst, no intermediate register.
+                    return CommandCastStr(instring, loc, dst, src.int_expr)
                 else:
                     raise GqcParseError(f"Invalid source {src} for string variable {dst}", instring, loc)
             else:

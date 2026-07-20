@@ -115,10 +115,11 @@ stage start {
 
         // label2: str(int) cast + concatenation of a literal, a persistent
         // str var, and a volatile int -- updated again on input(A) below.
-        // NB: the grammar only allows `str(x)` as the *entire* RHS of a
-        // `:=` (string_cast is a top-level alternative to string_expression,
-        // not composable inside a `+` chain) -- so the cast has to land in
-        // an intermediate str var (score_str) before it can be concatenated.
+        // Casts into an intermediate str var (score_str) here rather than
+        // inline (`... + str(score)`, gamequeer#386) to keep this fixture's
+        // coverage of the whole-RHS `str(x)` -> dst form (CommandCastStr,
+        // no intermediate register) alongside label4's; the inline form has
+        // its own coverage in gqc/tests/test_grammar.py and friends.
         GQI_LABEL2_X = 30;
         GQI_LABEL2_Y = 60;
         score_str := str(score);
