@@ -193,9 +193,13 @@ gamequeer#410, for the full mechanism and tick-margin derivation.
 happened to place next, since that firmware has no bounds check for a
 reserved-int offset it's never heard of. `gqc` refuses to compile a write to
 it (`Cannot assign to read-only variable GQI_FW_VERSION`). Read it only
-through `fw_version()`, not directly: a direct read before the probe has
-run — including on original firmware, which never populates it at all —
-returns that same undefined value, not `0`.
+through `fw_version()`, not directly: on original 2024 firmware — which
+never populates `GQI_FW_VERSION` at all — a direct read returns unspecified
+adjacent RAM, not `0`. Firmware that defines it populates it unconditionally
+at cart boot, so a direct read is well-defined there regardless of probe
+state — but a cart has no way to know which firmware it's on without
+running the probe, which is exactly the problem `fw_version()` exists to
+solve.
 
 ## 2. Labels (on-screen text)
 
