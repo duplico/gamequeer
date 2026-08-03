@@ -214,6 +214,15 @@ typedef enum gq_special_var_int {
     GQI_LABEL4_Y,
     GQI_LABEL_FLAGS,
     GQI_PLAYER_ID,
+    // gamequeer#411: firmware version, 0x60. Read-only from cart code (gqc
+    // rejects writes -- see structs.py's GQ_RESERVED_INTS) and undefined
+    // (not necessarily 0) on original 2024 firmware, which never heard of
+    // this offset; only meaningful after the gamequeer#410 probe establishes
+    // the running firmware is post-original. Firmware that defines it
+    // populates it once per cart load with a nonzero version (see
+    // HAL_new_game()); 0 continues to mean "original 2024 firmware" by
+    // convention, never an actual populated value.
+    GQI_FW_VERSION,
     GQI_COUNT
 } gq_special_var_int;
 
@@ -281,6 +290,7 @@ extern volatile uint8_t leds_animating;
 extern uint8_t gq_builtin_ints[];
 extern uint8_t gq_builtin_strs[];
 extern t_gq_int *player_id;
+extern t_gq_int *fw_version;
 
 extern uint8_t timer_active;
 extern t_gq_int timer_interval;

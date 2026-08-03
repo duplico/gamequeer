@@ -73,6 +73,10 @@ t_gq_int *label_flags = (t_gq_int *) &gq_builtin_ints[GQI_LABEL_FLAGS * GQ_INT_S
 
 t_gq_int *player_id = (t_gq_int *) &gq_builtin_ints[GQI_PLAYER_ID * GQ_INT_SIZE];
 
+// gamequeer#411: populated once per cart load by HAL_new_game() (see HAL.c),
+// never by cart bytecode -- gqc refuses to compile a write to GQI_FW_VERSION.
+t_gq_int *fw_version = (t_gq_int *) &gq_builtin_ints[GQI_FW_VERSION * GQ_INT_SIZE];
+
 char *game_title = (char *) &gq_builtin_strs[GQS_GAME_TITLE * GQ_STR_SIZE];
 
 char *labels[4] = {

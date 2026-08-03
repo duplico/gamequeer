@@ -212,8 +212,20 @@ void HAL_critical_exit(uint16_t prev_state) {
     (void) prev_state;
 }
 
+// gamequeer#411: this desktop/headless build's firmware version, reported
+// through GQI_FW_VERSION (see HAL_new_game() below). 0 is reserved to mean
+// "original 2024 firmware" by convention -- never set this to 0. Bump it
+// whenever this build gains a cart-observable capability worth gating on
+// (mirroring whatever scheme the badge firmware adopts for its own,
+// separate GQ_FW_VERSION -- see the qc2024 follow-up in gamequeer#411).
+#define GQ_FW_VERSION 1
+
 void HAL_new_game() {
-    // Nothing to do, on the emulator.
+    // Report this build's firmware version to cart code (gamequeer#411).
+    // Mirrors HAL_badge.c's HAL_new_game(), which does the analogous
+    // *player_id assignment for GQI_PLAYER_ID -- both run once per
+    // load_game() call (see gamequeer.c).
+    *fw_version = GQ_FW_VERSION;
 }
 
 void HAL_init(int argc, char *argv[]) {
