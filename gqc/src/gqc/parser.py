@@ -6,7 +6,7 @@ from rich import print
 
 from .datamodel import Animation, Game, Stage, Variable, Event, Menu, LightCue, StrExpression
 from .datamodel import IntExpression, GqcIntOperand, GqcStrCastOperand, GqcBadgeCountOperand
-from .datamodel import fold_constant_int_expression
+from .datamodel import fold_constant_int_expression, Constant, Enum
 from .commands import CommandPlay, CommandGoStage, CommandCue, CommandCastStr
 from .commands import CommandSetStr, CommandSetInt, CommandWithIntExpressionArgument
 from .commands import CommandTimer, CommandIf, CommandGoto, CommandLoop, Command, CommandType
@@ -182,6 +182,47 @@ def parse_variable_definition_storageclass(instring, loc, toks):
     for var in toks[1]:
         var.set_storageclass(storageclass)
 
+def parse_const_definition(instring, loc, toks):
+    # gamequeer#421: `const NAME = <int-expression>;`. `value` is whatever
+    # int_expression's own parse action already produced -- a literal
+    # GqcIntOperand if the RHS folded to a compile-time constant (gamequeer
+    # #385's fold_constant_int_expression, reused as-is via int_expression),
+    # or an IntExpression if it didn't (e.g. it references a variable, or a
+    # not-yet-defined name that reads as one -- see Constant's docstring in
+    # datamodel.py for why forward references aren't supported). Either way,
+    # a `const` has no runtime representation to fall back to, so anything
+    # short of an already-folded literal is rejected right here.
+    toks = toks[0]
+    name = toks[1]
+    value_operand = toks[2]
+
+    if not (isinstance(value_operand, GqcIntOperand) and value_operand.is_literal):
+        raise GqcParseError(
+            f"Constant {name} must be initialized with a compile-time "
+            "constant integer expression",
+            instring, loc,
+        )
+
+    try:
+        Constant.define(name, value_operand.value)
+    except ValueError as ve:
+        raise GqcParseError(str(ve), instring, loc)
+
+def parse_enum_definition(instring, loc, toks):
+    # gamequeer#421: `enum Name { A, B, C }`, auto-numbered from 0 in
+    # declaration order. Enum.define does the actual work (including
+    # registering each member into Constant.const_table under
+    # "Name.Member", see its docstring), so it can share the same
+    # duplicate-name and range-checking machinery as a plain `const`.
+    toks = toks[0]
+    name = toks[1]
+    members = list(toks[2])
+
+    try:
+        Enum.define(name, members)
+    except ValueError as ve:
+        raise GqcParseError(str(ve), instring, loc)
+
 def parse_lightcue_definition_section(instring, loc, toks):
     # Import here to avoid circular import
     from .cues import parse_cue
@@ -252,11 +293,32 @@ def parse_fw_version_operand(instring, loc, toks):
         Game.game.needs_fw_probe = True
     return GqcIntOperand(False, structs.GQ_FW_PROBE_RESULT_VAR)
 
+def parse_enum_member_operand(instring, loc, toks):
+    # `Name.Member` (gamequeer#421): resolved to its int value right here,
+    # at parse time, same as badge_count() above is resolved to its
+    # sentinel here -- by the time int_operand's own parse action
+    # (parse_int_operand, below) sees this, it's already a literal
+    # GqcIntOperand, indistinguishable from a bare int literal.
+    enum_name, member_name = toks[0]
+    try:
+        value = Enum.get_member_value(enum_name, member_name)
+    except ValueError as ve:
+        raise GqcParseError(str(ve), instring, loc)
+    return GqcIntOperand(is_literal=True, value=value)
+
 def parse_int_operand(instring, loc, toks):
     if isinstance(toks[0], (GqcIntOperand, GqcBadgeCountOperand)):
         return toks[0]
     elif isinstance(toks[0], int):
         return GqcIntOperand(True, toks[0])
+    elif toks[0] in Constant.const_table:
+        # A bare `const NAME` reference (gamequeer#421) -- substitute its
+        # value immediately, same as a literal int would parse. Must be
+        # declared earlier in the file (see Constant's docstring in
+        # datamodel.py); anything not already in the table by now is
+        # treated as an ordinary (possibly forward-declared) variable
+        # reference, exactly as before this feature existed.
+        return GqcIntOperand(True, Constant.const_table[toks[0]])
     else:
         return GqcIntOperand(False, toks[0])
 

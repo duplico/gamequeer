@@ -1198,6 +1198,95 @@ def fold_constant_int_expression(node):
 
     return result if _fits_t_gq_int(result) else None
 
+# --- named compile-time constants and enums (gamequeer#421) ------------------
+# `const NAME = <int-expression>;` and `enum Name { A, B, C }` are pure
+# compile-time sugar: every reference gqc emits is *already* the literal
+# int value substituted in at parse time (see parser.parse_int_operand and
+# parser.parse_enum_member_operand, below), by construction the exact same
+# GqcIntOperand shape a bare int literal produces -- so there is nothing
+# new for the linker or the VM to do with them (FROZEN VM CONTRACT: no new
+# opcode, register, or on-cart format change).
+#
+# Scoping (the "keep it simple" decision gamequeer#421 asks for): a single
+# flat, file-global namespace, resolved eagerly in source order -- a
+# `const`/`enum` must be declared *before* its first use, like a `#define`
+# in a single-pass C preprocessor. This is a deliberate departure from
+# ordinary variable/stage/animation references, which *are*
+# forward-reference-tolerant (see linker.py's multi-pass resolve sweep):
+# those all keep a name unresolved until link time, but a constant has no
+# runtime representation to stay unresolved *as* -- it has to already be a
+# literal by the time its use is parsed. gqc does not run a separate
+# constant-only pre-pass to lift this restriction; that's left as a
+# possible future enhancement if declare-before-use ever proves too
+# restrictive in practice.
+
+
+class Constant:
+    """A named compile-time integer constant (`const NAME = <int-expr>;`).
+
+    `const_table` is also where `Enum` registers each of its members, under
+    the composite key `"EnumName.Member"` (see `Enum.define`, below) --
+    that key can never collide with a plain `const` name because the
+    grammar's bare `identifier` token can't contain a `.`, so one flat
+    dict safely serves both forms and gives them a single shared
+    duplicate-name check.
+    """
+
+    const_table: dict[str, int] = {}
+
+    @classmethod
+    def define(cls, name: str, value: int) -> None:
+        if name in cls.const_table:
+            raise ValueError(f"Duplicate definition of constant {name}")
+        if not _fits_t_gq_int(value):
+            raise ValueError(
+                f"Constant {name} value {value} is out of range for a "
+                "32-bit int (t_gq_int)"
+            )
+        cls.const_table[name] = value
+
+
+class Enum:
+    """`enum Name { A, B, C }`: a named group of compile-time int constants,
+    auto-numbered from 0 in declaration order, referenced as `Name.Member`.
+
+    An enum is just sugar for a block of `const`s that share a name prefix
+    and get their values auto-assigned -- each member is registered into
+    `Constant.const_table` (under `"Name.Member"`) exactly as if the user
+    had written `const Name.Member = <index>;` themselves, so lookup,
+    duplicate-name rejection, and range-checking all reuse Constant's own
+    machinery rather than duplicating it.
+    """
+
+    enum_table: dict[str, list[str]] = {}
+
+    @classmethod
+    def define(cls, name: str, members: list[str]) -> None:
+        if name in cls.enum_table:
+            raise ValueError(f"Duplicate definition of enum {name}")
+
+        seen = set()
+        for member in members:
+            if member in seen:
+                raise ValueError(f"Duplicate member {member} in enum {name}")
+            seen.add(member)
+
+        cls.enum_table[name] = list(members)
+        for index, member in enumerate(members):
+            # Can't collide with Constant.define's own duplicate check
+            # (distinct enum names give distinct composite keys), so the
+            # only way this raises is the _fits_t_gq_int range check --
+            # unreachable in practice (it would take over 2**31 members).
+            Constant.define(f"{name}.{member}", index)
+
+    @classmethod
+    def get_member_value(cls, enum_name: str, member_name: str) -> int:
+        if enum_name not in cls.enum_table:
+            raise ValueError(f"Unknown enum {enum_name}")
+        if member_name not in cls.enum_table[enum_name]:
+            raise ValueError(f"Unknown member {member_name} of enum {enum_name}")
+        return Constant.const_table[f"{enum_name}.{member_name}"]
+
 class IntExpression:
     def __init__(self, expression_toks : list[GqcIntOperand], instring, loc):
         self.expression_toks = expression_toks

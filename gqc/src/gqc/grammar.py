@@ -8,13 +8,14 @@ from .parser import parse_int_expression, parse_int_operand, parse_str_literal, 
 from .parser import parse_str_expression, parse_string_cast_operand
 from .parser import parse_badge_count_operand
 from .parser import parse_fw_version_operand
+from .parser import parse_const_definition, parse_enum_definition, parse_enum_member_operand
 
 """
 Grammar for GQC language
 ========================
 
 program = top_level_section*
-top_level_section = game_definition_section | var_definition_section | animation_definition_section | lightcue_definition_section | menu_definition_section | stage_definition_section
+top_level_section = game_definition_section | var_definition_section | animation_definition_section | lightcue_definition_section | menu_definition_section | stage_definition_section | const_definition_section | enum_definition_section
 # Exactly one game_definition_section is required, but (gamequeer#420) it
 # may appear anywhere in the top-level section stream, not just first --
 # pyparsing's repetition here can't itself enforce "exactly one" (a rule
@@ -23,6 +24,8 @@ top_level_section = game_definition_section | var_definition_section | animation
 # instead: a second one is rejected by Game.__init__ (see
 # parser.parse_game_definition), and zero is rejected by parser.parse()
 # once the top-level repetition itself has finished matching.
+# const_definition_section / enum_definition_section (gamequeer#421) are
+# likewise just more top-level alternatives.
 
 game_definition_section = "game" "{" game_assignment* "}"
 game_id_assignment = "id" "=" integer ";"
@@ -36,6 +39,14 @@ var_definitions = var_definition | "{" var_definition* "}"
 var_definition = string_definition | int_definition
 string_definition = "str" identifier ":=" string ";" # | "str" identifier ";"
 int_definition = "int" identifier "=" integer ";" # | "int" identifier ";"
+
+# Named compile-time constants and enums (gamequeer#421): pure parse-time
+# sugar, folded to a literal int wherever they're referenced -- see
+# datamodel.Constant/datamodel.Enum for the scoping rules (single flat
+# file-global namespace, declare-before-use). Must be declared before their
+# first use.
+const_definition_section = "const" identifier "=" int_expression ";"
+enum_definition_section = "enum" identifier "{" identifier ("," identifier)* "}"
 
 animation_definition_section = "animations" animation_assignments
 animation_assignments = animation_assignment | "{" animation_assignment* "}"
@@ -86,7 +97,7 @@ int_assignment = identifier "=" int_expression ";"
 # including str(x) appearing inside a "+" chain (gamequeer#386).
 string_assignment = identifier ":=" ((string_cast &";") | string_expression) ";"
 
-int_operand = badge_count_call | identifier | integer
+int_operand = badge_count_call | enum_member_ref | identifier | integer
 string_cast = 'str' '(' int_expression ')'
 string_operand = identifier | string | string_cast
 
@@ -97,6 +108,11 @@ string_operand = identifier | string | string_cast
 # badge_get it takes an empty, mandatory parameter list, not a bare operand
 # form.
 badge_count_call = "badge_count" "(" ")"
+
+# Enum member reference (gamequeer#421), e.g. "Difficulty.Easy" -- resolved
+# to its int value at parse time, same as a bare int literal or a `const`
+# reference (see identifier's own const-lookup in parser.parse_int_operand).
+enum_member_ref = identifier "." identifier
 
 # Shorthand; see https://stackoverflow.com/a/23956778
 # badge_get is a right-associative unary prefix operator, e.g. badge_get(x).
@@ -202,7 +218,18 @@ def build_game_parser():
     fw_version_call = pp.Group(pp.Keyword("fw_version") - pp.Suppress("(") - pp.Suppress(")")).set_name("fw_version_call")
     fw_version_call.set_parse_action(parse_fw_version_operand)
 
-    int_operand = badge_count_call | fw_version_call | identifier | integer
+    # Enum member reference (gamequeer#421), e.g. "Difficulty.Easy" -- tried
+    # before the bare `identifier` alternative below so a dotted reference
+    # doesn't get swallowed as just its own leading identifier, leaving a
+    # stray "." for whatever follows to choke on. Plain `+` (not `-`): an
+    # ordinary identifier with no "." following it must fail *softly* here
+    # so MatchFirst falls through to the bare `identifier` alternative,
+    # rather than committing partway through like badge_count_call's `-`
+    # deliberately does above.
+    enum_member_ref = pp.Group(identifier + pp.Suppress(".") + identifier).set_name("enum_member_ref")
+    enum_member_ref.set_parse_action(parse_enum_member_operand)
+
+    int_operand = badge_count_call | fw_version_call | enum_member_ref | identifier | integer
     int_operand.set_parse_action(parse_int_operand)
     int_expression = pp.infix_notation(int_operand, [
         (pp.Keyword('badge_get') | pp.one_of('! - ~'), 1, pp.opAssoc.RIGHT),
@@ -218,6 +245,21 @@ def build_game_parser():
     ])
     int_expression.set_parse_action(parse_int_expression)
     int_assignment = pp.Keyword("=") - int_expression - pp.Suppress(";")
+
+    # Named compile-time constants and enums (gamequeer#421). const_definition
+    # reuses int_expression itself, so a `const`'s RHS gets the exact same
+    # compile-time folding (gamequeer#385) a runtime assignment's RHS would;
+    # parser.parse_const_definition then requires the result to have
+    # actually folded to a literal (a `const` has no runtime fallback).
+    const_definition_section = pp.Group(pp.Keyword("const") - identifier - pp.Suppress("=") - int_expression - pp.Suppress(";"))
+    const_definition_section.set_parse_action(parse_const_definition)
+
+    # enum Name { A, B, C } -- auto-numbered from 0 in declaration order;
+    # each member is registered as "Name.Member" (see Enum.define in
+    # datamodel.py) and referenced the same way via enum_member_ref, above.
+    enum_members = pp.Group(identifier - pp.ZeroOrMore(pp.Suppress(",") - identifier))
+    enum_definition_section = pp.Group(pp.Keyword("enum") - identifier - pp.Suppress("{") - enum_members - pp.Suppress("}"))
+    enum_definition_section.set_parse_action(parse_enum_definition)
 
     string_literal = pp.QuotedString('"').setName("string_literal")
     string_literal.set_parse_action(parse_str_literal)
@@ -298,8 +340,9 @@ def build_game_parser():
     # repetition (gamequeer#420) -- it's no longer structurally locked to
     # being first. "Exactly one" is enforced semantically instead: see
     # parser.parse_game_definition (a second one) and parser.parse()
-    # (zero) -- as well as the module docstring above.
-    gqc_game << pp.ZeroOrMore(game_definition_section | animation_definition_section | lightcue_definition_section | var_definition_section | menu_definition_section | stage_definition_section)
+    # (zero) -- as well as the module docstring above. const/enum sections
+    # (gamequeer#421) are folded in as further alternatives.
+    gqc_game << pp.ZeroOrMore(game_definition_section | animation_definition_section | lightcue_definition_section | var_definition_section | menu_definition_section | stage_definition_section | const_definition_section | enum_definition_section)
     gqc_game.ignore(pp.cppStyleComment)
 
     return gqc_game
