@@ -38,6 +38,34 @@ int  score   = 0;      // '=' for ints
 str  name    := "ME";  // ':=' for strings
 ```
 
+### Named constants and enums
+
+`const NAME = <int-expr>;` and `enum Name { A, B, C }` (gamequeer#421) are
+compile-time-only sugar for magic numbers — every reference is substituted
+with a literal int at parse time (reusing the same constant folding a
+literal-only expression gets, so `const MAX_HP = 20 + 1;` never emits a
+runtime add), so there's no register/opcode cost and no on-cart trace of
+the name at all:
+
+```
+const MAX_HP = 21;
+enum Difficulty { Easy, Medium, Hard }   // auto-numbered 0, 1, 2
+
+stage start {
+    event enter {
+        hp = MAX_HP;
+        if (difficulty == Difficulty.Hard) { hp = hp - 5; }
+    }
+}
+```
+
+**Declare before use.** Unlike variables/stages/animations (which resolve
+forward references at link time), a `const`/`enum` has no runtime
+representation to stay "unresolved" as — it must already be a literal by
+the time its use is parsed, so it has to appear earlier in the file than
+any reference to it. A single flat, file-global namespace covers both
+forms; an enum member is referenced as `Name.Member`.
+
 ### Stage options
 
 - `bganim <anim>;` — background animation for the stage.
