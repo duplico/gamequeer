@@ -13,8 +13,16 @@ from .parser import parse_fw_version_operand
 Grammar for GQC language
 ========================
 
-program = game_definition_section declaration_section*
-declaration_section = var_definition_section | animation_definition_section | lightcue_definition_section | menu_definition_section | stage_definition_section
+program = top_level_section*
+top_level_section = game_definition_section | var_definition_section | animation_definition_section | lightcue_definition_section | menu_definition_section | stage_definition_section
+# Exactly one game_definition_section is required, but (gamequeer#420) it
+# may appear anywhere in the top-level section stream, not just first --
+# pyparsing's repetition here can't itself enforce "exactly one" (a rule
+# about *how many* times an alternative matches across the whole
+# repetition, not about any single match), so that's a semantic check
+# instead: a second one is rejected by Game.__init__ (see
+# parser.parse_game_definition), and zero is rejected by parser.parse()
+# once the top-level repetition itself has finished matching.
 
 game_definition_section = "game" "{" game_assignment* "}"
 game_id_assignment = "id" "=" integer ";"
@@ -285,7 +293,13 @@ def build_game_parser():
     stage_definition_section.set_parse_action(parse_stage_definition)
 
     # Finish up
-    gqc_game << game_definition_section - pp.ZeroOrMore(animation_definition_section | lightcue_definition_section | var_definition_section | menu_definition_section | stage_definition_section)
+    #
+    # game_definition_section is just one more alternative in the top-level
+    # repetition (gamequeer#420) -- it's no longer structurally locked to
+    # being first. "Exactly one" is enforced semantically instead: see
+    # parser.parse_game_definition (a second one) and parser.parse()
+    # (zero) -- as well as the module docstring above.
+    gqc_game << pp.ZeroOrMore(game_definition_section | animation_definition_section | lightcue_definition_section | var_definition_section | menu_definition_section | stage_definition_section)
     gqc_game.ignore(pp.cppStyleComment)
 
     return gqc_game

@@ -15,6 +15,8 @@ in-process test modules in this package for callers. It is additive only:
 nothing in this file changes any production behavior.
 """
 
+import pathlib
+
 from gqc import structs
 from gqc.commands import Command
 from gqc.datamodel import (
@@ -35,6 +37,8 @@ def reset_compiler_state():
     """Clear every class-level compiler registry back to its startup state."""
     Game.link_table.clear()
     Game.game_name = None
+    Game.game_dir = pathlib.Path()
+    Game.needs_fw_probe_seen = False
     Game.game = None
 
     Event.event_table.clear()

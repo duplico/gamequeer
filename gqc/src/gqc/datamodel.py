@@ -47,7 +47,24 @@ GqcBadgeCountOperand = namedtuple('GqcBadgeCountOperand', [])
 class Game:
     link_table = dict() # OrderedDict not needed to remember order since Python 3.7
     game_name : str = None
+    # The directory containing the game's entry `.gq` file (gamequeer#420's
+    # game-as-directory convention). Set by gqc.py's `compile` command (and
+    # by tests that drive the parser directly) before parsing, so
+    # animations{}/lightcues{} sources -- and Game.__init__ below, via the
+    # game{}-anywhere relaxation -- never have to assume anything about
+    # *when* the game{} block itself is parsed relative to those sections.
+    # Defaults to the CWD, matching gqc's historical CWD-relative asset
+    # resolution for the common case where the entry file lives at the top
+    # of the invocation directory.
+    game_dir : pathlib.Path = pathlib.Path()
     game = None
+
+    # Set (regardless of whether a Game instance exists yet) the first time
+    # any stage's event code calls fw_version() (gamequeer#411), so the
+    # game{}-anywhere relaxation (gamequeer#420) can't lose the signal to a
+    # fw_version() call that's parsed *before* the game{} block itself --
+    # see parse_fw_version_operand and Game.__init__ below.
+    needs_fw_probe_seen = False
 
     def __init__(self, id : int, title : str, author : str, starting_stage : str = 'start'):
         self.addr = 0x00000000 # Set at link time
@@ -66,7 +83,10 @@ class Game:
         # only synthesizes the probe stage -- and its firmware pays for the
         # probe's BGDONE/TIMER race -- when this is True, so a game that
         # never calls fw_version() has zero footprint from this feature.
-        self.needs_fw_probe = False
+        # Seeded from needs_fw_probe_seen rather than starting False: since
+        # gamequeer#420, a fw_version() call may already have been parsed
+        # (and recorded there) before this game{} block itself is reached.
+        self.needs_fw_probe = Game.needs_fw_probe_seen
 
         if Game.game is not None:
             raise ValueError("Game already defined")
@@ -76,11 +96,21 @@ class Game:
         self.title = title
         self.author = author
 
+        # gamequeer#420: game{} may now be parsed after some/all of a
+        # game's stages (it no longer has to be the first top-level
+        # section), so a stage matching starting_stage may already be
+        # sitting in Stage.stage_table by the time we get here -- add_stage()
+        # only runs this same check for a stage parsed *after* this point.
+        for stage in Stage.stage_table.values():
+            if stage.name == self.starting_stage_name:
+                self.starting_stage = stage
+                break
+
     def add_stage(self, stage):
         self.stages.append(stage)
         if stage.name == self.starting_stage_name:
             self.starting_stage = stage
-    
+
     def __repr__(self) -> str:
         return f"Game({self.id}, {repr(self.title)}, {repr(self.author)}, crc_ptr={self.persistent_crc16_ptr:#0{10}x})"
     
@@ -181,7 +211,13 @@ class Stage:
 
         self.resolve()
 
-        Game.game.add_stage(self)
+        # gamequeer#420: game{} may not have been parsed yet (it's no
+        # longer required to be the first top-level section) -- in that
+        # case Game.__init__ itself scans Stage.stage_table for a
+        # starting_stage match once it *is* parsed, so there's nothing to
+        # register here yet.
+        if Game.game is not None:
+            Game.game.add_stage(self)
 
     def resolve(self) -> bool:
         # Don't bother trying to resolve symbols if we've already done so.
@@ -490,7 +526,12 @@ class Animation:
             if self.height:
                 make_animation_kwargs['height'] = self.height
 
-            self.src_path = pathlib.Path() / 'assets' / 'animations' / source
+            # gamequeer#420: resolved relative to the game's own directory
+            # (Game.game_dir), not the process CWD -- an absolute `source`
+            # still bypasses this entirely (pathlib truncates a `/`-joined
+            # absolute right-hand side), which linker.py's fw_version()
+            # probe-frame synthesis relies on.
+            self.src_path = Game.game_dir / 'assets' / 'animations' / source
             self.dst_path = pathlib.Path() / 'build' / 'assets' / 'animations' / Game.game_name / name
             digest_path = self.dst_path / '.digest'
 
