@@ -37,19 +37,25 @@ def create_reserved_variables():
 
 def _make_fw_probe_frame_source() -> pathlib.Path:
     # inject_fw_version_probe's bganim needs *a* frame to exist and load --
-    # its content is never meaningful (it's not actually rendered for more
-    # than a tick or two before the probe stage transitions away), so this
-    # synthesizes a throwaway solid-black still image into a temp file
-    # instead of shipping a package/author asset: no assets/animations/
-    # authoring surface, no packaging footprint, nothing for a project's
-    # asset digest cache to ever go stale against. Animation()'s `source`
-    # resolves relative to the CWD (pathlib.Path() / 'assets' / 'animations'
-    # / source) *unless* source is itself absolute, in which case the join
-    # returns the absolute path unchanged -- so passing this temp file's
-    # absolute path in bypasses that CWD-relative convention entirely.
+    # its content is never meaningful (it's on screen for up to ~21 ticks
+    # (~1s) on original firmware, which doesn't resolve the probe's race
+    # until its own 20-tick frame-duration clamp fires; only ~5-6 ticks on
+    # firmware that clamps to 5), so this synthesizes a throwaway
+    # solid-black still image into a temp file instead of shipping a
+    # package/author asset: no assets/animations/ authoring surface, no
+    # packaging footprint, nothing for a project's asset digest cache to
+    # ever go stale against. Animation()'s `source` resolves relative to
+    # the CWD (pathlib.Path() / 'assets' / 'animations' / source) *unless*
+    # source is itself absolute, in which case the join returns the
+    # absolute path unchanged -- so passing this temp file's absolute path
+    # in bypasses that CWD-relative convention entirely.
     fd, path = tempfile.mkstemp(prefix='gqc_fw_probe_', suffix='.png')
     os.close(fd)
-    Image.new('1', (structs.GQ_FW_PROBE_FRAME_SIZE, structs.GQ_FW_PROBE_FRAME_SIZE), 0).save(path)
+    try:
+        Image.new('1', (structs.GQ_FW_PROBE_FRAME_SIZE, structs.GQ_FW_PROBE_FRAME_SIZE), 0).save(path)
+    except Exception:
+        os.unlink(path)
+        raise
     return pathlib.Path(path)
 
 def inject_fw_version_probe():
