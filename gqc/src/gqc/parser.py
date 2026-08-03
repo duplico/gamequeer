@@ -1,5 +1,4 @@
 import sys
-import pathlib
 from collections import namedtuple
 
 import pyparsing as pp
@@ -190,7 +189,10 @@ def parse_lightcue_definition_section(instring, loc, toks):
 
     for cue in toks:
         cue_name = cue[0]
-        cue_source = pathlib.Path() / 'assets' / 'lighting' / cue[1]
+        # gamequeer#420: resolved relative to the game's own directory
+        # (Game.game_dir), not the process CWD -- see the matching comment
+        # on Animation.src_path in datamodel.py.
+        cue_source = Game.game_dir / 'assets' / 'lighting' / cue[1]
 
         print(f"[blue]Light cue [italic]{cue_name}[/italic][/blue] from [underline]{cue_source}[/underline]")
         
@@ -238,7 +240,16 @@ def parse_fw_version_operand(instring, loc, toks):
     # inject_fw_version_probe after parsing: a game that never calls
     # fw_version() gets no probe stage, and pays none of its ~1s cost on
     # original firmware.
-    Game.game.needs_fw_probe = True
+    #
+    # gamequeer#420: game{} may not have been parsed yet (it's no longer
+    # required to be the first top-level section), so Game.game can still be
+    # None here -- record the flag on the class itself either way;
+    # Game.__init__ seeds a not-yet-constructed instance's needs_fw_probe
+    # from it, and it's still applied directly to Game.game when that
+    # instance already exists (the common case).
+    Game.needs_fw_probe_seen = True
+    if Game.game is not None:
+        Game.game.needs_fw_probe = True
     return GqcIntOperand(False, structs.GQ_FW_PROBE_RESULT_VAR)
 
 def parse_int_operand(instring, loc, toks):
@@ -468,6 +479,21 @@ def parse(text):
         print(
             "Error: expression nesting is too deep for gqc to parse. "
             "Split it into intermediate variables.",
+            file=sys.stderr,
+        )
+        exit(1)
+
+    # gamequeer#420: game{} is no longer structurally locked to being the
+    # first top-level section (it's just one more alternative in the
+    # top-level section repetition in grammar.py), so the grammar alone
+    # can no longer enforce "exactly one" -- a *second* game{} block is
+    # still caught structurally (Game.__init__ raises "Game already
+    # defined", surfaced as a GqcParseError above), but *zero* game{}
+    # blocks parses cleanly with nothing left to reject it. Check for that
+    # here instead, once parsing is otherwise known to have succeeded.
+    if Game.game is None:
+        print(
+            "Error: no `game { ... }` block found (exactly one is required).",
             file=sys.stderr,
         )
         exit(1)

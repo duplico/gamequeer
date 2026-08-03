@@ -45,10 +45,11 @@ def _make_fw_probe_frame_source() -> pathlib.Path:
     # package/author asset: no assets/animations/ authoring surface, no
     # packaging footprint, nothing for a project's asset digest cache to
     # ever go stale against. Animation()'s `source` resolves relative to
-    # the CWD (pathlib.Path() / 'assets' / 'animations' / source) *unless*
-    # source is itself absolute, in which case the join returns the
-    # absolute path unchanged -- so passing this temp file's absolute path
-    # in bypasses that CWD-relative convention entirely.
+    # the game's own directory (gamequeer#420; Game.game_dir /
+    # 'assets' / 'animations' / source) *unless* source is itself
+    # absolute, in which case the join returns the absolute path unchanged
+    # -- so passing this temp file's absolute path in bypasses that
+    # game-directory-relative convention entirely.
     fd, path = tempfile.mkstemp(prefix='gqc_fw_probe_', suffix='.png')
     os.close(fd)
     try:
