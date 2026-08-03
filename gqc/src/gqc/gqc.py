@@ -75,6 +75,12 @@ def compile(input : pathlib.Path, no_mem_map : bool, out_dir : pathlib.Path):
     if Game.game.needs_fw_probe:
         linker.inject_fw_version_probe()
 
+    # Same zero-footprint-when-unused convention for random() (gamequeer#422):
+    # only create its hidden LCG state/counter variables if the game
+    # actually calls random() somewhere.
+    if Game.game.needs_random:
+        linker.create_random_state_variables()
+
     # Place symbols into the symbol table
     mem_map_path = out_dir / 'map.txt'
     cmd_asm_path = out_dir / 'cmds.gqasm'

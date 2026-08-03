@@ -422,3 +422,80 @@ def test_fw_version_never_folds(compile_gq):
     # read fw_version()'s backing variable at runtime instead of folding it.
     load = next(op for op in ops if op.name == "SETVAR" and op.arg1 == addby.arg1)
     assert not (load.flags & structs.OpFlags.LITERAL_ARG2)
+
+
+# --- random() never folds; min()/max()/clamp()/abs() do (gamequeer#422) -------
+
+
+def test_random_never_folds(compile_gq):
+    # random() reads (and mutates) live LCG state seeded from GQI_PLAYER_ID
+    # and a per-call counter, not a constant -- combined with a literal
+    # "+ 1" so a bug that treated it as foldable would visibly collapse the
+    # whole expression to a single SETVAR instead of the real LCG arithmetic.
+    source = game_with_stage("x = random(1, 10) + 1;", "volatile { int x = 0; }")
+    exit_code, stderr, out_dir = compile_gq(source)
+    assert exit_code == 0, stderr
+    ops = one_event((out_dir / "cmds.gqasm").read_text()).ops
+    addby_ops = [op for op in ops if op.name == "ADDBY"]
+    # Several ADDBYs belong to random()'s own LCG arithmetic; exactly one
+    # (the outermost) carries the literal "+ 1".
+    literal_addbys = [op for op in addby_ops if op.flags & structs.OpFlags.LITERAL_ARG2 and op.arg2 == 1]
+    assert len(literal_addbys) >= 1
+    assert len(addby_ops) > 1
+
+
+@pytest.mark.parametrize(
+    "expr, expected",
+    [
+        ("min(3, 7)", 3),
+        ("min(7, 3)", 3),
+        ("max(3, 7)", 7),
+        ("max(7, 3)", 7),
+        ("min(-3, 7)", -3),
+        ("max(-3, -7)", -3),
+        ("abs(5)", 5),
+        ("abs(-5)", 5),
+        ("abs(0)", 0),
+        ("clamp(5, 0, 10)", 5),
+        ("clamp(-5, 0, 10)", 0),
+        ("clamp(15, 0, 10)", 10),
+        ("clamp(5, 10, 0)", 0),  # lo > hi: min(max(5, 10), 0) = min(10, 0) = 0
+    ],
+)
+def test_math_intrinsics_of_literal_arguments_fold(compile_gq, expr, expected):
+    source = game_with_stage(f"x = {expr};", "volatile { int x = 0; }")
+    exit_code, stderr, out_dir = compile_gq(source)
+    assert exit_code == 0, stderr
+    cmds = (out_dir / "cmds.gqasm").read_text()
+    assert _folded_setvar_value(cmds) == expected
+
+
+def test_min_never_folds_with_a_variable_argument(compile_gq):
+    source = game_with_stage("x = min(y, 7) + 1;", "volatile { int x = 0; int y = 3; }")
+    exit_code, stderr, out_dir = compile_gq(source)
+    assert exit_code == 0, stderr
+    ops = one_event((out_dir / "cmds.gqasm").read_text()).ops
+    assert any(op.name in ("LT", "GT") for op in ops)
+    addby_literal = next(op for op in ops if op.name == "ADDBY" and op.flags & structs.OpFlags.LITERAL_ARG2)
+    assert addby_literal.arg2 == 1
+
+
+def test_abs_never_folds_with_a_variable_argument(compile_gq):
+    source = game_with_stage("x = abs(y) + 1;", "volatile { int x = 0; int y = -3; }")
+    exit_code, stderr, out_dir = compile_gq(source)
+    assert exit_code == 0, stderr
+    ops = one_event((out_dir / "cmds.gqasm").read_text()).ops
+    assert any(op.name == "NEG" for op in ops) or any(op.name == "LT" for op in ops)
+
+
+def test_abs_of_int32_min_does_not_fold_overflow(compile_gq):
+    # abs(INT32_MIN) is 2**31, one past T_GQ_INT_MAX -- not representable in
+    # t_gq_int, so this must decline to fold (same overflow-declines-to-fold
+    # policy as every other operator; see fold_constant_int_expression's
+    # docstring) rather than silently emit a wrong/truncated constant.
+    source = game_with_stage("x = abs(-2147483648);", "volatile { int x = 0; }")
+    exit_code, stderr, out_dir = compile_gq(source)
+    assert exit_code == 0, stderr
+    ops = one_event((out_dir / "cmds.gqasm").read_text()).ops
+    assert [op.name for op in ops] != ["SETVAR", "DONE"]
+    assert any(op.name in ("NEG", "LT") for op in ops)

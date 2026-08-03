@@ -35,6 +35,28 @@ def create_reserved_variables():
     for reg_name in structs.GQ_REGISTERS_STR:
         var = Variable('str', reg_name, '', 'volatile')
 
+def create_random_state_variables():
+    """Create the hidden LCG state/counter variables backing random()
+    (gamequeer#422) -- only for a game that actually calls random()
+    somewhere (gated on Game.game.needs_random in gqc.py, mirroring
+    inject_fw_version_probe's zero-footprint-when-unused convention below).
+
+    Deferred until after parsing completes, exactly like
+    inject_fw_version_probe, rather than created eagerly the first time
+    random() is *parsed* (parser.parse_random_operand): a game can declare
+    its own `volatile { ... }` section anywhere among its top-level
+    declarations, including *after* a stage that calls random(). Creating
+    these two variables eagerly would make them the first entries in
+    Variable.storageclass_table['volatile'] by the time that later
+    author-declared section gets parsed, and
+    parser.parse_variable_definition_storageclass's one-declaration-per-game
+    check would misidentify them as a pre-existing non-init/non-register
+    volatile var and falsely reject the author's own single, legitimate
+    volatile block.
+    """
+    Variable('int', structs.GQ_RANDOM_STATE_VAR, 0, storageclass='volatile')
+    Variable('int', structs.GQ_RANDOM_CTR_VAR, 0, storageclass='volatile')
+
 def _make_fw_probe_frame_source() -> pathlib.Path:
     # inject_fw_version_probe's bganim needs *a* frame to exist and load --
     # its content is never meaningful (it's on screen for up to ~21 ticks
