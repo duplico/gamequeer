@@ -206,6 +206,173 @@ def test_fw_version_write_rejects(compile_gq):
     assert "read-only" in stderr
 
 
+# --- random()/min()/max()/clamp()/abs() (gamequeer#422) -----------------------
+# Unlike badge_count()/fw_version() above, these all take one or more
+# int_expression *arguments* -- closer in grammar shape to str()'s
+# `str(<int_expression>)` cast (below) than to badge_count()'s empty parens.
+# test_random.py/test_math_intrinsics.py cover what they actually lower to;
+# test_constant_folding.py covers folding (min/max/clamp/abs fold when their
+# arguments do; random() never does). This section is just accept/reject
+# grammar coverage, including the same Keyword-not-bare-string/commits-on-
+# match care badge_count/fw_version/str already established.
+
+
+def test_random_call_accepts(compile_gq):
+    source = game_with_stage("x = random(1, 10);", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_random_combined_with_binary_op_accepts(compile_gq):
+    source = game_with_stage("x = random(1, 10) + 1;", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_random_accepts_full_expression_arguments(compile_gq):
+    # Unlike badge_count()/fw_version(), random()'s arguments are full
+    # int_expressions, not bare operands -- e.g. "y + 1", not just "y".
+    source = game_with_stage(
+        "x = random(y + 1, z * 2);", "volatile { int x = 0; int y = 0; int z = 5; }"
+    )
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_random_wrong_arity_too_few_rejects(compile_gq):
+    # random() is binary -- Keyword("random") commits (via the grammar's
+    # `-`) as soon as "random" itself matches, so a missing argument fails
+    # with a clean, source-located ParseSyntaxException rather than
+    # silently falling through to some other (wrong) interpretation.
+    source = game_with_stage("x = random(1);", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+    assert "ParseSyntaxException" in stderr
+
+
+def test_random_wrong_arity_too_many_rejects(compile_gq):
+    source = game_with_stage("x = random(1, 10, 100);", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+    assert "ParseSyntaxException" in stderr
+
+
+def test_random_bare_no_parens_rejects(compile_gq):
+    source = game_with_stage("x = random;", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+
+
+def test_random_prefixed_identifier_in_expression_accepts(compile_gq):
+    # "random" is matched via Keyword(), so it doesn't swallow a
+    # random-*prefixed* identifier -- same reasoning as
+    # test_badge_count_prefixed_identifier_in_expression_accepts above
+    # (gamequeer#354).
+    source = game_with_stage(
+        "y = random_seed + 1;",
+        "volatile { int random_seed = 0; int y = 0; }",
+    )
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_min_call_accepts(compile_gq):
+    source = game_with_stage("x = min(1, 2);", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_min_wrong_arity_rejects(compile_gq):
+    source = game_with_stage("x = min(1);", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+    assert "ParseSyntaxException" in stderr
+
+
+def test_min_prefixed_identifier_in_expression_accepts(compile_gq):
+    source = game_with_stage(
+        "y = minimum + 1;", "volatile { int minimum = 0; int y = 0; }"
+    )
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_max_call_accepts(compile_gq):
+    source = game_with_stage("x = max(1, 2);", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_max_wrong_arity_rejects(compile_gq):
+    source = game_with_stage("x = max(1, 2, 3);", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+    assert "ParseSyntaxException" in stderr
+
+
+def test_max_prefixed_identifier_in_expression_accepts(compile_gq):
+    source = game_with_stage(
+        "y = maximum + 1;", "volatile { int maximum = 0; int y = 0; }"
+    )
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_clamp_call_accepts(compile_gq):
+    source = game_with_stage("x = clamp(5, 0, 10);", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_clamp_wrong_arity_too_few_rejects(compile_gq):
+    source = game_with_stage("x = clamp(5, 0);", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+    assert "ParseSyntaxException" in stderr
+
+
+def test_clamp_wrong_arity_too_many_rejects(compile_gq):
+    source = game_with_stage("x = clamp(5, 0, 10, 20);", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+    assert "ParseSyntaxException" in stderr
+
+
+def test_clamp_prefixed_identifier_in_expression_accepts(compile_gq):
+    source = game_with_stage(
+        "y = clamped + 1;", "volatile { int clamped = 0; int y = 0; }"
+    )
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_abs_call_accepts(compile_gq):
+    source = game_with_stage("x = abs(-5);", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_abs_wrong_arity_rejects(compile_gq):
+    source = game_with_stage("x = abs(1, 2);", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+    assert "ParseSyntaxException" in stderr
+
+
+def test_abs_bare_no_parens_rejects(compile_gq):
+    source = game_with_stage("x = abs;", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+
+
+def test_abs_prefixed_identifier_in_expression_accepts(compile_gq):
+    source = game_with_stage(
+        "y = absolute + 1;", "volatile { int absolute = 0; int y = 0; }"
+    )
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
 # --- str() cast: whole-RHS and inline (gamequeer#386) ------------------------
 
 

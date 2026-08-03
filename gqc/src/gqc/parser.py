@@ -7,6 +7,7 @@ from rich import print
 
 from .datamodel import Animation, Game, Stage, Variable, Event, Menu, LightCue, StrExpression
 from .datamodel import IntExpression, GqcIntOperand, GqcStrCastOperand, GqcBadgeCountOperand
+from .datamodel import GqcRandomOperand, GqcMinMaxOperand, GqcClampOperand, GqcAbsOperand
 from .datamodel import fold_constant_int_expression
 from .commands import CommandPlay, CommandGoStage, CommandCue, CommandCastStr
 from .commands import CommandSetStr, CommandSetInt, CommandWithIntExpressionArgument
@@ -241,8 +242,37 @@ def parse_fw_version_operand(instring, loc, toks):
     Game.game.needs_fw_probe = True
     return GqcIntOperand(False, structs.GQ_FW_PROBE_RESULT_VAR)
 
+def parse_random_operand(instring, loc, toks):
+    # random(lo, hi) (gamequeer#422): toks[0] is random_call's own pp.Group,
+    # holding exactly its two already-parsed int_expression arguments (the
+    # "random" keyword itself is suppressed in the grammar, same as
+    # string_cast's "str" -- see parse_string_cast_operand). Setting
+    # needs_random here (mirroring parse_fw_version_operand's needs_fw_probe
+    # above) is what tells gqc.py to call
+    # linker.create_random_state_variables after parsing: a game that never
+    # calls random() gets no hidden LCG state/counter variables.
+    Game.game.needs_random = True
+    lo, hi = toks[0]
+    return GqcRandomOperand(lo, hi)
+
+def parse_min_operand(instring, loc, toks):
+    a, b = toks[0]
+    return GqcMinMaxOperand(a, b, False)
+
+def parse_max_operand(instring, loc, toks):
+    a, b = toks[0]
+    return GqcMinMaxOperand(a, b, True)
+
+def parse_clamp_operand(instring, loc, toks):
+    x, lo, hi = toks[0]
+    return GqcClampOperand(x, lo, hi)
+
+def parse_abs_operand(instring, loc, toks):
+    x = toks[0][0]
+    return GqcAbsOperand(x)
+
 def parse_int_operand(instring, loc, toks):
-    if isinstance(toks[0], (GqcIntOperand, GqcBadgeCountOperand)):
+    if isinstance(toks[0], (GqcIntOperand, GqcBadgeCountOperand, GqcRandomOperand, GqcMinMaxOperand, GqcClampOperand, GqcAbsOperand)):
         return toks[0]
     elif isinstance(toks[0], int):
         return GqcIntOperand(True, toks[0])
@@ -264,15 +294,30 @@ def parse_int_expression(instring, loc, toks):
         # re-folding/re-constructing it (which would double-alloc its
         # registers -- see gamequeer#345).
         return toks
-    if isinstance(toks, GqcBadgeCountOperand):
-        # badge_count() as the *entire* RHS, e.g. "x = badge_count();" --
-        # with no sibling operator at this nesting level, infix_notation
-        # hands this back as a bare atom rather than a
-        # [operand, op, operand] token group. Unlike a bare variable
-        # reference, badge_count() always emits real commands (its
-        # popcount loop), so it needs an IntExpression wrapper even here;
-        # get_result_symbol recognizes the same sentinel to build that
-        # loop (see IntExpression._emit_badge_count).
+    if isinstance(toks, (GqcBadgeCountOperand, GqcRandomOperand, GqcMinMaxOperand, GqcClampOperand, GqcAbsOperand)):
+        # badge_count()/random()/min()/max()/clamp()/abs() as the *entire*
+        # RHS, e.g. "x = badge_count();" or "x = min(3, 7);" -- with no
+        # sibling operator at this nesting level, infix_notation hands this
+        # back as a bare atom rather than a [operand, op, operand] token
+        # group. min()/max()/clamp()/abs() (unlike badge_count()/random(),
+        # which never fold -- see fold_constant_int_expression) fold to a
+        # single literal here too when their own arguments do (gamequeer#422)
+        # -- this is the *only* place a bare-atom marker like this reaches
+        # fold_constant_int_expression directly; the generic fold attempt
+        # further down only ever sees a real [operand, op, operand] node, so
+        # without this a whole-RHS "x = min(3, 7);" would never fold even
+        # though "x = min(3, 7) + 1;" already does (via that generic path
+        # recursing into the marker as one of its two operands).
+        folded = fold_constant_int_expression(toks)
+        if folded is not None:
+            return GqcIntOperand(is_literal=True, value=folded)
+
+        # Otherwise, every one of these always emits real commands (a
+        # popcount loop, LCG arithmetic, or a compare-and-conditionally-
+        # overwrite -- see IntExpression._emit_badge_count/_emit_random/
+        # _emit_minmax/_emit_clamp/_emit_abs), so each needs an
+        # IntExpression wrapper even here; get_result_symbol recognizes the
+        # same markers to build that lowering.
         try:
             return IntExpression([toks], instring, loc)
         except ValueError as ve:

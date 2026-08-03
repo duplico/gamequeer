@@ -337,3 +337,34 @@ GQ_REGISTERS_INT = [
 GQ_REGISTERS_STR = [
     'GQ_RS0.reg', 'GQ_RS1.reg', 'GQ_RS2.reg', 'GQ_RS3.reg',
 ]
+
+# random(lo, hi) intrinsic (gamequeer#422): hidden LCG state variable names,
+# and the Park-Miller "minimal standard" generator constants it's built
+# from. See IntExpression._emit_random (datamodel.py) for the full
+# derivation; this is just the shared vocabulary between it and
+# parser.parse_random_operand. Deliberately the *same* sequence (seed
+# convention and Schrage-method advance) the game corpus already hand-rolls
+# at the source level -- see e.g. gq-games/games/donsol.gq's card-shuffle
+# `lcg` -- so random() is genuinely just sugar for that pattern, not a
+# different generator. Named `.reg` like GQ_REGISTERS_INT/GQ_FW_PROBE_RESULT_VAR
+# above, but NOT a member of GQ_REGISTERS_INT: it must never be handed out by
+# IntExpression.alloc_register() as ordinary expression scratch space, since
+# unlike those, its value has to survive *between* separate random() calls.
+GQ_RANDOM_STATE_VAR = '__gq_random_state.reg'
+GQ_RANDOM_CTR_VAR = '__gq_random_ctr.reg'
+# GQI_PLAYER_ID * GQ_RANDOM_SEED_MULTIPLIER + (a monotonically incrementing
+# per-call counter) is the perturbation folded into the LCG state on every
+# call (donsol.gq's own seeding formula, applied per-call instead of
+# per-"run" -- see _emit_random's docstring for why).
+GQ_RANDOM_SEED_MULTIPLIER = 7919
+# The Park-Miller "minimal standard" LCG: state' = (a * state) mod m, with
+# m = 2**31 - 1 (a Mersenne prime) and a = 48271, computed via Schrage's
+# method (state / GQ_RANDOM_LCG_Q, state % GQ_RANDOM_LCG_Q, etc.) so the
+# `a * state` multiply never leaves t_gq_int's signed-32-bit range. Valid
+# for any nonzero seed in [1, m-1] -- see the state-normalization step in
+# _emit_random, which seeds from GQ_RANDOM_LCG_MODULUS - 1 (i.e. mod (m-1),
+# then +1) for exactly that reason.
+GQ_RANDOM_LCG_MODULUS = 2147483647
+GQ_RANDOM_LCG_MULTIPLIER = 48271
+GQ_RANDOM_LCG_Q = GQ_RANDOM_LCG_MODULUS // GQ_RANDOM_LCG_MULTIPLIER  # 44488
+GQ_RANDOM_LCG_R = GQ_RANDOM_LCG_MODULUS % GQ_RANDOM_LCG_MULTIPLIER  # 3399

@@ -8,6 +8,8 @@ from .parser import parse_int_expression, parse_int_operand, parse_str_literal, 
 from .parser import parse_str_expression, parse_string_cast_operand
 from .parser import parse_badge_count_operand
 from .parser import parse_fw_version_operand
+from .parser import parse_random_operand, parse_min_operand, parse_max_operand
+from .parser import parse_clamp_operand, parse_abs_operand
 
 """
 Grammar for GQC language
@@ -175,8 +177,16 @@ def build_game_parser():
 
     ### Stage sections ###
     event_statements = pp.Forward()
-    
+
     # Assignments and expressions
+    # int_expression is forward-declared (same idiom as event_statements
+    # above) so the gamequeer#422 intrinsics below -- random()/min()/max()/
+    # clamp(), each of which takes one or more int_expression *arguments* --
+    # can reference it before int_operand (which they're themselves part of)
+    # is assembled a few lines down. Populated via "int_expression << ..."
+    # once int_operand is complete.
+    int_expression = pp.Forward()
+
     # badge_count() -- a nullary popcount intrinsic over the badges-seen
     # bitfield (gamequeer#387). Keyword("badge_count"), not a bare string,
     # so it doesn't swallow a `badge_count`-prefixed identifier
@@ -194,9 +204,33 @@ def build_game_parser():
     fw_version_call = pp.Group(pp.Keyword("fw_version") - pp.Suppress("(") - pp.Suppress(")")).set_name("fw_version_call")
     fw_version_call.set_parse_action(parse_fw_version_operand)
 
-    int_operand = badge_count_call | fw_version_call | identifier | integer
+    # random(lo, hi)/min(a, b)/max(a, b)/clamp(x, lo, hi)/abs(x) --
+    # gamequeer#422's math intrinsics. Same Keyword-not-bare-string
+    # reasoning as badge_count_call/fw_version_call above, so e.g. a
+    # `random`- or `min`-prefixed identifier isn't swallowed; same `-`-commits-
+    # on-keyword-match reasoning too, so a wrong argument count (or a bare,
+    # parens-less form -- unlike badge_get, none of these have one) fails
+    # with a clean, source-located ParseSyntaxException. Each takes one or
+    # more full int_expression arguments (like string_cast's `str(x)`
+    # above), not just a bare operand, so e.g. `min(a + 1, b)` is valid.
+    random_call = pp.Group(pp.Suppress(pp.Keyword("random")) - pp.Suppress("(") - int_expression - pp.Suppress(",") - int_expression - pp.Suppress(")")).set_name("random_call")
+    random_call.set_parse_action(parse_random_operand)
+
+    min_call = pp.Group(pp.Suppress(pp.Keyword("min")) - pp.Suppress("(") - int_expression - pp.Suppress(",") - int_expression - pp.Suppress(")")).set_name("min_call")
+    min_call.set_parse_action(parse_min_operand)
+
+    max_call = pp.Group(pp.Suppress(pp.Keyword("max")) - pp.Suppress("(") - int_expression - pp.Suppress(",") - int_expression - pp.Suppress(")")).set_name("max_call")
+    max_call.set_parse_action(parse_max_operand)
+
+    clamp_call = pp.Group(pp.Suppress(pp.Keyword("clamp")) - pp.Suppress("(") - int_expression - pp.Suppress(",") - int_expression - pp.Suppress(",") - int_expression - pp.Suppress(")")).set_name("clamp_call")
+    clamp_call.set_parse_action(parse_clamp_operand)
+
+    abs_call = pp.Group(pp.Suppress(pp.Keyword("abs")) - pp.Suppress("(") - int_expression - pp.Suppress(")")).set_name("abs_call")
+    abs_call.set_parse_action(parse_abs_operand)
+
+    int_operand = badge_count_call | fw_version_call | random_call | min_call | max_call | clamp_call | abs_call | identifier | integer
     int_operand.set_parse_action(parse_int_operand)
-    int_expression = pp.infix_notation(int_operand, [
+    int_expression << pp.infix_notation(int_operand, [
         (pp.Keyword('badge_get') | pp.one_of('! - ~'), 1, pp.opAssoc.RIGHT),
         (pp.one_of('* / %'), 2, pp.opAssoc.LEFT),
         (pp.one_of('+ -'), 2, pp.opAssoc.LEFT),
