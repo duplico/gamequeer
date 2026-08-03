@@ -45,7 +45,18 @@ game_id_assignment = "id" "=" integer ";"
 game_title_assignment = "title" ":=" string ";"
 game_author_assignment = "author" ":=" string ";"
 game_starting_stage_assignment = "starting_stage" "=" identifier ";"
-game_assignment = game_id_assignment | game_title_assignment | game_author_assignment | game_starting_stage_assignment  # one of each, in any order
+game_assignment = game_id_assignment | game_title_assignment | game_author_assignment | game_starting_stage_assignment
+# `game_assignment*` is a plain repetition of the alternation above, in any
+# order -- not pyparsing's `&` ("each") operator. Each of the four keys is
+# still required exactly once, but (like game_definition_section itself
+# being exactly-one, gamequeer#420) that cardinality can't be expressed
+# structurally by a repetition, so it's enforced semantically instead, in
+# parser.parse_game_definition: a missing or duplicated key raises a
+# GqcParseError naming that specific key, rather than pyparsing's `&`
+# producing a generic "missing one or more required elements" message that
+# can't distinguish a duplicate `id` from a missing everything-else (see
+# gamequeer#331's investigation notes) or a bare ParseSyntaxException with
+# no semantic message at all.
 
 var_definition_section = ("volatile" | "persistent") var_definitions
 var_definitions = var_definition | "{" var_definition* "}"
@@ -188,8 +199,15 @@ def build_game_parser():
     game_title_assignment = pp.Group(pp.Keyword("title") - pp.Suppress(":=") - string - pp.Suppress(";")).set_name("title")
     game_author_assignment = pp.Group(pp.Keyword("author") - pp.Suppress(":=") - string - pp.Suppress(";")).set_name("author")
     game_starting_stage_assignment = pp.Group(pp.Keyword("starting_stage") - pp.Suppress("=") - identifier - pp.Suppress(";")).set_name("starting_stage")
-    game_assignment = pp.Group(game_id_assignment & game_title_assignment & game_author_assignment & game_starting_stage_assignment)
-    game_definition_section = pp.Group(pp.Keyword("game") - pp.Suppress("{") - game_assignment - pp.Suppress("}"))
+    # A plain repetition of the alternation, any number of times in any
+    # order -- not pp.Each (`&`), which can only ever produce a generic
+    # "missing one or more required elements" ParseException that can't
+    # name which key is missing/duplicated. parser.parse_game_definition
+    # validates "exactly one of each" itself and raises a GqcParseError
+    # naming the specific offending key (gamequeer#420 cardinality
+    # follow-up).
+    game_assignment = game_id_assignment | game_title_assignment | game_author_assignment | game_starting_stage_assignment
+    game_definition_section = pp.Group(pp.Keyword("game") - pp.Suppress("{") - pp.ZeroOrMore(game_assignment) - pp.Suppress("}"))
     game_definition_section.set_parse_action(parse_game_definition)
 
     # Variable sections

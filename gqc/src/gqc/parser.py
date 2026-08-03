@@ -18,27 +18,36 @@ from . import structs, GqcParseError
 def parse_game_definition(instring, loc, toks):
     toks = toks[0]
 
-    # Note: if we're already here, the parser has already enforced that each of the key
-    #       parameters for the game are uniquely defined.
-    id = None
-    title = None
-    author = None
-    starting_stage = None
+    # grammar.py's game_assignment is a plain repetition of the
+    # id/title/author/starting_stage alternation, in any order and any
+    # number of times -- not pyparsing's `&` ("each") operator, which could
+    # only ever raise a generic "missing one or more required elements"
+    # ParseException with no way to tell a duplicated key from a genuinely
+    # missing one (gamequeer#331's investigation notes). "Exactly one of
+    # each" is enforced here instead, the same semantic-cardinality
+    # approach gamequeer#420 already uses for zero/duplicate game{}
+    # *blocks* themselves (see parser.parse's Game.game is None check and
+    # Game.__init__'s "Game already defined" check) -- each of toks[1:] is
+    # one already-parsed [key, value] assignment group (game_id_assignment/
+    # game_title_assignment/game_author_assignment/
+    # game_starting_stage_assignment); counting them by key lets a missing
+    # or duplicated key be named specifically in the resulting error.
+    values = {}
+    counts = {"id": 0, "title": 0, "author": 0, "starting_stage": 0}
+
+    for assignment in toks[1:]:
+        key, value = assignment
+        counts[key] += 1
+        values[key] = value
+
+    for key, count in counts.items():
+        if count == 0:
+            raise GqcParseError(f"Missing required game key '{key}'", instring, loc)
+        if count > 1:
+            raise GqcParseError(f"Duplicate game key '{key}'", instring, loc)
 
     try:
-        for assignment in toks[1]:
-            if assignment[0] == "id":
-                id = assignment[1]
-            elif assignment[0] == "title":
-                title = assignment[1]
-            elif assignment[0] == "author":
-                author = assignment[1]
-            elif assignment[0] == "starting_stage":
-                starting_stage = assignment[1]
-            else:
-                raise ValueError(f"Invalid assignment {assignment[0]}")
-        
-        return Game(id, title, author, starting_stage)
+        return Game(values["id"], values["title"], values["author"], values["starting_stage"])
     except ValueError as ve:
         raise GqcParseError(str(ve), instring, loc)
 

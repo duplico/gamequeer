@@ -731,17 +731,19 @@ def test_game_block_missing_key_rejects(compile_gq, game_block, missing_key):
 
 
 def test_game_block_duplicate_key_rejects(compile_gq):
-    # Pins current behavior: pyparsing's "each" operator can't tell a
-    # duplicate `id` from a missing everything-else, so the diagnostic
-    # names the *other* three keys as "missing" rather than naming `id` as
-    # duplicated. See gamequeer#331 investigation notes.
+    # game_assignment is a plain repetition (gamequeer#420 cardinality
+    # follow-up), not pyparsing's `&` ("each") operator -- so unlike the
+    # `&`-based diagnostic this used to pin (which could only ever name the
+    # *other* three keys as "missing", never `id` itself as duplicated; see
+    # gamequeer#331's investigation notes), parser.parse_game_definition
+    # counts each key itself and names the specific duplicated one.
     source = (
         'game { id = 1; id = 2; title := "T"; author := "A"; starting_stage = start; }\n'
         "stage start { event enter { badge_set 1; } }\n"
     )
     exit_code, stderr, _ = compile_gq(source)
     assert exit_code != 0
-    assert "Missing one or more required elements" in stderr
+    assert "id" in stderr
 
 
 def test_game_block_shuffled_order_accepts(compile_gq):
