@@ -61,6 +61,13 @@ def compile(input : pathlib.Path, no_mem_map : bool, out_dir : pathlib.Path):
     with open(input, 'r') as f:
         parsed = parser.parse(f)
 
+    # If the game calls fw_version() anywhere (gamequeer#411), splice the
+    # compiler-synthesized firmware-detection probe stage in ahead of its
+    # declared starting stage. Games that never call fw_version() skip this
+    # entirely -- no probe stage, no extra boot delay.
+    if Game.game.needs_fw_probe:
+        linker.inject_fw_version_probe()
+
     # Place symbols into the symbol table
     mem_map_path = out_dir / 'map.txt'
     cmd_asm_path = out_dir / 'cmds.gqasm'

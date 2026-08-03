@@ -1,11 +1,15 @@
+import os
+import pathlib
 import sys
+import tempfile
 
+from PIL import Image
 from tabulate import tabulate
 from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn
 
 from .datamodel import Game, Stage, Variable, Animation, Frame, FrameData, Event, Menu
-from .datamodel import LightCue, LightCueFrame
-from .commands import Command, CommandDone
+from .datamodel import LightCue, LightCueFrame, GqcIntOperand
+from .commands import Command, CommandDone, CommandGoStage, CommandSetInt, CommandTimer
 
 from . import structs
 
@@ -14,21 +18,125 @@ def create_reserved_variables():
     for gq_var in structs.GQ_RESERVED_INTS:
         var = Variable('int', gq_var.name, gq_var.description, 'builtin_int')
         var.set_addr(gq_var.addr, namespace=structs.GQ_PTR_BUILTIN_INT)
-    
+        var.writable = gq_var.writable
+
     for gq_var in structs.GQ_RESERVED_STRS:
         var = Variable('str', gq_var.name, gq_var.description, 'builtin_str')
         var.set_addr(gq_var.addr, namespace=structs.GQ_PTR_BUILTIN_STR)
-    
+
     for gq_var in structs.GQ_RESERVED_PERSISTENT:
         var = Variable(gq_var.type, gq_var.name, gq_var.description, 'persistent')
 
     # Create the reserved integer registers for the game:
     for reg_name in structs.GQ_REGISTERS_INT:
         var = Variable('int', reg_name, 0, 'volatile')
-    
+
     # Create the reserved string registers for the game:
     for reg_name in structs.GQ_REGISTERS_STR:
         var = Variable('str', reg_name, '', 'volatile')
+
+def _make_fw_probe_frame_source() -> pathlib.Path:
+    # inject_fw_version_probe's bganim needs *a* frame to exist and load --
+    # its content is never meaningful (it's not actually rendered for more
+    # than a tick or two before the probe stage transitions away), so this
+    # synthesizes a throwaway solid-black still image into a temp file
+    # instead of shipping a package/author asset: no assets/animations/
+    # authoring surface, no packaging footprint, nothing for a project's
+    # asset digest cache to ever go stale against. Animation()'s `source`
+    # resolves relative to the CWD (pathlib.Path() / 'assets' / 'animations'
+    # / source) *unless* source is itself absolute, in which case the join
+    # returns the absolute path unchanged -- so passing this temp file's
+    # absolute path in bypasses that CWD-relative convention entirely.
+    fd, path = tempfile.mkstemp(prefix='gqc_fw_probe_', suffix='.png')
+    os.close(fd)
+    Image.new('1', (structs.GQ_FW_PROBE_FRAME_SIZE, structs.GQ_FW_PROBE_FRAME_SIZE), 0).save(path)
+    return pathlib.Path(path)
+
+def inject_fw_version_probe():
+    """Splice a compiler-synthesized firmware-detection probe stage in
+    ahead of the game's declared starting stage, backing the fw_version()
+    intrinsic (gamequeer#411). Only called (from gqc.py, after parsing) when
+    Game.game.needs_fw_probe is True, i.e. the game actually calls
+    fw_version() somewhere -- a game that never does pays nothing for this:
+    no extra stage, no extra boot delay, no probe animation asset.
+
+    Design choice over an author-designated probe window (the alternative
+    the issue raises): this is fully transparent to game authors -- no new
+    authoring surface, no stage they have to remember to add -- at the cost
+    of an unconditional ~1s (21-tick) delay before the game's *own* first
+    stage appears, but *only* on original 2024 firmware, and *only* for
+    carts that call fw_version() at all. Carts that don't call it are
+    unaffected; carts running on post-original firmware resolve the probe
+    in ~5 ticks (~50ms), not ~1s. That trade was judged worth it for a
+    detection primitive whose entire point is to be effortless to reach for
+    at the top of a game rather than something authors have to choreograph
+    around their own splash/intro stage.
+
+    Lowers entirely to *existing* bytecode (frozen VM contract -- see
+    gamequeer#410 for the full derivation): a 1-frame background animation
+    clamped to GQ_FW_PROBE_TICKS_PER_FRAME (5) ticks/frame races a
+    GQ_FW_PROBE_TIMER_TICKS (13)-tick timer, both started on stage entry.
+    Firmware that clamps bganim frames to 5 ticks (the 20 FPS line,
+    gamequeer#312 on) fires BGDONE first (~5th tick); original firmware,
+    which clamps to 20 ticks, fires TIMER first (13th tick) -- an 8-tick
+    margin either way. Both the timer and the probe stage are fully
+    consumed by the race itself: nothing else may run a competing timer
+    while the probe is armed, which is guaranteed here because this stage
+    is the very first thing the cart does.
+
+    On BGDONE (post-original firmware): GQI_FW_VERSION is only ever *read*
+    here, once the probe has established the firmware actually defines it
+    -- reading it on original firmware, where it's undefined, returns
+    unspecified adjacent RAM, not 0 (gamequeer#410) -- and it is never
+    written by gqc-generated code (see `writable=False` on its
+    GqReservedVariable entry in structs.py, enforced in
+    commands.CommandSetInt/CommandArithmetic).
+
+    On TIMER (original firmware): the hidden result variable is left at its
+    zero-initialized value, giving fw_version() its documented "0 =
+    original firmware" result.
+    """
+    original_starting_stage_name = Game.game.starting_stage_name
+
+    Variable('int', structs.GQ_FW_PROBE_RESULT_VAR, 0, storageclass='volatile')
+
+    probe_frame_source = _make_fw_probe_frame_source()
+    try:
+        Animation(
+            structs.GQ_FW_PROBE_ANIM_NAME,
+            str(probe_frame_source),
+            dithering='none',
+            duration=structs.GQ_FW_PROBE_TICKS_PER_FRAME,
+            w=structs.GQ_FW_PROBE_FRAME_SIZE,
+            h=structs.GQ_FW_PROBE_FRAME_SIZE,
+        )
+    finally:
+        probe_frame_source.unlink(missing_ok=True)
+
+    enter_event = Event(structs.EventType.ENTER, [
+        CommandTimer(None, None, GqcIntOperand(True, structs.GQ_FW_PROBE_TIMER_TICKS)),
+    ])
+    bgdone_event = Event(structs.EventType.BGDONE, [
+        CommandSetInt(None, None, structs.GQ_FW_PROBE_RESULT_VAR, GqcIntOperand(False, 'GQI_FW_VERSION')),
+        CommandGoStage(None, None, original_starting_stage_name),
+    ])
+    timer_event = Event(structs.EventType.TIMER, [
+        CommandSetInt(None, None, structs.GQ_FW_PROBE_RESULT_VAR, GqcIntOperand(True, 0)),
+        CommandGoStage(None, None, original_starting_stage_name),
+    ])
+
+    probe_stage = Stage(
+        structs.GQ_FW_PROBE_STAGE_NAME,
+        bganim=structs.GQ_FW_PROBE_ANIM_NAME,
+        events=[enter_event, bgdone_event, timer_event],
+    )
+
+    # Stage.__init__ -> Game.add_stage only sets Game.game.starting_stage
+    # when a stage's own name matches starting_stage_name, which the probe
+    # stage's compiler-internal name deliberately never does -- so it has to
+    # be spliced in as the actual entry point explicitly, here.
+    Game.game.starting_stage_name = probe_stage.name
+    Game.game.starting_stage = probe_stage
 
 def create_symbol_table(table_dest = sys.stdout, cmd_dest = sys.stdout):
     # Output order (.game .anim .stage .frame .framedata .cues .cuedata

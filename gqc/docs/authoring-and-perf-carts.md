@@ -153,6 +153,50 @@ if (state <= 0) {
 // roll: r = state % N; for a 0..N-1 result
 ```
 
+### Firmware detection: `fw_version()`
+
+`fw_version()` (nullary, parens mandatory, like `badge_count()`) returns an
+int: `0` on the original 2024 fleet firmware, otherwise the value of the
+`GQI_FW_VERSION` reserved builtin int on firmware that defines it. Use it to
+gate content on a firmware capability instead of assuming every badge in the
+field is running the same build:
+
+```
+if (fw_version() == 0) {
+    // original 2024 firmware: don't rely on feature X
+} else {
+    // firmware that defines GQI_FW_VERSION: feature X is available
+}
+```
+
+Calling `fw_version()` anywhere in a game makes `gqc` splice a hidden probe
+stage in ahead of the game's declared `starting_stage` — the compiled cart's
+actual entry point becomes the probe, which falls through to the declared
+starting stage as soon as it's done. This is fully automatic: nothing to
+declare, no extra stage to author, no reference to the probe anywhere in
+source. A game that never calls `fw_version()` gets none of this: no probe
+stage, no extra boot delay, no probe animation asset.
+
+**The probe costs up to ~1s (21 ticks) of boot delay, but only on original
+2024 firmware, and only for a game that calls `fw_version()` at all.** On any
+firmware that clamps background-animation frames to 5 ticks (the 20 FPS
+line and later), the probe resolves in ~5 ticks (about 50ms) instead. It
+works by racing a 1-frame background animation against a 13-tick timer, both
+armed the instant the probe stage is entered, and — like the global-timer
+monopolization the Randomness recipe above calls out — the probe is the only
+thing running a timer while it's armed. See
+`linker.inject_fw_version_probe`'s docstring (`gqc/src/gqc/linker.py`), and
+gamequeer#410, for the full mechanism and tick-margin derivation.
+
+**Never write `GQI_FW_VERSION` from cart code.** It's undefined on original
+2024 firmware — writing it there corrupts whatever adjacent RAM the linker
+happened to place next, since that firmware has no bounds check for a
+reserved-int offset it's never heard of. `gqc` refuses to compile a write to
+it (`Cannot assign to read-only variable GQI_FW_VERSION`). Read it only
+through `fw_version()`, not directly: a direct read before the probe has
+run — including on original firmware, which never populates it at all —
+returns that same undefined value, not `0`.
+
 ## 2. Labels (on-screen text)
 
 Four label slots (`GQI_LABEL{1..4}_X/Y` position, `GQS_LABEL{1..4}` text,

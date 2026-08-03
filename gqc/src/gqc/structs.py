@@ -248,7 +248,11 @@ GqStage = namedtuple('GqStage', 'id anim_bg_pointer cue_bg_pointer menu_pointer 
 GQ_STAGE_FORMAT = f'<H{T_GQ_POINTER_FORMAT}{T_GQ_POINTER_FORMAT}{T_GQ_POINTER_FORMAT}{T_GQ_POINTER_FORMAT}{len(EventType)}{T_GQ_POINTER_FORMAT}'
 GQ_STAGE_SIZE = struct.calcsize(GQ_STAGE_FORMAT)
 
-GqReservedVariable = namedtuple('GqReservedVariable', 'name type description addr')
+# `writable` defaults to True (via the namedtuple field default below) for
+# every existing entry, so none of them need to be touched to pick it up.
+# GQI_FW_VERSION (gamequeer#411) is the first read-only one: see its own
+# comment for why.
+GqReservedVariable = namedtuple('GqReservedVariable', 'name type description addr writable', defaults=(True,))
 
 GQ_RESERVED_INTS = [
     GqReservedVariable('GQI_GAME_ID', 'int', 'ID of the game', 0x000000),
@@ -275,6 +279,17 @@ GQ_RESERVED_INTS = [
     GqReservedVariable('GQI_LABEL4_Y', 'int', 'Label 4 Y', 0x000054),
     GqReservedVariable('GQI_LABEL_FLAGS', 'int', 'Label flags', 0x000058),
     GqReservedVariable('GQI_PLAYER_ID', 'int', 'Player ID', 0x00005C),
+    # gamequeer#411: compile-time only from gqc's perspective (it just emits
+    # this address) -- firmware carrying the GQI_FW_VERSION init (>= the
+    # version-word release cut for the QC2026 field-update campaign)
+    # populates it at cart boot with a nonzero version value; the original
+    # 2024 fleet firmware never heard of this offset and does not initialize
+    # it. A read of it is therefore only meaningful *after* establishing
+    # (via the gamequeer#410 behavioral probe -- see linker.py's
+    # inject_fw_version_probe) that the running firmware is post-original;
+    # gqc never emits a write to it (see `writable=False` below and its
+    # enforcement in commands.CommandSetInt/CommandArithmetic).
+    GqReservedVariable('GQI_FW_VERSION', 'int', 'Firmware version (0/undefined on original 2024 firmware)', 0x000060, False),
 ]
 
 GQ_RESERVED_STRS = [
@@ -291,6 +306,29 @@ GQ_RESERVED_PERSISTENT = []
 
 for i in range(math.ceil(BADGES_ALLOWED / (8 * GQ_INT_SIZE))):
     GQ_RESERVED_PERSISTENT.append(GqReservedVariable(f'GQ_PERSISTENT_BADGES_{i}.builtin', 'int', 0, 0x000000 + 8 * i * GQ_INT_SIZE))
+
+# fw_version() intrinsic (gamequeer#411): compiler-injected probe stage
+# naming/timing. See linker.py's inject_fw_version_probe for the full
+# derivation; this is just the shared vocabulary between it and
+# parser.parse_fw_version_operand. The dotted names can't collide with any
+# author identifier (identifiers are pp.Word(alphas, alphanums + "_") --
+# see grammar.py -- so a literal "." never appears in one), the same
+# convention used for GQ_REGISTERS_INT/STR and Variable.get_str_literal's
+# "S{n}.strlit" names below.
+GQ_FW_PROBE_RESULT_VAR = '__gq_fw_probe_result.reg'
+GQ_FW_PROBE_STAGE_NAME = '__gq_fw_probe.stage'
+GQ_FW_PROBE_ANIM_NAME = '__gq_fw_probe.anim'
+# 1 frame, clamped by whichever firmware's own minimum-frame-duration floor
+# is in effect (5 ticks post-original, 20 ticks on original firmware) --
+# see gamequeer#410's tick-margin derivation for why 13 sits cleanly between
+# the two.
+GQ_FW_PROBE_TICKS_PER_FRAME = 5
+GQ_FW_PROBE_TIMER_TICKS = 13
+# The probe frame is a single solid-black still (see
+# linker._make_fw_probe_frame_source); its content is irrelevant, so this
+# is sized just large enough to keep the RLE-encoded frame data trivially
+# small.
+GQ_FW_PROBE_FRAME_SIZE = 8
 
 GQ_REGISTERS_INT = [
     'GQ_RI0.reg', 'GQ_RI1.reg', 'GQ_RI2.reg', 'GQ_RI3.reg',

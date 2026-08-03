@@ -132,6 +132,80 @@ def test_badge_count_bare_no_parens_rejects(compile_gq):
     assert exit_code != 0
 
 
+# --- fw_version() (gamequeer#411) ---------------------------------------------
+# Same nullary-call shape as badge_count() above: mandatory-but-empty parens,
+# no bare-operand form. test_fw_version.py covers what it actually lowers to
+# (the compiler-injected probe stage) and the GQI_FW_VERSION write-protection
+# it relies on; this section is just accept/reject grammar coverage.
+
+
+def test_fw_version_call_accepts(compile_gq):
+    source = game_with_stage("x = fw_version();", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_fw_version_combined_with_binary_op_accepts(compile_gq):
+    source = game_with_stage("x = fw_version() + 1;", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_fw_version_in_if_condition_accepts(compile_gq):
+    source = game_with_stage(
+        "if (fw_version() == 0) { badge_set 42; }", "volatile { int x = 0; }"
+    )
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_fw_version_with_argument_rejects(compile_gq):
+    # fw_version() is nullary -- Keyword("fw_version") commits (via the
+    # grammar's `-`) as soon as "fw_version" itself matches, so a spurious
+    # argument fails with a clean, source-located ParseSyntaxException.
+    source = game_with_stage("x = fw_version(5);", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+    assert "ParseSyntaxException" in stderr
+
+
+def test_fw_version_standalone_statement_rejects(compile_gq):
+    source = game_with_stage("fw_version();")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+
+
+def test_fw_version_prefixed_identifier_in_expression_accepts(compile_gq):
+    # "fw_version" is matched via Keyword(), so it doesn't swallow a
+    # fw_version-*prefixed* identifier -- same reasoning as
+    # test_badge_count_prefixed_identifier_in_expression_accepts above
+    # (gamequeer#354).
+    source = game_with_stage(
+        "y = fw_version_flag + 1;",
+        "volatile { int fw_version_flag = 0; int y = 0; }",
+    )
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_fw_version_bare_no_parens_rejects(compile_gq):
+    # Like badge_count, fw_version has no bare-operand form -- the parens
+    # (even though empty) are mandatory.
+    source = game_with_stage("x = fw_version;", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+
+
+def test_fw_version_write_rejects(compile_gq):
+    # GQI_FW_VERSION is read-only by cart convention (gamequeer#411): writing
+    # an as-yet-undefined reserved int corrupts adjacent RAM on firmware that
+    # predates it (gamequeer#410). See test_fw_version.py for more on this.
+    source = game_with_stage("GQI_FW_VERSION = 5;")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+    assert "read-only" in stderr
+
+
 # --- str() cast: whole-RHS and inline (gamequeer#386) ------------------------
 
 

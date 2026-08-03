@@ -36,7 +36,7 @@ import pytest
 
 from gqc import structs
 
-from .opstream import one_event
+from .opstream import one_event, parse_gqasm
 
 GAME_HEADER = 'game { id = 1; title := "T"; author := "A"; starting_stage = start; }\n'
 
@@ -394,3 +394,31 @@ def test_badge_count_never_folds(compile_gq):
     assert len(addby_ops) == 2
     addby_literal = next(op for op in addby_ops if op.flags & structs.OpFlags.LITERAL_ARG2)
     assert addby_literal.arg2 == 1
+
+
+# --- fw_version() never folds (gamequeer#411) ---------------------------------
+
+
+def test_fw_version_never_folds(compile_gq):
+    # fw_version() is sugar for a reference to a hidden runtime-populated
+    # variable (see linker.inject_fw_version_probe), not a literal -- so
+    # "fw_version() + 1" must load it into a register and ADDBY the literal
+    # 1, not collapse to a single literal SETVAR the way "1 + 1" would.
+    source = game_with_stage("x = fw_version() + 1;", "volatile { int x = 0; }")
+    exit_code, stderr, out_dir = compile_gq(source)
+    assert exit_code == 0, stderr
+    cmds = (out_dir / "cmds.gqasm").read_text()
+    # opstream.one_event's default ENTER lookup is ambiguous here: the
+    # compiler-injected probe stage (linker.inject_fw_version_probe) has its
+    # own ENTER event. The author's own `start` stage is always the first
+    # ENTER block -- its Stage is registered before the probe stage's (see
+    # inject_fw_version_probe's docstring).
+    ops = next(b for b in parse_gqasm(cmds) if b.event_type == "ENTER").ops
+    addby = next(op for op in ops if op.name == "ADDBY")
+    assert addby.flags & structs.OpFlags.LITERAL_ARG2
+    assert addby.arg2 == 1
+    # The dst register was loaded from a variable (a SETVAR with a
+    # non-literal source), not initialized with a literal -- i.e. gqc really
+    # read fw_version()'s backing variable at runtime instead of folding it.
+    load = next(op for op in ops if op.name == "SETVAR" and op.arg1 == addby.arg1)
+    assert not (load.flags & structs.OpFlags.LITERAL_ARG2)
