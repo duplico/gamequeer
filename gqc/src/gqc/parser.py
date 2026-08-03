@@ -227,6 +227,20 @@ def parse_badge_count_operand(instring, loc, toks):
     # IntExpression.get_result_symbol to recognize, not a value container.
     return GqcBadgeCountOperand()
 
+def parse_fw_version_operand(instring, loc, toks):
+    # fw_version() (gamequeer#411) carries no data of its own: unlike
+    # badge_count() (which builds a real runtime loop at every call site),
+    # it's pure sugar for a reference to the hidden volatile int that the
+    # compiler-injected probe stage (see linker.inject_fw_version_probe)
+    # writes its result into -- exactly what parse_int_operand would already
+    # build for a bare identifier reference to that variable. Setting
+    # needs_fw_probe here is what tells gqc.py to actually call
+    # inject_fw_version_probe after parsing: a game that never calls
+    # fw_version() gets no probe stage, and pays none of its ~1s cost on
+    # original firmware.
+    Game.game.needs_fw_probe = True
+    return GqcIntOperand(False, structs.GQ_FW_PROBE_RESULT_VAR)
+
 def parse_int_operand(instring, loc, toks):
     if isinstance(toks[0], (GqcIntOperand, GqcBadgeCountOperand)):
         return toks[0]

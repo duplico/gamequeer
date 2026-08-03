@@ -7,6 +7,7 @@ from .parser import parse_menu_definition, parse_bound_menu, parse_play
 from .parser import parse_int_expression, parse_int_operand, parse_str_literal, parse_if
 from .parser import parse_str_expression, parse_string_cast_operand
 from .parser import parse_badge_count_operand
+from .parser import parse_fw_version_operand
 
 """
 Grammar for GQC language
@@ -187,7 +188,13 @@ def build_game_parser():
     badge_count_call = pp.Group(pp.Keyword("badge_count") - pp.Suppress("(") - pp.Suppress(")")).set_name("badge_count_call")
     badge_count_call.set_parse_action(parse_badge_count_operand)
 
-    int_operand = badge_count_call | identifier | integer
+    # fw_version() -- a nullary firmware-detection intrinsic (gamequeer#411).
+    # Same Keyword-not-bare-string reasoning as badge_count_call above, so a
+    # `fw_version`-prefixed identifier isn't swallowed.
+    fw_version_call = pp.Group(pp.Keyword("fw_version") - pp.Suppress("(") - pp.Suppress(")")).set_name("fw_version_call")
+    fw_version_call.set_parse_action(parse_fw_version_operand)
+
+    int_operand = badge_count_call | fw_version_call | identifier | integer
     int_operand.set_parse_action(parse_int_operand)
     int_expression = pp.infix_notation(int_operand, [
         (pp.Keyword('badge_get') | pp.one_of('! - ~'), 1, pp.opAssoc.RIGHT),

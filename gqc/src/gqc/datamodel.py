@@ -61,6 +61,13 @@ class Game:
 
         self.persistent_crc16_ptr = None
 
+        # Set by parser.parse_fw_version_operand the first time a game
+        # calls fw_version() (gamequeer#411). linker.inject_fw_version_probe
+        # only synthesizes the probe stage -- and its firmware pays for the
+        # probe's BGDONE/TIMER race -- when this is True, so a game that
+        # never calls fw_version() has zero footprint from this feature.
+        self.needs_fw_probe = False
+
         if Game.game is not None:
             raise ValueError("Game already defined")
         Game.game = self
@@ -305,6 +312,12 @@ class Variable:
         self.name = name
         self.value = value
         self.storageclass = None
+        # Read-only by cart convention (gamequeer#411, e.g. GQI_FW_VERSION):
+        # writing an as-yet-undefined reserved int corrupts adjacent RAM on
+        # firmware that predates it. Only linker.create_reserved_variables()
+        # ever sets this False; every other Variable stays writable. See
+        # commands.CommandSetInt/CommandArithmetic.resolve() for enforcement.
+        self.writable = True
 
         if name in Variable.var_table:
             existing_storageclass = Variable.var_table[name].storageclass

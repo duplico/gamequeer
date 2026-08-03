@@ -194,11 +194,13 @@ class CommandArithmetic(Command):
         if self.dst_name in Variable.var_table and Variable.var_table[self.dst_name].addr != 0x00000000:
             if Variable.var_table[self.dst_name].datatype != 'int':
                 raise GqcParseError(f"Variable {self.dst_name} is not an int", self.instring, self.loc)
+            if not Variable.var_table[self.dst_name].writable:
+                raise GqcParseError(f"Cannot assign to read-only variable {self.dst_name}", self.instring, self.loc)
             self.arg1 = Variable.var_table[self.dst_name].addr
         else:
             self.unresolved_symbols.append(self.dst_name)
             resolved = False
-        
+
         if self.src.is_literal:
             self.arg2 = self.src.value
             self.command_flags |= structs.OpFlags.LITERAL_ARG2
@@ -349,6 +351,8 @@ class CommandSetInt(CommandWithIntExpressionArgument):
         if self.dst_name in Variable.var_table and Variable.var_table[self.dst_name].addr != 0x00000000:
             if Variable.var_table[self.dst_name].datatype != 'int':
                 raise GqcParseError(f"Cannot assign int expression to non-int {self.dst_name}", self.instring, self.loc)
+            if not Variable.var_table[self.dst_name].writable:
+                raise GqcParseError(f"Cannot assign to read-only variable {self.dst_name}", self.instring, self.loc)
             self.arg1 = Variable.var_table[self.dst_name].addr
         else:
             self.unresolved_symbols.append(self.dst_name)
