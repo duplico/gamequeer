@@ -411,6 +411,60 @@ def test_volatile_str_init_shadow_lands_in_const_section(compile_gq):
     assert "storageclass='const'" in repr_str
 
 
+def test_menu_prompt_literal_lands_in_const_section(compile_gq):
+    # `menu <name> prompt "...";` routes its prompt through the same
+    # string_operand -> get_str_literal() grammar path as any other string
+    # literal (Stage.resolve() looks the prompt up by name in
+    # Variable.var_table, same as a CommandSetStr operand) -- it's not a
+    # special case, but it's a distinct grammar rule from a plain
+    # assignment RHS, so pin it directly rather than relying on golden/
+    # ctest coverage (menu_choice.gq) alone.
+    source = (
+        f"{game_header()}"
+        'menus { m { 1: "One"; 2: "Two"; } }\n'
+        'stage start { menu m prompt "Pick one:"; event enter { } }\n'
+    )
+    gqgame_bytes, map_text = _compile_and_read(compile_gq, source, game_name="menuprompt")
+    del gqgame_bytes
+    sections, symbols = _parse_map_txt(map_text)
+
+    const_start, const_size = sections[".const"]
+    # Not just "'S0.strlit'" -- the Stage's own repr also names it (as
+    # BoundMenu(..., menu_prompt='S0.strlit')), so that needle matches two
+    # symbols (the Stage and the Variable). Anchor on the Variable repr.
+    prompt_addr = _find_symbol_addr(symbols, "Variable('str', 'S0.strlit'")
+    assert const_start <= prompt_addr < const_start + const_size
+
+    repr_str = next(r for a, _s, r in symbols if a == prompt_addr)
+    assert "storageclass='const'" in repr_str
+    assert "Pick one:" in repr_str
+
+
+def test_empty_string_literal_assignment_rhs_lands_in_const_section(compile_gq):
+    # gamequeer#418 named `x := "";` (an *empty* literal used as an
+    # assignment RHS, not a declaration default) as an edge case distinct
+    # from test_volatile_str_init_shadow_lands_in_const_section's `str x :=
+    # "";` default-value form -- that one never calls get_str_literal() at
+    # all (the default value is stored directly on the `.init` shadow), so
+    # it doesn't exercise the same path this test does.
+    source = (
+        f"{game_header()}"
+        'volatile { str x := "nonempty"; }\n'
+        'stage start { event enter { x := ""; } }\n'
+    )
+    _gqgame_bytes, map_text = _compile_and_read(compile_gq, source, game_name="emptylit")
+    sections, symbols = _parse_map_txt(map_text)
+
+    const_start, const_size = sections[".const"]
+    empty_lit_addr = _find_symbol_addr(symbols, "'S0.strlit'")
+    assert const_start <= empty_lit_addr < const_start + const_size
+
+    repr_str = next(r for a, _s, r in symbols if a == empty_lit_addr)
+    # Variable.__repr__ doesn't repr() the value field, so an empty string
+    # shows up as nothing between the two commas either side of it.
+    assert repr_str == "Variable('str', 'S0.strlit', , storageclass='const')"
+
+
 def test_reserved_persistent_badges_offset_is_unchanged_by_literal_count(compile_gq):
     # GQP_OFFSET_BADGES (gamequeer_bytecode.h) hardcodes offset 0 from
     # persistent_var_ptr for the reserved badge-bitfield ints. Nothing about
