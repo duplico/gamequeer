@@ -499,3 +499,72 @@ def test_abs_of_int32_min_does_not_fold_overflow(compile_gq):
     ops = one_event((out_dir / "cmds.gqasm").read_text()).ops
     assert [op.name for op in ops] != ["SETVAR", "DONE"]
     assert any(op.name in ("NEG", "LT") for op in ops)
+
+
+# --- social vocabulary folding (gamequeer#423, DEF CON sprint epic
+# gamequeer#419) -- have_met/count_seen(NAME) never fold (same badge-state
+# reasoning as badge_get/badge_count() above); in_cohort() is the one
+# exception, since it's a pure range compare with no badge state involved.
+
+
+def test_have_met_never_folds_even_with_a_literal_argument(compile_gq):
+    # have_met(id) is a bare rename of badge_get(id) -- reads live badge
+    # state, not a constant, regardless of whether `id` itself is a literal.
+    source = game_with_stage("x = have_met(1) + 1;", "volatile { int x = 0; }")
+    exit_code, stderr, out_dir = compile_gq(source)
+    assert exit_code == 0, stderr
+    cmds = (out_dir / "cmds.gqasm").read_text()
+    ops = one_event(cmds).ops
+    assert any(op.name == "QCGET" for op in ops)
+    addby = next(op for op in ops if op.name == "ADDBY")
+    assert addby.flags & structs.OpFlags.LITERAL_ARG2
+    assert addby.arg2 == 1
+
+
+def test_count_seen_range_never_folds(compile_gq):
+    # count_seen(NAME) reads live badge state the same way badge_count()
+    # does, even though NAME's own lo/hi are always compile-time constants.
+    # (count_seen(GUESTS)'s own loop emits 2 ADDBYs -- the idx+lo offset and
+    # the acc accumulation, see IntExpression._emit_count_seen_range -- so
+    # the outer "+ 1" is asserted directly rather than by a total count.)
+    source = game_with_stage(
+        "x = count_seen(GUESTS) + 1;",
+        "cohort GUESTS = 300..319;\nvolatile { int x = 0; }",
+    )
+    exit_code, stderr, out_dir = compile_gq(source)
+    assert exit_code == 0, stderr
+    cmds = (out_dir / "cmds.gqasm").read_text()
+    ops = one_event(cmds).ops
+    assert any(op.name == "QCGET" for op in ops)
+    outer_addby = [op for op in ops if op.name == "ADDBY"][-1]  # the "+ 1" itself, after the loop
+    assert outer_addby.flags & structs.OpFlags.LITERAL_ARG2
+    assert outer_addby.arg2 == 1
+
+
+def test_in_cohort_folds_when_id_is_a_literal(compile_gq):
+    # Unlike have_met()/count_seen(), in_cohort(NAME, id) is a pure
+    # "(id >= lo) && (id <= hi)" range compare -- no badge state involved --
+    # so it folds whenever `id` itself does, exactly like any other
+    # literal-only subexpression (gamequeer#385).
+    source = game_with_stage(
+        "x = in_cohort(GUESTS, 305);",
+        "cohort GUESTS = 300..319;\nvolatile { int x = 0; }",
+    )
+    exit_code, stderr, out_dir = compile_gq(source)
+    assert exit_code == 0, stderr
+    cmds = (out_dir / "cmds.gqasm").read_text()
+    assert _folded_setvar_value(cmds) == 1
+
+
+def test_in_cohort_with_variable_id_does_not_fold(compile_gq):
+    source = game_with_stage(
+        "x = in_cohort(GUESTS, y);",
+        "cohort GUESTS = 300..319;\nvolatile { int x = 0; int y = 0; }",
+    )
+    exit_code, stderr, out_dir = compile_gq(source)
+    assert exit_code == 0, stderr
+    cmds = (out_dir / "cmds.gqasm").read_text()
+    ops = one_event(cmds).ops
+    assert "GE" in [op.name for op in ops]
+    assert "LE" in [op.name for op in ops]
+    assert "AND" in [op.name for op in ops]

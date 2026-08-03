@@ -60,6 +60,45 @@ GqcMinMaxOperand = namedtuple('GqcMinMaxOperand', 'a b want_max')
 GqcClampOperand = namedtuple('GqcClampOperand', 'x lo hi')
 GqcAbsOperand = namedtuple('GqcAbsOperand', 'x')
 
+# The social vocabulary (gamequeer#423, DEF CON sprint epic gamequeer#419):
+# `have_met(id)`, `in_cohort(NAME, id)`, and `count_seen(NAME)` (the
+# one-argument overload of `count_seen`; the bare `count_seen()` form
+# reuses `GqcBadgeCountOperand` directly -- see `parser.parse_count_seen_operand`).
+# FROZEN VM CONTRACT: all three desugar entirely to *existing* opcodes --
+# `badge_get` (`QCGET`), the comparison/logical ops, and the same
+# loop-over-`badge_get` shape `badge_count()` already uses -- never a new
+# opcode or register. Each is a marker `parser.py`'s own parse action
+# returns for `parse_int_operand`/`parse_int_expression`/
+# `IntExpression.get_result_symbol`/`fold_constant_int_expression` to
+# recognize and lower, the same role `GqcBadgeCountOperand` already plays
+# for `badge_count()`.
+#
+# `have_met(id)` is a bare rename of `badge_get(id)` -- `id_operand` is
+# whatever `int_expression` already reduced the argument to (a
+# `GqcIntOperand` or `IntExpression`); `IntExpression.get_result_symbol`
+# lowers it by delegating straight to the existing unary-`badge_get`
+# codegen path (see the `GqcHaveMetOperand` branch there).
+GqcHaveMetOperand = namedtuple('GqcHaveMetOperand', 'id_operand')
+
+# `in_cohort(NAME, id)` -- `NAME` is resolved against `Cohort.cohort_table`
+# at parse time (`parser.parse_in_cohort_operand`); `lo`/`hi` are that
+# cohort's own already-validated bounds (plain `int`s, not `GqcIntOperand`s
+# -- there's no register/variable to reference, just two compile-time
+# constants), so this lowers to a bare `(id_operand >= lo) && (id_operand
+# <= hi)` range compare over the *existing* `GE`/`LE`/`AND` opcodes -- see
+# the `GqcInCohortOperand` branches of `fold_constant_int_expression` (this
+# one folds if `id_operand` does) and `IntExpression.get_result_symbol`.
+GqcInCohortOperand = namedtuple('GqcInCohortOperand', 'id_operand lo hi')
+
+# `count_seen(NAME)` -- like `GqcInCohortOperand`, `lo`/`hi` are `NAME`'s
+# own resolved `Cohort` bounds. Lowers to a `badge_get` popcount loop
+# bounded to `[lo, hi]` instead of `badge_count()`'s full `[0,
+# BADGES_ALLOWED)` sweep -- see `IntExpression._emit_count_seen_range`.
+# Reads live badge state, not a constant, so -- like `GqcBadgeCountOperand`
+# -- this never folds even when `lo`/`hi` are themselves compile-time
+# constants (they always are).
+GqcCountSeenRangeOperand = namedtuple('GqcCountSeenRangeOperand', 'lo hi')
+
 class Game:
     link_table = dict() # OrderedDict not needed to remember order since Python 3.7
     game_name : str = None
@@ -911,6 +950,48 @@ class Menu:
         self.addr = structs.gq_ptr_apply_ns(namespace, addr)
         Menu.link_table[self.addr] = self
 
+class Cohort:
+    """A `cohort NAME = <lo>..<hi>;` declaration (gamequeer#423, DEF CON
+    sprint epic gamequeer#419): a named, inclusive player-ID range, resolved
+    entirely at compile time (`cohort_table` is a compiler-only symbol
+    table, consulted by `parser.parse_in_cohort_operand`/
+    `parse_count_seen_operand`). Unlike `Menu`/`LightCue`/`Animation`, a
+    cohort has no on-cart footprint of its own -- it never appears in the
+    compiled `.gqgame` at all, only as the already-resolved `lo`/`hi`
+    literals baked into the range-compare/bounded-popcount codegen its
+    references desugar to (see `GqcInCohortOperand`/
+    `GqcCountSeenRangeOperand` in this module). No `addr`, `set_addr`, or
+    `to_bytes` -- there's nothing to link or serialize.
+
+    `lo`/`hi` are bounded to `[0, BADGES_ALLOWED)` -- the same bound the
+    badges-seen bitfield itself uses (`structs.BADGES_ALLOWED`) -- not just
+    because `count_seen(NAME)` walks that bitfield directly, but so a
+    cohort declared partly or wholly outside it doesn't silently behave as
+    "always empty" for that usage instead of failing to compile.
+    """
+
+    cohort_table = dict()
+
+    def __init__(self, name: str, lo: int, hi: int):
+        if name in Cohort.cohort_table:
+            raise ValueError(f"Cohort {name} already defined")
+        if lo > hi:
+            raise ValueError(f"Cohort {name} has an empty/invalid range {lo}..{hi} (lo must be <= hi)")
+        if lo < 0 or hi >= structs.BADGES_ALLOWED:
+            raise ValueError(
+                f"Cohort {name} range {lo}..{hi} is out of bounds for the badges-seen "
+                f"bitfield (valid player IDs are 0..{structs.BADGES_ALLOWED - 1})"
+            )
+
+        self.name = name
+        self.lo = lo
+        self.hi = hi
+
+        Cohort.cohort_table[name] = self
+
+    def __repr__(self) -> str:
+        return f"Cohort({self.name}, {self.lo}..{self.hi})"
+
 class LightCue:
     link_table = dict() # OrderedDict not needed to remember order since Python 3.7
     cue_table = dict()
@@ -1090,10 +1171,12 @@ def fold_constant_int_expression(node):
     from the VM's actual runtime behavior:
       - any operand references a variable or a register, rather than being
         a literal;
-      - the operator is `badge_get`, or the node is a `badge_count()` call
-        -- both read live badge state, not a constant, regardless of
-        whether `badge_get`'s own operand is a literal (`badge_count()`
-        never has one);
+      - the operator is `badge_get`, or the node is a `badge_count()`,
+        `have_met(id)`, or `count_seen(NAME)` call -- all read live badge
+        state, not a constant, regardless of whether their own operand (if
+        any) is a literal (`in_cohort(NAME, id)`, gamequeer#423, is the one
+        exception: it's a pure range compare with no badge state involved,
+        so it folds whenever `id` does);
       - a `/` or `%` whose literal divisor is 0 -- the VM leaves this
         unguarded at runtime (see `run_arithmetic`), so folding it would
         turn a runtime behavior into either a compile-time crash or a
@@ -1178,6 +1261,29 @@ def fold_constant_int_expression(node):
         if x is None or lo is None or hi is None:
             return None
         return min(max(x, lo), hi)
+
+    if isinstance(node, GqcHaveMetOperand):
+        # have_met(id) is a bare rename of badge_get(id) (gamequeer#423) --
+        # reads live badge state, not a constant, regardless of whether
+        # `id_operand` itself is a literal. Same reasoning as badge_get
+        # below.
+        return None
+
+    if isinstance(node, GqcCountSeenRangeOperand):
+        # count_seen(NAME) reads live badge state the same way badge_count()
+        # does, just bounded to NAME's own range (gamequeer#423) -- never a
+        # constant, even though `lo`/`hi` themselves always are.
+        return None
+
+    if isinstance(node, GqcInCohortOperand):
+        # in_cohort(NAME, id) is a pure `(id >= lo) && (id <= hi)` range
+        # compare (gamequeer#423) -- unlike badge_get/badge_count/
+        # count_seen, it never touches live badge state, so it folds
+        # whenever `id_operand` itself does.
+        id_value = fold_constant_int_expression(node.id_operand)
+        if id_value is None:
+            return None
+        return int(node.lo <= id_value <= node.hi)
 
     # The remaining shape is a raw `[operand, op, operand]` / `[op, operand]`
     # token group -- a plain `list` when built by this module's own
@@ -1431,12 +1537,45 @@ class IntExpression:
         if isinstance(subexpr, GqcAbsOperand):
             return self._emit_abs(subexpr.x)
 
+        if isinstance(subexpr, GqcHaveMetOperand):
+            # have_met(id) (gamequeer#423) is a bare rename of badge_get(id)
+            # -- delegate straight to the existing unary-badge_get codegen
+            # path by handing it the exact same ['badge_get', operand] shape
+            # infix_notation itself would produce for a literal `badge_get`
+            # invocation, rather than duplicating that branch's logic here.
+            return self.get_result_symbol(['badge_get', subexpr.id_operand])
+
+        if isinstance(subexpr, GqcInCohortOperand):
+            # in_cohort(NAME, id) (gamequeer#423) is a bare `(id >= lo) &&
+            # (id <= hi)` range compare -- delegate to the ordinary binary-op
+            # branches below via the same raw [operand, op, operand] shape a
+            # hand-written `id >= lo && id <= hi` would produce, reusing the
+            # existing GE/LE/AND opcodes instead of a dedicated range-check
+            # op. `subexpr.id_operand` is referenced twice (once per side of
+            # the `&&`); if it's an already-built IntExpression, the
+            # IntExpression-unwrap branch above runs once per reference,
+            # safely re-deriving it under this expression's own register
+            # pool each time (see unregister_orphaned_commands's docstring) at
+            # the cost of evaluating it twice at runtime -- acceptable for a
+            # side-effect-free int expression, the same tradeoff
+            # badge_count() used twice in one expression already accepts.
+            return self.get_result_symbol([
+                [subexpr.id_operand, '>=', GqcIntOperand(is_literal=True, value=subexpr.lo)],
+                '&&',
+                [subexpr.id_operand, '<=', GqcIntOperand(is_literal=True, value=subexpr.hi)],
+            ])
+
+        if isinstance(subexpr, GqcCountSeenRangeOperand):
+            # count_seen(NAME) (gamequeer#423) -- a badge_count()-style
+            # popcount loop bounded to NAME's own [lo, hi] range.
+            return self._emit_count_seen_range(subexpr.lo, subexpr.hi)
+
         if isinstance(subexpr, GqcIntOperand):
             return subexpr
         elif len(subexpr) == 1:
             # subexpr[0] may itself be a bare GqcBadgeCountOperand (or one
-            # of the gamequeer#422 markers above) -- e.g. the sole atom of
-            # "x = badge_count();", which parser.parse_int_expression wraps
+            # of the gamequeer#422/#423 markers above) -- e.g. the sole
+            # atom of "x = badge_count();", which parser.parse_int_expression wraps
             # as IntExpression([GqcBadgeCountOperand()], ...). Recurse
             # instead of handing it back unresolved; every other len-1 shape
             # here is already a GqcIntOperand (or an IntExpression to
@@ -1797,6 +1936,80 @@ class IntExpression:
         self._emit_negate_if_negative(result_operand)
 
         return result_operand
+
+    def _emit_count_seen_range(self, lo: int, hi: int) -> GqcIntOperand:
+        """Lower a `count_seen(NAME)` leaf (gamequeer#423) to a runtime
+        popcount loop over `badge_get`, bounded to the inclusive `[lo, hi]`
+        range instead of `_emit_badge_count`'s full `[0, BADGES_ALLOWED)`
+        sweep -- `lo`/`hi` are `NAME`'s own `Cohort`-validated bounds, so
+        `0 <= lo <= hi < BADGES_ALLOWED` always holds here.
+
+        Same "count the loop variable down to a bare truthiness check"
+        strategy as `_emit_badge_count`, generalized with a compile-time
+        constant `lo` offset: `idx` counts down from `hi - lo + 1` (the
+        range's own size) to 0 -- so the loop-continue test is still just
+        `idx`'s own truthiness, no extra comparison register -- while the
+        actual badge id passed to `badge_get` is computed into `bit_reg` as
+        `idx + lo` before the `QCGET` overwrites it with the read result
+        (`QCGET`'s own dst/src *may* be the same register: the VM's
+        `run_arithmetic` always reads `arg2` into a local before writing
+        `arg1`, so this self-referential form is safe -- see
+        `gamequeer/src/bytecode.c`). When `lo == 0` (e.g. a cohort starting
+        at badge id 0) the `idx + lo` computation is skipped entirely --
+        `idx` is already the badge id -- keeping that case's bytecode
+        identical in shape to `_emit_badge_count`'s own loop body.
+
+        Register cost: identical to `_emit_badge_count` -- 3 of gqc's 4
+        `GQ_REGISTERS_INT` (accumulator, counter, per-iteration scratch),
+        not 4, despite computing both a "how many left" counter and a
+        separate "which badge id" value -- the `idx + lo` computation
+        reuses the same scratch register `QCGET`'s result lands in rather
+        than allocating a dedicated one. Only the accumulator survives past
+        this method, same as `_emit_badge_count`.
+        """
+        from .commands import CommandSetInt, CommandArithmetic, CommandIf, CommandGoto, CommandLoop
+
+        acc_reg = self.alloc_register()
+        idx_reg = self.alloc_register()
+        acc_operand = GqcIntOperand(is_literal=False, value=acc_reg)
+        idx_operand = GqcIntOperand(is_literal=False, value=idx_reg)
+
+        self.commands.append(CommandSetInt(self.instring, self.loc, acc_reg, GqcIntOperand(is_literal=True, value=0)))
+        self.commands.append(CommandSetInt(self.instring, self.loc, idx_reg, GqcIntOperand(is_literal=True, value=hi - lo + 1)))
+
+        bit_reg = self.alloc_register()
+        bit_operand = GqcIntOperand(is_literal=False, value=bit_reg)
+
+        # while (idx) { idx -= 1; bit = idx [+ lo]; bit = badge_get(bit); acc += bit; }
+        decrement_and_accumulate = [
+            CommandArithmetic(structs.OpCode.SUBBY, self.instring, self.loc, idx_operand, GqcIntOperand(is_literal=True, value=1)),
+        ]
+        if lo == 0:
+            decrement_and_accumulate.append(
+                CommandArithmetic(structs.OpCode.QCGET, self.instring, self.loc, bit_operand, idx_operand)
+            )
+        else:
+            decrement_and_accumulate += [
+                CommandSetInt(self.instring, self.loc, bit_reg, idx_operand),
+                CommandArithmetic(structs.OpCode.ADDBY, self.instring, self.loc, bit_operand, GqcIntOperand(is_literal=True, value=lo)),
+                CommandArithmetic(structs.OpCode.QCGET, self.instring, self.loc, bit_operand, bit_operand),
+            ]
+        decrement_and_accumulate.append(
+            CommandArithmetic(structs.OpCode.ADDBY, self.instring, self.loc, acc_operand, bit_operand)
+        )
+        guarded_body = [
+            CommandIf(
+                self.instring, self.loc, idx_operand,
+                decrement_and_accumulate,
+                [CommandGoto(self.instring, self.loc, form='break')],
+            )
+        ]
+        self.commands.append(CommandLoop(self.instring, self.loc, guarded_body))
+
+        self.free_register(bit_reg)
+        self.free_register(idx_reg)
+
+        return acc_operand
 
     def resolve(self):
         if self.resolved:
