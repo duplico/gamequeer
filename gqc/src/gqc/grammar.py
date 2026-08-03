@@ -7,13 +7,20 @@ from .parser import parse_menu_definition, parse_bound_menu, parse_play
 from .parser import parse_int_expression, parse_int_operand, parse_str_literal, parse_if
 from .parser import parse_str_expression, parse_string_cast_operand
 from .parser import parse_badge_count_operand
+from .parser import parse_cohort_definition, parse_have_met_operand, parse_in_cohort_operand, parse_count_seen_operand
 
 """
 Grammar for GQC language
 ========================
 
 program = game_definition_section declaration_section*
-declaration_section = var_definition_section | animation_definition_section | lightcue_definition_section | menu_definition_section | stage_definition_section
+declaration_section = var_definition_section | animation_definition_section | lightcue_definition_section | menu_definition_section | cohort_definition_section | stage_definition_section
+
+# cohort NAME = <lo>..<hi>; -- a declared, inclusive player-ID range,
+# resolved entirely at compile time (gamequeer#423, DEF CON sprint epic
+# gamequeer#419). No on-cart footprint; NAME is only ever consulted by
+# in_cohort()/count_seen() below.
+cohort_definition_section = "cohort" identifier "=" integer ".." integer ";"
 
 game_definition_section = "game" "{" game_assignment* "}"
 game_id_assignment = "id" "=" integer ";"
@@ -57,7 +64,7 @@ stage_event = "event" event_type event_statement
 event_type = "input" "(" event_input_button ")" | "bgdone" | "fgdone" "(" integer ")" | "menu" | "enter" | "timer"
 event_input_button = "A" | "B" | "<-" | "->" | "-"
 event_statements = event_statement | "{" event_statement* "}"
-event_statement = play | cue | gostage | assignment_statement | if_statement | timer | continue | break | loop | badge_set | badge_clear
+event_statement = play | cue | gostage | assignment_statement | if_statement | timer | continue | break | loop | badge_set | badge_clear | seen_self
 play = "play" ("bganim" | ("fganim" | "fgmask") "(" int ")") identifier ";"
 cue = "cue" identifier ";"
 gostage = "gostage" identifier ";"
@@ -67,6 +74,11 @@ break = "break" ";"
 loop = "loop" event_statements
 badge_set = "badge_set" int_expression ";"
 badge_clear = "badge_clear" int_expression ";"
+# seen_self() (gamequeer#423) desugars to the idiom copy-pasted verbatim
+# across several games: "if (badge_get(GQI_PLAYER_ID)==0) badge_set
+# GQI_PLAYER_ID;" -- mark this badge as having seen its own player ID,
+# exactly once.
+seen_self = "seen_self" "(" ")" ";"
 
 assignment_statement = int_assignment | string_assignment
 int_assignment = identifier "=" int_expression ";"
@@ -77,7 +89,7 @@ int_assignment = identifier "=" int_expression ";"
 # including str(x) appearing inside a "+" chain (gamequeer#386).
 string_assignment = identifier ":=" ((string_cast &";") | string_expression) ";"
 
-int_operand = badge_count_call | identifier | integer
+int_operand = badge_count_call | have_met_call | in_cohort_call | count_seen_call | identifier | integer
 string_cast = 'str' '(' int_expression ')'
 string_operand = identifier | string | string_cast
 
@@ -88,6 +100,20 @@ string_operand = identifier | string | string_cast
 # badge_get it takes an empty, mandatory parameter list, not a bare operand
 # form.
 badge_count_call = "badge_count" "(" ")"
+
+# The social vocabulary (gamequeer#423, DEF CON sprint epic gamequeer#419) --
+# a first-class desugaring over the same badge_get/badge_set/badge_count
+# intrinsics above, replacing hand-rolled range-compare chains and the
+# copy-pasted seen_self idiom (see seen_self above).
+#
+# have_met(id) is a bare rename of badge_get(id).
+have_met_call = "have_met" "(" int_expression ")"
+# in_cohort(NAME, id) desugars to "(id >= NAME.lo) && (id <= NAME.hi)";
+# NAME must already be declared by a cohort_definition_section above it.
+in_cohort_call = "in_cohort" "(" identifier "," int_expression ")"
+# count_seen() (no argument) is badge_count() itself; count_seen(NAME) is a
+# badge_count()-style popcount loop bounded to NAME's own declared range.
+count_seen_call = "count_seen" "(" [identifier] ")"
 
 # Shorthand; see https://stackoverflow.com/a/23956778
 # badge_get is a right-associative unary prefix operator, e.g. badge_get(x).
@@ -172,10 +198,30 @@ def build_game_parser():
 
     menu_definition.set_parse_action(parse_menu_definition)
 
+    # Cohort declarations (gamequeer#423, DEF CON sprint epic gamequeer#419):
+    # "cohort NAME = <lo>..<hi>;" -- a named, inclusive player-ID range,
+    # resolved entirely at compile time (Cohort.cohort_table). No on-cart
+    # footprint of its own; only in_cohort()/count_seen() below ever
+    # reference it. `lo`/`hi` are bare integer literals for now (gqc has no
+    # named-constant feature yet -- see gamequeer#421); once that lands,
+    # this is the one place that would need to switch to whatever operand
+    # rule #421 introduces.
+    cohort_definition_section = pp.Group(pp.Keyword("cohort") - identifier - pp.Suppress("=") - integer - pp.Suppress("..") - integer - pp.Suppress(";")).set_name("cohort_definition_section")
+    cohort_definition_section.set_parse_action(parse_cohort_definition)
+
     ### Stage sections ###
     event_statements = pp.Forward()
-    
+
     # Assignments and expressions
+    # int_expression is declared as a Forward here, ahead of int_operand,
+    # because two of the social-vocabulary call forms below (have_met_call,
+    # in_cohort_call) take an int_expression as their own argument -- the
+    # usual definition order (int_operand, then int_expression built on top
+    # of it via infix_notation) would be circular otherwise. Assigned via
+    # `<<` once int_operand is fully built, same pattern as event_statements
+    # above.
+    int_expression = pp.Forward()
+
     # badge_count() -- a nullary popcount intrinsic over the badges-seen
     # bitfield (gamequeer#387). Keyword("badge_count"), not a bare string,
     # so it doesn't swallow a `badge_count`-prefixed identifier
@@ -187,9 +233,37 @@ def build_game_parser():
     badge_count_call = pp.Group(pp.Keyword("badge_count") - pp.Suppress("(") - pp.Suppress(")")).set_name("badge_count_call")
     badge_count_call.set_parse_action(parse_badge_count_operand)
 
-    int_operand = badge_count_call | identifier | integer
+    # The social vocabulary (gamequeer#423, DEF CON sprint epic
+    # gamequeer#419) -- same Keyword()-commits-once-matched reasoning as
+    # badge_count_call above, so each fails with a clean
+    # ParseSyntaxException on a malformed argument list rather than falling
+    # through to some other interpretation.
+    #
+    # have_met(id) is a bare rename of badge_get(id) -- see
+    # parser.parse_have_met_operand / GqcHaveMetOperand.
+    have_met_call = pp.Group(pp.Keyword("have_met") - pp.Suppress("(") - int_expression - pp.Suppress(")")).set_name("have_met_call")
+    have_met_call.set_parse_action(parse_have_met_operand)
+
+    # in_cohort(NAME, id) desugars to "(id >= NAME.lo) && (id <= NAME.hi)"
+    # -- NAME is resolved against Cohort.cohort_table at parse time, so it
+    # must already have been declared by a cohort_definition_section above
+    # this point in the source. See parser.parse_in_cohort_operand /
+    # GqcInCohortOperand.
+    in_cohort_call = pp.Group(pp.Keyword("in_cohort") - pp.Suppress("(") - identifier - pp.Suppress(",") - int_expression - pp.Suppress(")")).set_name("in_cohort_call")
+    in_cohort_call.set_parse_action(parse_in_cohort_operand)
+
+    # count_seen() -- no argument -- is badge_count() itself (same
+    # GqcBadgeCountOperand marker, see parser.parse_count_seen_operand);
+    # count_seen(NAME) is a badge_count()-style popcount loop bounded to
+    # NAME's own declared range. pp.Optional(identifier), not
+    # pp.Optional(int_expression): a cohort reference is a bare name looked
+    # up at parse time, not a value-producing expression.
+    count_seen_call = pp.Group(pp.Keyword("count_seen") - pp.Suppress("(") - pp.Optional(identifier) - pp.Suppress(")")).set_name("count_seen_call")
+    count_seen_call.set_parse_action(parse_count_seen_operand)
+
+    int_operand = badge_count_call | have_met_call | in_cohort_call | count_seen_call | identifier | integer
     int_operand.set_parse_action(parse_int_operand)
-    int_expression = pp.infix_notation(int_operand, [
+    int_expression <<= pp.infix_notation(int_operand, [
         (pp.Keyword('badge_get') | pp.one_of('! - ~'), 1, pp.opAssoc.RIGHT),
         (pp.one_of('* / %'), 2, pp.opAssoc.LEFT),
         (pp.one_of('+ -'), 2, pp.opAssoc.LEFT),
@@ -243,6 +317,11 @@ def build_game_parser():
     # Other commands
     badge_set = pp.Group(pp.Keyword("badge_set") - int_expression - pp.Suppress(";"))
     badge_clear = pp.Group(pp.Keyword("badge_clear") - int_expression - pp.Suppress(";"))
+    # seen_self() (gamequeer#423) desugars to the copy-pasted-verbatim idiom
+    # "if (badge_get(GQI_PLAYER_ID)==0) badge_set GQI_PLAYER_ID;" -- see
+    # parser.parse_seen_self. Nullary, like badge_count(): mandatory empty
+    # parens, no bare-operand form.
+    seen_self = pp.Group(pp.Keyword("seen_self") - pp.Suppress("(") - pp.Suppress(")") - pp.Suppress(";")).set_name("seen_self")
 
     play_type = pp.Group(pp.Keyword("bganim") | (pp.Keyword("fganim") | pp.Keyword("fgmask")) - pp.Suppress("(") - integer - pp.Suppress(")"))
     play = pp.Group(pp.Keyword("play") - play_type - identifier - pp.Suppress(";"))
@@ -253,7 +332,7 @@ def build_game_parser():
     gostage = pp.Group(pp.Keyword("gostage") - identifier - pp.Suppress(";"))
     timer = pp.Group(pp.Keyword("timer") - int_expression - pp.Suppress(";"))
 
-    event_statement = badge_set | badge_clear | play | cue | gostage | timer | if_statement | continue_statement | break_statement | loop_statement | assignment_statement
+    event_statement = badge_set | badge_clear | seen_self | play | cue | gostage | timer | if_statement | continue_statement | break_statement | loop_statement | assignment_statement
     event_statements << (pp.Group(event_statement | pp.Suppress("{") - pp.ZeroOrMore(event_statement) - pp.Suppress("}")))
 
     event_statement.set_parse_action(parse_command)
@@ -278,7 +357,7 @@ def build_game_parser():
     stage_definition_section.set_parse_action(parse_stage_definition)
 
     # Finish up
-    gqc_game << game_definition_section - pp.ZeroOrMore(animation_definition_section | lightcue_definition_section | var_definition_section | menu_definition_section | stage_definition_section)
+    gqc_game << game_definition_section - pp.ZeroOrMore(animation_definition_section | lightcue_definition_section | var_definition_section | menu_definition_section | cohort_definition_section | stage_definition_section)
     gqc_game.ignore(pp.cppStyleComment)
 
     return gqc_game

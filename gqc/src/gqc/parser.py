@@ -7,6 +7,7 @@ from rich import print
 
 from .datamodel import Animation, Game, Stage, Variable, Event, Menu, LightCue, StrExpression
 from .datamodel import IntExpression, GqcIntOperand, GqcStrCastOperand, GqcBadgeCountOperand
+from .datamodel import Cohort, GqcHaveMetOperand, GqcInCohortOperand, GqcCountSeenRangeOperand
 from .datamodel import fold_constant_int_expression
 from .commands import CommandPlay, CommandGoStage, CommandCue, CommandCastStr
 from .commands import CommandSetStr, CommandSetInt, CommandWithIntExpressionArgument
@@ -227,8 +228,79 @@ def parse_badge_count_operand(instring, loc, toks):
     # IntExpression.get_result_symbol to recognize, not a value container.
     return GqcBadgeCountOperand()
 
+# The social vocabulary (gamequeer#423, DEF CON sprint epic gamequeer#419).
+# Each parse action below produces one of the datamodel.py marker
+# namedtuples documented there, following the exact same
+# parse_int_operand/parse_int_expression/IntExpression.get_result_symbol/
+# fold_constant_int_expression recognition pattern parse_badge_count_operand
+# and GqcBadgeCountOperand already established for gamequeer#387.
+
+def parse_have_met_operand(instring, loc, toks):
+    # toks[0] is have_met_call's own pp.Group: ['have_met', arg], where arg
+    # is whatever this call's own int_expression sub-rule already reduced
+    # the argument to (a GqcIntOperand or IntExpression).
+    return GqcHaveMetOperand(id_operand=toks[0][1])
+
+def parse_in_cohort_operand(instring, loc, toks):
+    # toks[0] is in_cohort_call's own pp.Group: ['in_cohort', cohort_name, id].
+    _, cohort_name, id_operand = toks[0]
+
+    if cohort_name not in Cohort.cohort_table:
+        raise GqcParseError(f"Undefined cohort {cohort_name}", instring, loc)
+    cohort = Cohort.cohort_table[cohort_name]
+
+    return GqcInCohortOperand(id_operand=id_operand, lo=cohort.lo, hi=cohort.hi)
+
+def parse_count_seen_operand(instring, loc, toks):
+    # toks[0] is count_seen_call's own pp.Group: either ['count_seen']
+    # (the bare-call form) or ['count_seen', cohort_name].
+    toks = toks[0]
+
+    if len(toks) == 1:
+        # count_seen() with no argument is badge_count() itself
+        # (gamequeer#423) -- the same marker, same lowering, same op-stream.
+        return GqcBadgeCountOperand()
+
+    cohort_name = toks[1]
+    if cohort_name not in Cohort.cohort_table:
+        raise GqcParseError(f"Undefined cohort {cohort_name}", instring, loc)
+    cohort = Cohort.cohort_table[cohort_name]
+
+    return GqcCountSeenRangeOperand(lo=cohort.lo, hi=cohort.hi)
+
+def parse_cohort_definition(instring, loc, toks):
+    toks = toks[0]
+    _, name, lo, hi = toks
+
+    try:
+        return Cohort(name, lo, hi)
+    except ValueError as ve:
+        raise GqcParseError(str(ve), instring, loc)
+
+def parse_seen_self(instring, loc):
+    # seen_self() (gamequeer#423) desugars to the copy-pasted-verbatim idiom
+    # "if (badge_get(GQI_PLAYER_ID)==0) badge_set GQI_PLAYER_ID;" -- built
+    # by hand here rather than via the grammar (there's no source text for
+    # it to parse), mirroring the manual Command construction
+    # IntExpression._emit_badge_count already does for badge_count()'s own
+    # fixed shape.
+    id_operand = GqcIntOperand(is_literal=False, value='GQI_PLAYER_ID')
+    condition = IntExpression(
+        [['badge_get', id_operand], '==', GqcIntOperand(is_literal=True, value=0)],
+        instring, loc,
+    )
+    true_cmds = [CommandWithIntExpressionArgument(CommandType.QCSET, instring, loc, id_operand)]
+
+    return CommandIf(instring, loc, condition, true_cmds)
+
+# Every social-vocabulary operand marker (see datamodel.py) that
+# parse_int_operand/parse_int_expression need to pass through unchanged
+# rather than wrap in a GqcIntOperand -- the same role GqcBadgeCountOperand
+# already plays for badge_count().
+_SOCIAL_VOCAB_OPERAND_TYPES = (GqcBadgeCountOperand, GqcHaveMetOperand, GqcInCohortOperand, GqcCountSeenRangeOperand)
+
 def parse_int_operand(instring, loc, toks):
-    if isinstance(toks[0], (GqcIntOperand, GqcBadgeCountOperand)):
+    if isinstance(toks[0], (GqcIntOperand,) + _SOCIAL_VOCAB_OPERAND_TYPES):
         return toks[0]
     elif isinstance(toks[0], int):
         return GqcIntOperand(True, toks[0])
@@ -250,15 +322,32 @@ def parse_int_expression(instring, loc, toks):
         # re-folding/re-constructing it (which would double-alloc its
         # registers -- see gamequeer#345).
         return toks
-    if isinstance(toks, GqcBadgeCountOperand):
-        # badge_count() as the *entire* RHS, e.g. "x = badge_count();" --
-        # with no sibling operator at this nesting level, infix_notation
-        # hands this back as a bare atom rather than a
-        # [operand, op, operand] token group. Unlike a bare variable
-        # reference, badge_count() always emits real commands (its
-        # popcount loop), so it needs an IntExpression wrapper even here;
-        # get_result_symbol recognizes the same sentinel to build that
-        # loop (see IntExpression._emit_badge_count).
+    if isinstance(toks, _SOCIAL_VOCAB_OPERAND_TYPES):
+        # badge_count() (gamequeer#387) or one of the gamequeer#423 social-
+        # vocabulary markers (have_met/in_cohort/count_seen) as the *entire*
+        # RHS, e.g. "x = badge_count();" -- with no sibling operator at this
+        # nesting level, infix_notation hands this back as a bare atom
+        # rather than a [operand, op, operand] token group.
+        #
+        # Unlike the other three, in_cohort(NAME, id) *can* be a compile-time
+        # constant (a pure range compare, no badge state involved -- see
+        # fold_constant_int_expression's GqcInCohortOperand branch), so try
+        # folding first, exactly like any other bare-atom operand a few
+        # lines below this would -- skipping this would leave an
+        # IntExpression whose own result_symbol is itself a literal with no
+        # emitted commands, a shape CommandWithIntExpressionArgument doesn't
+        # handle (it only ever expects a register/variable-name result from
+        # a *wrapped* IntExpression, gamequeer#423 code review).
+        folded = fold_constant_int_expression(toks)
+        if folded is not None:
+            return GqcIntOperand(is_literal=True, value=folded)
+
+        # Not foldable (badge_count()/have_met()/count_seen() never are;
+        # in_cohort() is here because `id` itself wasn't a literal). Every
+        # one of these always emits real commands (or, for a non-foldable
+        # in_cohort(), a bare comparison), so it needs an IntExpression
+        # wrapper; IntExpression.get_result_symbol recognizes the same
+        # sentinels to build the right shape for each.
         try:
             return IntExpression([toks], instring, loc)
         except ValueError as ve:
@@ -426,6 +515,8 @@ def parse_command(instring, loc, toks):
             return CommandWithIntExpressionArgument(CommandType.QCSET, instring, loc, toks[1])
         elif command == 'badge_clear':
             return CommandWithIntExpressionArgument(CommandType.QCCLR, instring, loc, toks[1])
+        elif command == 'seen_self':
+            return parse_seen_self(instring, loc)
         else:
             raise GqcParseError(f"Invalid command {command}", instring, loc)
         
