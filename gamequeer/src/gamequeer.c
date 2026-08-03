@@ -73,6 +73,13 @@ t_gq_int *label_flags = (t_gq_int *) &gq_builtin_ints[GQI_LABEL_FLAGS * GQ_INT_S
 
 t_gq_int *player_id = (t_gq_int *) &gq_builtin_ints[GQI_PLAYER_ID * GQ_INT_SIZE];
 
+// gamequeer#411: populated once per cart load by HAL_new_game() (see HAL.c).
+// Cart code must never write this word -- on original firmware, which
+// never heard of this offset, a write corrupts whatever adjacent RAM the
+// linker happened to place next. gqc enforces read-only-ness for
+// GQI_FW_VERSION as part of the gamequeer#411 contract.
+t_gq_int *fw_version = (t_gq_int *) &gq_builtin_ints[GQI_FW_VERSION * GQ_INT_SIZE];
+
 char *game_title = (char *) &gq_builtin_strs[GQS_GAME_TITLE * GQ_STR_SIZE];
 
 char *labels[4] = {
