@@ -437,16 +437,38 @@ data lines. flashrom detects the chip as `W25Q128.V` (16384 kB).
 Software: distro `flashrom` (v1.3.0) and `usbutils`; run `flashrom` with
 `sudo`.
 
+**Recommended: `qc2024`'s `flashing/cart_flash.py`.** It automates all of
+padding, layout-file generation, and the flashrom invocations below —
+region-limited erase/program/verify by default (`--full` for a whole-chip
+write), with a `--dry-run` that prints the exact commands without touching
+hardware. Run it from the root of a `qc2024` checkout (a separate repo from
+`gamequeer`; the path below is relative to it):
+
+```bash
+python3 flashing/cart_flash.py write <name>.gqgame
+python3 flashing/cart_flash.py verify <name>.gqgame   # optional, independent read-back check
+```
+
+See `flashing/cart_flash.py --help` (or its module docstring) in the
+`qc2024` repo for the full flag set, including the WSL2/usbipd pre-flight
+check and `--programmer`/`--expect-chip` overrides.
+
 On WSL2 the CH341A enumerates Windows-side and is attached into the distro
 with [usbipd-win](https://github.com/dorssel/usbipd-win). From an elevated
 Windows shell, `usbipd bind --busid <id>` once, then
 `usbipd attach --wsl --busid <id>`; it then appears in the distro as USB ID
 `1a86:5512` (verify with `lsusb`).
 
+**Manual fallback**, for when the wrapper isn't available. This is the exact
+sequence `cart_flash.py` automates — its flashrom invocations use
+`-c "W25Q128.V"` to pin the expected chip on every call, and `-N`
+(`--noverify-all`) on region-limited writes so `-w`'s own auto-verify reads
+back only the written region instead of the whole 16 MiB chip:
+
 1. **Probe** the programmer and chip:
 
    ```bash
-   sudo flashrom -p ch341a_spi
+   sudo flashrom -p ch341a_spi -c "W25Q128.V"
    ```
 
    It must print `Found Winbond flash chip "W25Q128.V" (16384 kB, SPI)`. A
@@ -475,25 +497,22 @@ Windows shell, `usbipd bind --busid <id>` once, then
    seconds):
 
    ```bash
-   sudo flashrom -p ch341a_spi --layout cart.layout --include game -w cart_padded.bin
+   sudo flashrom -p ch341a_spi -c "W25Q128.V" --layout cart.layout --include game -N -w cart_padded.bin
    ```
 
 5. Optionally **read back** the same region and byte-compare the image
    extent for an independent verification:
 
    ```bash
-   sudo flashrom -p ch341a_spi --layout cart.layout --include game -r cart_readback.bin
+   sudo flashrom -p ch341a_spi -c "W25Q128.V" --layout cart.layout --include game -r cart_readback.bin
    ```
 
 The burned cart boots and renders on a physical badge. A region-limited write
 leaves any data past the new image's end intact — harmless, since the VM
 follows the header's cart pointers and never reads past them, but if the cart
 previously held a larger game and you want the tail scrubbed, drop
-`--layout`/`--include` and write the full 16 MiB `cart_padded.bin`.
-
-A user-friendly wrapper that automates padding, layout generation, and the
-flashrom invocation is tracked as
-[duplico/qc2024#62](https://github.com/duplico/qc2024/issues/62).
+`--layout`/`--include`/`-N` (keep `-c "W25Q128.V"`) and write the full
+16 MiB `cart_padded.bin` (matching `cart_flash.py`'s own `--full`).
 
 The recipe above assumes the cart is pulled and seated directly in the
 CH341A. An **in-system** variant also exists: the cart stays seated in the
