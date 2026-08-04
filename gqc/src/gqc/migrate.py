@@ -599,8 +599,21 @@ def _compile_flat_baseline(plan: MigrationPlan) -> bytes:
     with tempfile.TemporaryDirectory(prefix="gqc-migrate-pre-") as tmp:
         tmp_path = pathlib.Path(tmp)
         tmp_entry = tmp_path / plan.entry_path.name
-        shutil.copyfile(plan.entry_path, tmp_entry)
-        os.symlink(plan.workspace / "assets", tmp_path / "assets")
+        # Both of these only ever touch the throwaway tmp_path harness (the
+        # symlink's target, plan.workspace / "assets", is read, never
+        # written) -- this whole function runs before execute()'s first
+        # real workspace mutation, so there's nothing to roll back here,
+        # just the same "clean MigrateError, never a raw traceback"
+        # contract this module promises everywhere else (permissions, a
+        # filesystem/OS without symlink support, ...).
+        try:
+            shutil.copyfile(plan.entry_path, tmp_entry)
+            os.symlink(plan.workspace / "assets", tmp_path / "assets")
+        except OSError as exc:
+            raise MigrateError(
+                f"{plan.game_name}: building the pre-migration compile "
+                f"harness in {tmp_path} failed ({exc})"
+            ) from exc
         return _run_compile(tmp_entry, tmp_path / "build", cwd=tmp_path)
 
 

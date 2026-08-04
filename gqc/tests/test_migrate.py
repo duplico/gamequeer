@@ -551,6 +551,34 @@ def test_migrate_destination_created_after_build_plan_is_not_clobbered(tmp_path)
     assert plan.entry_path.read_bytes() == entry_before
 
 
+def test_migrate_flat_baseline_symlink_failure_raises_clean_migrate_error(
+    tmp_path, monkeypatch
+):
+    # _compile_flat_baseline's os.symlink() (and its shutil.copyfile()
+    # neighbor) were unguarded -- an OSError (permissions, a filesystem/OS
+    # without symlink support) would escape as a raw traceback instead of
+    # the clean MigrateError this module documents everywhere else
+    # (gamequeer#437 review; Copilot flagged this across all four of #433's
+    # review rounds, always suppressed, never fixed). This runs before
+    # execute()'s first real workspace mutation (the whole harness lives in
+    # a throwaway tempdir), so there's nothing to roll back -- just confirm
+    # the clean error and that the original workspace is untouched.
+    plan = _build_single_game_plan(tmp_path)
+    entry_before = plan.entry_path.read_bytes()
+
+    def failing_symlink(*args, **kwargs):
+        raise OSError("simulated symlink failure")
+
+    monkeypatch.setattr(migrate.os, "symlink", failing_symlink)
+
+    with pytest.raises(migrate.MigrateError, match="compile harness"):
+        migrate.execute(plan)
+
+    assert not plan.new_game_dir.exists()
+    assert plan.entry_path.exists()
+    assert plan.entry_path.read_bytes() == entry_before
+
+
 def test_migrate_unlink_failure_rolls_back_move_and_raises_migrate_error(tmp_path, monkeypatch):
     # The *existing* rollback for execute()'s final plan.entry_path.unlink()
     # -- the migrated directory is already verified and moved into place,
