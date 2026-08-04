@@ -35,7 +35,7 @@ jobs:
         # provisions the interpreter `uv sync` below resolves against,
         # matching gqc/pyproject.toml's `requires-python` floor and the
         # gamequeer-builder image's own pinned base (see builder.Dockerfile).
-        uses: astral-sh/setup-uv@v9
+        uses: astral-sh/setup-uv@v9.0.0
         with:
           python-version: "3.12"
           enable-cache: true
