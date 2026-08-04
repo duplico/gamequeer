@@ -15,6 +15,8 @@ import sys
 
 import pytest
 
+from gqc import migrate
+
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 CIRCLE_BMP = REPO_ROOT / "gqc" / "examples" / "skel" / "assets" / "animations" / "circle.bmp"
 TEST_GQCUE = REPO_ROOT / "examples" / "assets" / "lighting" / "test.gqcue"
@@ -373,6 +375,135 @@ def test_migrate_rejects_explicit_path_outside_workspace(tmp_path):
     assert "--workspace" in stderr
     assert outside.exists()
     assert outside.read_bytes()  # untouched, still has content
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="os.symlink needs elevated privileges on Windows"
+)
+def test_migrate_rejects_bare_name_resolving_through_symlink_outside_workspace(tmp_path):
+    # A symlink planted at the canonical already-migrated location
+    # (<name>/<name>.gq) pointing outside --workspace must be rejected just
+    # like an explicit out-of-workspace path is: _resolve_entry_path's
+    # bare-name branches (directory_style.is_file() / flat.is_file())
+    # returned a `.resolve()`d path -- which follows the symlink -- with no
+    # boundary check at all, and `execute()` unconditionally unlink()s
+    # whatever this function returns on success.
+    ws = _write_flat_workspace(tmp_path, {})
+    outside = tmp_path / "outside.gq"
+    outside.write_text(GAME_HEADER.format(title="T") + STAGE)
+
+    (ws / "mygame").mkdir()
+    (ws / "mygame" / "mygame.gq").symlink_to(outside)
+
+    exit_code, stdout, stderr = _run(tmp_path, ["migrate", "mygame", "--workspace", str(ws)])
+    assert exit_code != 0
+    assert "Traceback" not in stderr
+    assert "outside workspace" in stderr
+    assert outside.exists()
+    assert outside.read_text()  # untouched, still has content
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="os.symlink needs elevated privileges on Windows"
+)
+def test_migrate_rejects_explicit_path_at_symlinked_canonical_location(tmp_path):
+    # Even the explicit-path branch's existing membership check (`resolved
+    # in (directory_style, flat)`) is trivially satisfied when GAME names
+    # the canonical <name>/<name>.gq location *and* that location is itself
+    # a symlink escaping the workspace -- both sides resolve through the
+    # identical symlink to the identical external target. Same escape as
+    # the bare-name case above, reached via an explicit path instead.
+    ws = _write_flat_workspace(tmp_path, {})
+    outside = tmp_path / "outside.gq"
+    outside.write_text(GAME_HEADER.format(title="T") + STAGE)
+
+    (ws / "mygame").mkdir()
+    symlinked_entry = ws / "mygame" / "mygame.gq"
+    symlinked_entry.symlink_to(outside)
+
+    exit_code, stdout, stderr = _run(
+        tmp_path, ["migrate", str(symlinked_entry), "--workspace", str(ws)]
+    )
+    assert exit_code != 0
+    assert "Traceback" not in stderr
+    assert "outside workspace" in stderr
+    assert outside.exists()
+    assert outside.read_text()  # untouched, still has content
+
+
+# --- execute(): filesystem-failure rollback (in-process, monkeypatched) ----
+#
+# These two drive gqc.migrate's functions directly (build_plan/execute)
+# rather than the CLI subprocess: the failure modes below (a mid-copy
+# shutil.move failure, an unlink() failure) need to be injected
+# deterministically, which isn't reachable by shaping fixture source/inputs
+# alone.
+
+
+def _build_single_game_plan(tmp_path):
+    source = (
+        GAME_HEADER.format(title="T")
+        + 'animations { circ <- "mygame/circle.bmp"; }\n'
+        + STAGE
+    )
+    ws = _write_flat_workspace(tmp_path, {"mygame": source})
+    _seed_asset(ws, "animations", "mygame/circle.bmp", CIRCLE_BMP)
+    return migrate.build_plan("mygame", ws.resolve())
+
+
+def test_migrate_move_failure_rolls_back_and_raises_migrate_error(tmp_path, monkeypatch):
+    # execute()'s final shutil.move(staged_game_dir, plan.new_game_dir) was
+    # unguarded: cross-filesystem (this temp staging dir on one mount, a
+    # real workspace on another) shutil.move degrades to copytree+rmtree,
+    # so a mid-copy failure can leave new_game_dir partially populated in
+    # the real workspace, with a raw OSError escaping gqc.py's `migrate`
+    # command (which only catches MigrateError/GqcParseError) as a
+    # traceback. The patched shutil.move below writes a partial destination
+    # before failing, mimicking what a real copytree failure would leave
+    # behind.
+    plan = _build_single_game_plan(tmp_path)
+    entry_before = plan.entry_path.read_bytes()
+
+    def failing_move(src, dst):
+        dst_path = pathlib.Path(dst)
+        dst_path.mkdir(parents=True)
+        (dst_path / "partial.gq").write_text("incomplete")
+        raise OSError("simulated cross-filesystem move failure mid-copy")
+
+    monkeypatch.setattr(migrate.shutil, "move", failing_move)
+
+    with pytest.raises(migrate.MigrateError, match="moving it into place"):
+        migrate.execute(plan)
+
+    assert not plan.new_game_dir.exists()
+    assert plan.entry_path.exists()
+    assert plan.entry_path.read_bytes() == entry_before
+
+
+def test_migrate_unlink_failure_rolls_back_move_and_raises_migrate_error(tmp_path, monkeypatch):
+    # The *existing* rollback for execute()'s final plan.entry_path.unlink()
+    # -- the migrated directory is already verified and moved into place,
+    # but removing the original flat entry file then fails -- had no test
+    # coverage at all. Pin it down the same way as the move-failure case
+    # above.
+    plan = _build_single_game_plan(tmp_path)
+    entry_before = plan.entry_path.read_bytes()
+
+    real_unlink = pathlib.Path.unlink
+
+    def failing_unlink(self, *args, **kwargs):
+        if self == plan.entry_path:
+            raise OSError("simulated unlink failure")
+        return real_unlink(self, *args, **kwargs)
+
+    monkeypatch.setattr(pathlib.Path, "unlink", failing_unlink)
+
+    with pytest.raises(migrate.MigrateError, match="removing the original"):
+        migrate.execute(plan)
+
+    assert not plan.new_game_dir.exists()
+    assert plan.entry_path.exists()
+    assert plan.entry_path.read_bytes() == entry_before
 
 
 # --- malformed source: clean error, not a raw traceback --------------------

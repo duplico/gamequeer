@@ -74,6 +74,10 @@ stages the migrated form in a separate temp directory, compiles that too,
 and requires the two `.gqgame` outputs to be **byte-identical** before
 committing anything to the workspace. Any mismatch (or either compile
 failing) aborts loudly and leaves the original completely untouched.
+Once gamequeer#434 (layout-detected legacy resolution) lands, a flat game
+will compile directly again, and `_compile_flat_baseline`'s symlink
+harness can be simplified to a direct in-place compile of the original
+entry file.
 """
 
 import dataclasses
@@ -280,6 +284,28 @@ def _resolve_flat_source(workspace: pathlib.Path, section: str, literal: str) ->
     return workspace / "assets" / asset_dir / literal
 
 
+def _require_in_workspace(
+    resolved: pathlib.Path, workspace: pathlib.Path, game: str
+) -> None:
+    """Raise MigrateError unless RESOLVED (already followed through any
+    symlinks, via `.resolve()`) sits inside WORKSPACE (also already
+    resolved -- see `build_plan`).
+
+    Guards every path `_resolve_entry_path` can return, not just an
+    explicit GAME path: a symlink planted at either canonical location
+    (`<name>/<name>.gq` or `games/<name>.gq`) resolves outside the
+    workspace exactly as easily as an explicit `../escape.gq` would, and
+    `execute()` unconditionally `unlink()`s whatever this function
+    returns on success -- so a workspace-external file reached via either
+    path shape must never be handed back."""
+    if not resolved.is_relative_to(workspace):
+        raise MigrateError(
+            f"{game!r} resolves to {resolved}, outside workspace {workspace} "
+            "(likely a symlink) -- migrate only operates on games inside "
+            "--workspace."
+        )
+
+
 def _resolve_entry_path(game: str, workspace: pathlib.Path) -> pathlib.Path:
     """Resolve GAME (a bare game name, or a path to its `.gq` entry file)
     against WORKSPACE, whether the game is currently flat
@@ -291,7 +317,10 @@ def _resolve_entry_path(game: str, workspace: pathlib.Path) -> pathlib.Path:
     arbitrary existing file path here (e.g. `../elsewhere/foo.gq`, or an
     absolute path outside --workspace entirely) would let GAME name a file
     outside the workspace migrate is meant to operate on, which `execute`
-    would then happily delete."""
+    would then happily delete. Every returned path -- explicit, or found
+    via a bare-name lookup -- is additionally required to actually resolve
+    inside WORKSPACE (`_require_in_workspace`): a symlink at the canonical
+    location is just as much an escape as an explicit `..` path."""
     candidate = pathlib.Path(game)
     name = candidate.name
     if name.endswith(".gq"):
@@ -308,11 +337,14 @@ def _resolve_entry_path(game: str, workspace: pathlib.Path) -> pathlib.Path:
                 f"{workspace} (expected {directory_style} or {flat}) -- "
                 "migrate only operates on games inside --workspace."
             )
+        _require_in_workspace(resolved, workspace, game)
         return resolved
 
     if directory_style.is_file():
+        _require_in_workspace(directory_style, workspace, game)
         return directory_style
     if flat.is_file():
+        _require_in_workspace(flat, workspace, game)
         return flat
 
     raise MigrateError(
@@ -585,7 +617,27 @@ def execute(plan: MigrationPlan) -> MigrationResult:
         # staged, byte-verified game directory into place, then remove the
         # original flat entry file. Never the shared assets/ tree -- other,
         # not-yet-migrated games may still reference it.
-        shutil.move(str(staged_game_dir), str(plan.new_game_dir))
+        try:
+            shutil.move(str(staged_game_dir), str(plan.new_game_dir))
+        except OSError as exc:
+            # Same filesystem: os.rename is atomic, so this can only ever
+            # fail all-or-nothing. Cross-filesystem (e.g. this temp
+            # staging dir on /tmp vs. a real workspace on another mount)
+            # shutil.move degrades to copytree+rmtree, and a mid-copy
+            # failure (disk full, permissions, ...) can leave
+            # new_game_dir partially populated in the *real* workspace
+            # while the original flat entry file is still untouched.
+            # Remove whatever landed so the workspace stays in exactly
+            # one of its two valid states -- fully flat, never a
+            # half-written migrated directory -- and report it as a
+            # clean MigrateError, not a raw traceback (gqc.py's `migrate`
+            # command only catches MigrateError/GqcParseError).
+            shutil.rmtree(plan.new_game_dir, ignore_errors=True)
+            raise MigrateError(
+                f"{plan.game_name}: migrated directory verified and staged, "
+                f"but moving it into place at {plan.new_game_dir} failed "
+                f"({exc}) -- rolled back; original flat game left in place."
+            ) from exc
 
     try:
         plan.entry_path.unlink()
