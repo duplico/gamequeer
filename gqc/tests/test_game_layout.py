@@ -580,3 +580,42 @@ def test_update_makefile_local_on_workspace_with_no_games_is_sane(tmp_path):
     # because there's nothing to build.
     exit_code, stdout, stderr = _make(tmp_path, "-f", "Makefile.local")
     assert exit_code == 0, stderr
+
+
+def test_update_makefile_local_on_nonexistent_dir_gives_clean_diagnostic(tmp_path):
+    # Regression guard (Copilot review, PR #444): BASE_DIR previously had no
+    # exists=True check, so a typo'd/nonexistent path raised a raw
+    # FileNotFoundError from `(base_dir / 'Makefile.local').open('w')`
+    # instead of click's normal usage-error diagnostic.
+    missing = tmp_path / "does-not-exist"
+    exit_code, stderr, _ = _run(tmp_path, ["update-makefile-local", str(missing)])
+    assert exit_code != 0
+    assert "does not exist" in stderr
+    assert "Traceback" not in stderr
+
+
+def test_init_dir_makefile_clean_targets_base_dir_not_cwd(tmp_path):
+    # Regression guard (Copilot review, PR #444): `clean`'s `-rm -rf build/*`
+    # used to be relative to whatever directory `make` was invoked from,
+    # not $(BASE_DIR) -- inconsistent with every other rule in the file,
+    # which is BASE_DIR-rooted so it works regardless of invocation CWD.
+    exit_code, stderr, _ = _run(tmp_path, ["init-dir", str(tmp_path)])
+    assert exit_code == 0, stderr
+
+    exit_code, stderr, _ = _run(tmp_path, ["new", "demo"])
+    assert exit_code == 0, stderr
+
+    exit_code, stdout, stderr = _make(tmp_path)
+    assert exit_code == 0, stderr
+    gqgame = tmp_path / "build" / "demo" / "demo.gqgame"
+    assert gqgame.exists()
+
+    # Invoke `clean` from an unrelated CWD via `-f <path>` (not `-C`, which
+    # would just chdir into tmp_path first and mask the bug); it must still
+    # remove tmp_path's own build/ output, not create/empty a bogus one
+    # relative to the unrelated CWD.
+    other_cwd = tmp_path.parent
+    exit_code, stdout, stderr = _make(other_cwd, "-f", str(tmp_path / "Makefile"), "clean")
+    assert exit_code == 0, stderr
+    assert not gqgame.exists()
+    assert not (other_cwd / "build").exists()

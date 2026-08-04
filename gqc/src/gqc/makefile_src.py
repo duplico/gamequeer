@@ -44,5 +44,5 @@ endef
 $(foreach g,$(GAME_NAMES),$(eval $(call GAME_RULE,$(g))))
 
 clean:
-\t-rm -rf build/*
+\t-rm -rf $(BASE_DIR)/build/*
 """

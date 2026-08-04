@@ -290,7 +290,7 @@ def init_dir(base_dir : pathlib.Path, force : bool):
         f.write(makefile_contents)
 
 @gqc_cli.command()
-@click.argument('base_dir', type=click.Path(file_okay=False, dir_okay=True, writable=True, path_type=pathlib.Path))
+@click.argument('base_dir', type=click.Path(file_okay=False, dir_okay=True, exists=True, writable=True, path_type=pathlib.Path))
 def update_makefile_local(base_dir : pathlib.Path):
     """Regenerate BASE_DIR/Makefile.local for the game-as-directory layout
     (gamequeer#420): every top-level directory directly under BASE_DIR
@@ -310,10 +310,9 @@ def update_makefile_local(base_dir : pathlib.Path):
     # inside it -- not a recursive scan, and not the old flat games/*.gq
     # convention.
     game_paths = []
-    if base_dir.is_dir():
-        for entry in sorted(base_dir.iterdir()):
-            if entry.is_dir() and (entry / f'{entry.name}.gq').is_file():
-                game_paths.append(GamePath(entry.name, entry))
+    for entry in sorted(base_dir.iterdir()):
+        if entry.is_dir() and (entry / f'{entry.name}.gq').is_file():
+            game_paths.append(GamePath(entry.name, entry))
 
     # Populate the Makefile with the game destinations, and create
     #  the build directory tree for games as well.
