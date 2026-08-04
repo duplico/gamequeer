@@ -139,7 +139,7 @@ dmg = random(low_dmg, high_dmg);
 
 Its *multiplicative core* is the same Park-Miller "minimal standard" LCG
 the game corpus already hand-rolled before this existed (see e.g.
-`gq-games/games/donsol.gq`'s card-shuffle `lcg`), advanced one Schrage-method
+`gq-games/donsol/donsol.gq`'s card-shuffle `lcg`), advanced one Schrage-method
 step on every call. Its *seeding* is NOT the same as donsol.gq's: the state
 is perturbed on every call with `GQI_PLAYER_ID` and a hidden counter that
 increments once per `random()` *call* (zero at boot) -- not donsol.gq's own
@@ -367,16 +367,33 @@ were polled.
 - **`compile <input.gq> -o <out_dir>`** — produces `<out_dir>/<name>.gqgame`
   (the flashable cart), plus `map.txt` (linker/symbol summary) and
   `cmds.gqasm` (disassembled event bytecode) unless `--no-mem-map` is given.
-  Animation/cue source files are resolved **relative to the current working
-  directory** as `assets/animations/<file>` and `assets/lighting/<file>` — so
-  always run `compile` from the workspace dir that has an `assets/` tree.
+  Animation/cue source files are resolved **relative to `<input.gq>`'s own
+  parent directory** as `assets/animations/<file>` and `assets/lighting/<file>`
+  — not the process CWD — so `<input.gq>` must be a self-contained game
+  directory's entry file, `<name>/<name>.gq` (see `new`/`migrate` below).
+- **`new <name> [-o <out-dir>] [--force]`** — scaffold a new game in the
+  game-as-directory layout: `<name>/<name>.gq` (a starter `game{}` block +
+  `start` stage) plus `<name>/assets/animations/` and `<name>/assets/lighting/`,
+  under `--out-dir` (default: CWD).
 - **`mkanim -i <src> -o <dir> [-d <dither>] [-f <fps>]`** — standalone
   GIF/video/image → dithered 1-bit frames (writes `anim.gif` + `frame*.bmp`).
   Note: the `compile` pipeline runs this conversion **internally** per
   `animations{}` entry, so you rarely call `mkanim` directly.
 - **`mkcue -i <src> -o <dir>`** — build an LED lighting cue.
-- `init-dir` / `update-makefile-local` — scaffold a workspace + Makefile that
-  auto-discovers `games/**/*.gq`.
+- **`migrate <name> [-w <workspace>] [--dry-run]`** — re-layout a flat
+  `games/<name>.gq` (+ shared workspace `assets/`) game onto its own
+  self-contained `<name>/<name>.gq` directory: copies only the assets it
+  actually references and rewrites their path literals to match. Verifies the
+  migrated game compiles to a byte-identical `.gqgame` before committing
+  anything; on any mismatch the original flat game is left untouched.
+- `init-dir` / `update-makefile-local` — scaffold a workspace + Makefile.
+  **Both still only know the flat `games/**/*.gq` convention** (`makefile_src.py`'s
+  generated Makefile shells out to `find $BASE_DIR/games -name "*.gq"`;
+  `update_makefile_local` scans the same `games/` subtree) — they haven't been
+  updated for the game-as-directory layout. A workspace scaffolded with
+  `init-dir` needs `new`/`migrate` used per-game plus a hand-maintained
+  Makefile that discovers the game-as-directory convention instead (see
+  `gq-games`'s own `Makefile` for a worked example), not `update-makefile-local`.
 
 ## 5. How animations bind and get encoded
 
@@ -438,19 +455,24 @@ cover all four (image-encoding × mask-encoding) combinations gqc can produce.
 
 ## 7. Compile → flashable cart (the exact command)
 
-From a workspace with `assets/animations/` present (e.g. `examples/`), inside
-the builder container:
+From a game-as-directory workspace — each game self-contained at
+`<workspace>/<name>/<name>.gq` plus its own `assets/` — inside the builder
+container:
 
 ```bash
 docker run --rm --workdir /workspaces/gamequeer \
   -v "$PWD":/workspaces/gamequeer --user $(id -u):$(id -g) \
   gamequeer-builder:latest \
-  /bin/bash -c "cd examples && \
+  /bin/bash -c "cd <workspace> && \
     PYTHONPATH=/workspaces/gamequeer/gqc/src python -m gqc \
-      compile -o build/<name> games/<path>/<name>.gq"
+      compile -o build/<name> <name>/<name>.gq"
 ```
 
-The flashable cart is `examples/build/<name>/<name>.gqgame`.
+The flashable cart is `<workspace>/build/<name>/<name>.gqgame`.
+
+This repo's own `examples/` hasn't been moved onto this layout yet
+(gamequeer#440) and won't compile as shown above until it is; `gq-games`
+(a separate repo, the actual game library) is the current worked reference.
 
 ### Validate rendering headlessly (emulator)
 
@@ -602,8 +624,11 @@ for the full in-system procedure.
 
 ## 8. Gotchas found
 
-- **Asset paths are CWD-relative** (`assets/animations/<file>`). Compile from
-  the workspace root, not from `games/`.
+- **Asset paths resolve against the game's own directory**
+  (`<name>/assets/animations/<file>`, `<name>/assets/lighting/<file>`), not the
+  process CWD. A "does not exist" asset error against a game still living flat
+  under `games/<name>.gq` means it needs `gqc migrate <name>` first, not a
+  path fix.
 - **`w`/`h` default to 128 and *resize*** — a small source is scaled up, a
   wide source is distorted (no aspect preservation, no crop).
 - **Hand-authored GIFs can silently collapse to one frame** through gqc's
@@ -662,10 +687,12 @@ for the full in-system procedure.
 ## 9. The committed perf / regression-content test carts
 
 Under `examples/games/perf/` (assets under `examples/assets/animations/`,
-regenerable with `games/perf/gen_perf_assets.py`). All compiled with
-`gqc` and confirmed rendering correctly in the headless emulator
-(`--dump`/`--input`); image-cart frame encodings additionally confirmed via
-`map.txt`.
+regenerable with `examples/games/perf/gen_perf_assets.py`). `examples/` is
+still on the flat layout and doesn't currently compile against tip `gqc`
+(gamequeer#440) — the table below describes each cart's content and render
+path, not a live, re-runnable recipe. Once `examples/` is migrated, verify a
+cart the same way as any other game: compile, check `map.txt` for frame
+encoding, and render it in the headless emulator (`--dump`/`--input`).
 
 | Cart | Path drives | Notes |
 |------|-------------|-------|
