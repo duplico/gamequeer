@@ -28,9 +28,8 @@ Design decisions
   `<workspace>/games/`, matching `gqc new`'s own scaffold (its default
   `--out-dir` is the CWD) -- not nested inside `games/`. `games/` stays the
   home for whatever flat games haven't been migrated yet during the
-  transition (see gamequeer#432); the workspace `Makefile`'s discovery of
-  the new, sibling-of-`games/` layout is tracked separately (out of scope
-  here -- lives in `gq-games`, not `gqc`).
+  transition (see gamequeer#432); `gqc init-dir`/`gqc update-makefile-local`
+  generate workspace Makefiles that discover this layout.
 - **Path rewriting, not verbatim copying**: a flat source like
   `"bricks/bg_title.png"` could, mechanically, be preserved unchanged and
   just copied to `<name>/assets/animations/bricks/bg_title.png` (still
