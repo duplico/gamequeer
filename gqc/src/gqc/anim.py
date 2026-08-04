@@ -79,7 +79,8 @@ def make_animation(progress: Progress, anim_src_path : pathlib.Path, output_dir 
     for file in output_dir.glob('frame*.bmp'):
         file.unlink()
 
-    # Check whether the source file exists and raise a value error if it doesn't
+    # Check whether the source file exists and raise a GqcAssetNotFoundError
+    # (a ValueError subclass) if it doesn't
     if not anim_src_path.exists():
         raise GqcAssetNotFoundError(f"Animation source file {anim_src_path} does not exist")
     

@@ -84,7 +84,8 @@ def make_cue(progress : Progress, src_path : pathlib.Path, output_dir : pathlib.
     task = progress.add_task(f"Parsing light cue '{src_path}'", total=1)
     # Set up the output directory
     output_dir.mkdir(parents=True, exist_ok=True)
-    # Check whether the source file exists and raise a value error if it doesn't
+    # Check whether the source file exists and raise a GqcAssetNotFoundError
+    # (a ValueError subclass) if it doesn't
     if not src_path.exists():
         raise GqcAssetNotFoundError(f"Light cue source file {src_path} does not exist")
     
