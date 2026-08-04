@@ -342,20 +342,25 @@ GQ_REGISTERS_STR = [
 # and the Park-Miller "minimal standard" generator constants it's built
 # from. See IntExpression._emit_random (datamodel.py) for the full
 # derivation; this is just the shared vocabulary between it and
-# parser.parse_random_operand. Deliberately the *same* sequence (seed
-# convention and Schrage-method advance) the game corpus already hand-rolls
-# at the source level -- see e.g. gq-games/games/donsol.gq's card-shuffle
-# `lcg` -- so random() is genuinely just sugar for that pattern, not a
-# different generator. Named `.reg` like GQ_REGISTERS_INT/GQ_FW_PROBE_RESULT_VAR
-# above, but NOT a member of GQ_REGISTERS_INT: it must never be handed out by
-# IntExpression.alloc_register() as ordinary expression scratch space, since
-# unlike those, its value has to survive *between* separate random() calls.
+# parser.parse_random_operand. The *multiplicative core* (Schrage-method
+# advance, same modulus/multiplier) is the same recurrence the game corpus
+# already hand-rolls at the source level -- see e.g. gq-games/games/
+# donsol.gq's card-shuffle `lcg` -- but the *seeding scheme* is deliberately
+# NOT the same as donsol.gq's; see _emit_random's docstring for the actual
+# entropy model and why real per-boot entropy needs an author-side
+# donsol-style timer salt. Named `.reg` like GQ_REGISTERS_INT/
+# GQ_FW_PROBE_RESULT_VAR above, but NOT a member of GQ_REGISTERS_INT: it
+# must never be handed out by IntExpression.alloc_register() as ordinary
+# expression scratch space, since unlike those, its value has to survive
+# *between* separate random() calls.
 GQ_RANDOM_STATE_VAR = '__gq_random_state.reg'
 GQ_RANDOM_CTR_VAR = '__gq_random_ctr.reg'
-# GQI_PLAYER_ID * GQ_RANDOM_SEED_MULTIPLIER + (a monotonically incrementing
-# per-call counter) is the perturbation folded into the LCG state on every
-# call (donsol.gq's own seeding formula, applied per-call instead of
-# per-"run" -- see _emit_random's docstring for why).
+# GQI_PLAYER_ID * GQ_RANDOM_SEED_MULTIPLIER + GQ_RANDOM_CTR_VAR (a counter
+# incremented once per random() *call*, zero-initialized at boot -- NOT a
+# free-running timer counter like donsol.gq's own `ctr`) is the perturbation
+# folded into the LCG state on every call. See _emit_random's docstring for
+# why this makes the first random() call after a fresh boot a deterministic
+# function of GQI_PLAYER_ID alone.
 GQ_RANDOM_SEED_MULTIPLIER = 7919
 # The Park-Miller "minimal standard" LCG: state' = (a * state) mod m, with
 # m = 2**31 - 1 (a Mersenne prime) and a = 48271, computed via Schrage's

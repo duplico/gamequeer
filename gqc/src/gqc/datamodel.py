@@ -1398,6 +1398,17 @@ def fold_constant_int_expression(node):
 # constant-only pre-pass to lift this restriction; that's left as a
 # possible future enhancement if declare-before-use ever proves too
 # restrictive in practice.
+#
+# A `const`/`enum` name used before its own declaration is diagnosed, not
+# silently miscompiled: `parser.parse_int_operand`'s identifier branch
+# can't tell at parse time whether an as-yet-undefined name is an ordinary
+# (forward-reference-tolerant) variable or a not-yet-declared const/enum
+# member, so it records every such fallback reference in
+# `Constant.pending_int_refs`; once the whole file has been parsed (and
+# `const_table` therefore holds every const/enum name the file will ever
+# define), `parser.parse` cross-checks that list and rejects any entry that
+# turns out to name a const/enum member after all -- see
+# `parser.check_pending_int_refs`.
 
 
 class Constant:
@@ -1409,9 +1420,23 @@ class Constant:
     grammar's bare `identifier` token can't contain a `.`, so one flat
     dict safely serves both forms and gives them a single shared
     duplicate-name check.
+
+    `pending_int_refs` is a *separate* table, for a separate purpose: every
+    identifier `parser.parse_int_operand` couldn't resolve against
+    `const_table` at the point it was parsed (so fell through to treating
+    it as an ordinary variable reference), recorded as `(name, instring,
+    loc)`. Declare-before-use for const/enum (see the module-level comment
+    above this class) means that fallback is *correct* for a genuine
+    variable, but *wrong* for a const/enum referenced ahead of its own
+    declaration -- which this file can't yet tell apart at that point in
+    the parse, since the name might still get defined later. Once the
+    whole file is parsed, `parser.check_pending_int_refs` re-checks every
+    entry here against the now-complete `const_table` and rejects any that
+    do turn out to name a const/enum member.
     """
 
     const_table: dict[str, int] = {}
+    pending_int_refs: list = []
 
     @classmethod
     def define(cls, name: str, value: int) -> None:
@@ -1741,33 +1766,49 @@ class IntExpression:
         self.free_register(cmp_reg)
 
     def _emit_random(self, lo, hi) -> GqcIntOperand:
-        """Lower a `random(lo, hi)` leaf (gamequeer#422) to the exact
-        Park-Miller "minimal standard" LCG (multiplier
-        `structs.GQ_RANDOM_LCG_MULTIPLIER`, modulus
-        `structs.GQ_RANDOM_LCG_MODULUS` = 2**31 - 1) the game corpus already
-        hand-rolls at the source level -- see e.g. gq-games/games/donsol.gq's
-        card-shuffle `lcg` -- advanced via Schrage's method so the
-        multiply-by-48271 step never has to leave `t_gq_int`'s signed-32-bit
-        range. FROZEN VM CONTRACT: no dedicated opcode, no wider int type --
-        every step below is an existing `CommandArithmetic`/`CommandIf` op.
+        """Lower a `random(lo, hi)` leaf (gamequeer#422) to the Park-Miller
+        "minimal standard" LCG (multiplier `structs.GQ_RANDOM_LCG_MULTIPLIER`,
+        modulus `structs.GQ_RANDOM_LCG_MODULUS` = 2**31 - 1), advanced via
+        Schrage's method so the multiply-by-48271 step never has to leave
+        `t_gq_int`'s signed-32-bit range. FROZEN VM CONTRACT: no dedicated
+        opcode, no wider int type -- every step below is an existing
+        `CommandArithmetic`/`CommandIf` op.
 
-        Seed convention: `structs.GQ_RANDOM_STATE_VAR` is the persisted LCG
-        state, carried across *every* `random()` call for the life of the
-        running cart (it's a volatile/heap variable, zero-initialized at
-        boot like any other -- see `linker.create_random_state_variables`).
-        Every call perturbs it with `GQI_PLAYER_ID * GQ_RANDOM_SEED_MULTIPLIER`
-        plus `structs.GQ_RANDOM_CTR_VAR`, a counter incremented on every call
-        -- donsol.gq's own seeding formula (`lcg = GQI_PLAYER_ID * 7919; lcg
-        = lcg + ctr; ...`), applied fresh on every call instead of once per
-        "run": two `random()` calls made back-to-back (or a fresh cart boot,
-        which resets the state back to 0) still diverge from each other,
-        rather than both landing on the same first draw. The perturbation
-        folds into the *previous* call's already-well-mixed state rather
-        than replacing it outright, so the full multiplicative recurrence's
-        statistical properties carry forward between calls; the seed
-        formula alone (without a continuously-advancing state) would just
-        be an arithmetic progression in the counter -- not what "the same
-        LCG donsol hand-rolls" means here.
+        The *multiplicative core* (this same modulus/multiplier, advanced
+        one Schrage step per draw) is the recurrence the game corpus already
+        hand-rolls at the source level -- see e.g. gq-games/games/donsol.gq's
+        card-shuffle `lcg`. The *seeding scheme* is deliberately NOT the
+        same, and callers should not assume it is:
+
+        `structs.GQ_RANDOM_STATE_VAR` is the persisted LCG state, carried
+        across *every* `random()` call for the life of the running cart
+        (it's a volatile/heap variable, zero-initialized at boot like any
+        other -- see `linker.create_random_state_variables`). Every call
+        perturbs it with `GQI_PLAYER_ID * GQ_RANDOM_SEED_MULTIPLIER` plus
+        `structs.GQ_RANDOM_CTR_VAR`, a counter incremented once per
+        `random()` *call* (also zero-initialized at boot) -- NOT donsol.gq's
+        `ctr`, which is a free-running counter driven by a re-armed `timer`
+        event while the player sits on a menu, i.e. real wall-clock entropy
+        that varies with how long the player waited before triggering the
+        first draw. `GQ_RANDOM_CTR_VAR` has no such source: it is 0 at boot
+        and only ever advances when `random()` itself is called, so the
+        *first* `random()` call after a fresh boot is `state = GQI_PLAYER_ID
+        * 7919 + 1` -- a value fully determined by the cart's badge ID,
+        identical and reproducible on every reboot of the same badge. (The
+        perturbation still folds into the *previous* call's already-mixed
+        state rather than replacing it outright, so calls made back-to-back
+        within the same boot session do diverge from each other and from
+        the first draw -- it's only the very first draw per boot that has no
+        real entropy behind it.)
+
+        Authors who need a genuinely per-boot-unpredictable first draw (e.g.
+        a card shuffle that shouldn't replay identically every time the same
+        badge boots the cart) need to hand-roll real entropy the same way
+        donsol.gq does: arm a `timer` event on a menu/title screen, let it
+        free-run while the player is looking at the screen, and salt an int
+        variable with that counter (via ordinary int-expression ops) before
+        the first `random()` call -- `random()` alone does not do this for
+        you.
 
         Maps the result into the caller's *inclusive* `[lo, hi]` range via
         `state % (hi - lo + 1) + lo`. Like every other gqc runtime `/`/`%`

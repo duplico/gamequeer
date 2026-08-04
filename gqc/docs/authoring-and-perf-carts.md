@@ -137,27 +137,40 @@ roll = random(1, 6);          // 1..6 inclusive, like a d6
 dmg = random(low_dmg, high_dmg);
 ```
 
-It's sugar for exactly the hand-rolled Park-Miller "minimal standard" LCG
-the game corpus already used before this existed (see e.g.
-`gq-games/games/donsol.gq`'s card-shuffle `lcg`) -- seeded from
-`GQI_PLAYER_ID` and a hidden per-call counter, advanced one Schrage-method
-step on every call. No setup required: the first call anywhere in a game
-lazily creates its hidden state; a game that never calls `random()` pays
-nothing for it. See `IntExpression._emit_random` (`gqc/src/gqc/datamodel.py`)
-for the full derivation.
+Its *multiplicative core* is the same Park-Miller "minimal standard" LCG
+the game corpus already hand-rolled before this existed (see e.g.
+`gq-games/games/donsol.gq`'s card-shuffle `lcg`), advanced one Schrage-method
+step on every call. Its *seeding* is NOT the same as donsol.gq's: the state
+is perturbed on every call with `GQI_PLAYER_ID` and a hidden counter that
+increments once per `random()` *call* (zero at boot) -- not donsol.gq's own
+`ctr`, which is sampled from a free-running timer counter for real
+wall-clock entropy. That means **the first `random()` call after a fresh
+cart boot is fully determined by the badge's `GQI_PLAYER_ID`** and repeats
+identically on every reboot of the same badge; only later calls within the
+same boot session diverge from each other. No setup required either way:
+the first call anywhere in a game lazily creates the hidden state; a game
+that never calls `random()` pays nothing for it. See
+`IntExpression._emit_random` (`gqc/src/gqc/datamodel.py`) for the full
+derivation.
 
 Also available: `min(a, b)`, `max(a, b)`, `clamp(x, lo, hi)` (`=
 min(max(x, lo), hi)`), and `abs(x)` -- all full `int_expression` arguments,
 all fold to a single literal at compile time when every argument is one
 (unlike `random()`, which never folds -- it reads live state).
 
-**Hand-rolling your own generator is no longer necessary for the common
-case**, but the recipe below is kept for reference (e.g. driving a full
-shuffle from one manually-managed seed, or matching a specific published
-LCG for cross-checking against another implementation). Note it predates
-`random()` and uses a *different* multiplier (16807, the original 1969
-Lehmer/Park-Miller constant) than `random()`'s own (48271, the 1993 revised
-"minimal standard" constant matching donsol.gq) -- the two aren't
+**If a game needs its first draw to actually vary from boot to boot**
+(e.g. a card shuffle that shouldn't replay identically every time the same
+badge boots the cart), `random()` alone doesn't provide that -- hand-roll
+real entropy the same way donsol.gq does, with the recipe below: arm a
+`timer` event on a menu/title screen so a counter free-runs while the
+player is looking at the screen, and salt an int variable with it (or feed
+it straight into your own LCG state) before relying on any random draw.
+The recipe is also useful for driving a full shuffle from one
+manually-managed seed, or matching a specific published LCG for
+cross-checking against another implementation. Note it predates `random()`
+and uses a *different* multiplier (16807, the original 1969 Lehmer/
+Park-Miller constant) than `random()`'s own (48271, the 1993 revised
+"minimal standard" constant, also used by donsol.gq) -- the two aren't
 interchangeable mid-sequence, but both are valid, full-period generators on
 their own terms.
 
