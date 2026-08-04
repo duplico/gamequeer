@@ -61,7 +61,11 @@ jobs:
         # Real tests now exist (gamequeer#331); a bare `pytest tests` fails on
         # zero collected items (exit 5) same as any other test failure or
         # error, with no special-casing.
-        run: uv run pytest tests
+        # --extra test here too (not just relying on the sync step above):
+        # `uv run` without it wouldn't fail loudly on a missing `pytest` --
+        # it silently falls through to whatever `pytest` is elsewhere on
+        # PATH (see gqc/Makefile's `test` target for the same reasoning).
+        run: uv run --extra test pytest tests
         working-directory: gqc/
 
   gq-game-language-tests:
