@@ -388,7 +388,7 @@ were polled.
   anything; on any mismatch the original flat game is left untouched.
 - `init-dir` / `update-makefile-local` — scaffold a workspace + Makefile.
   **Both still only know the flat `games/**/*.gq` convention** (`makefile_src.py`'s
-  generated Makefile shells out to `find $BASE_DIR/games -name "*.gq"`;
+  generated Makefile shells out to `find $(BASE_DIR)/games -name "*.gq" -print`;
   `update_makefile_local` scans the same `games/` subtree) — they haven't been
   updated for the game-as-directory layout. A workspace scaffolded with
   `init-dir` needs `new`/`migrate` used per-game plus a hand-maintained
@@ -624,11 +624,11 @@ for the full in-system procedure.
 
 ## 8. Gotchas found
 
-- **Asset paths resolve against the game's own directory**
-  (`<name>/assets/animations/<file>`, `<name>/assets/lighting/<file>`), not the
-  process CWD. A "does not exist" asset error against a game still living flat
-  under `games/<name>.gq` means it needs `gqc migrate <name>` first, not a
-  path fix.
+- **`animations{}`/`lightcues{}` source literals are bare filenames**,
+  resolved against the game's own directory as `assets/animations/<file>` /
+  `assets/lighting/<file>`, not the process CWD. A "does not exist" asset
+  error against a game still living flat under `games/<name>.gq` means it
+  needs `gqc migrate <name>` first, not a path fix.
 - **`w`/`h` default to 128 and *resize*** — a small source is scaled up, a
   wide source is distorted (no aspect preservation, no crop).
 - **Hand-authored GIFs can silently collapse to one frame** through gqc's
