@@ -82,6 +82,44 @@ def test_undefined_animation_in_play_rejects_as_linker_fatal_no_location(compile
     assert_no_traceback(stderr)
 
 
+# --- undefined int identifier (gamequeer#428) --------------------------------
+# `CommandWithIntExpressionArgument.resolve()` (gqc/src/gqc/commands.py) used
+# to have no `else` branch for an int operand that names no known variable
+# (or const/enum/builtin) at all: `self.arg2_name in Variable.var_table` being
+# false just fell through without touching `unresolved_symbols` or `resolved`,
+# so the command was reported resolved with `arg2` left at its zero-initialized
+# default -- a typo'd or never-declared int identifier silently compiled to a
+# literal 0 instead of failing to compile. Its string counterpart
+# (CommandWithStrExpressionArgument.resolve(), just below) already had this
+# `else` branch, so an undefined string identifier already hit the same
+# link-time FATAL sweep as gostage/play above. The fix adds the missing
+# branch so both types behave the same way.
+
+
+def test_undefined_int_variable_rejects_instead_of_silently_reading_as_zero(
+    compile_gq,
+):
+    source = game_with_stage("x = y;", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 1
+    assert (
+        "FATAL: Unresolved symbols remain in command SETVAR: UNRESOLVED: ['y']"
+        in stderr
+    )
+    assert_no_traceback(stderr)
+
+
+def test_defined_int_variable_reference_still_accepts(compile_gq):
+    # Sibling accept case for the reject test above: an int identifier that
+    # *is* a known variable still resolves and compiles cleanly.
+    source = game_with_stage(
+        "x = y;", "volatile { int x = 0; int y = 5; }"
+    )
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+    assert_no_traceback(stderr)
+
+
 # --- non-string menu/textmenu prompt -----------------------------------------
 # Stage.resolve() raises a bare ValueError (not GqcParseError) if a bound
 # prompt variable turns out not to be a string. Whether that ValueError is
