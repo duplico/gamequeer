@@ -276,7 +276,10 @@ class CommandWithIntExpressionArgument(Command):
                 else:
                     self.unresolved_symbols.append(self.arg2_name)
                     resolved = False
-        
+            else:
+                self.unresolved_symbols.append(self.arg2_name)
+                resolved = False
+
         self.resolved = resolved
         return self.resolved
     
