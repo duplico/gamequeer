@@ -15,7 +15,11 @@ single flat, file-global namespace, resolved eagerly in source order -- a
 `const`/`enum` must be declared *before* its first use, like a `#define` in
 a single-pass C preprocessor (see `datamodel.Constant`'s docstring for the
 full reasoning). This is a deliberate, documented departure from ordinary
-variable/stage/animation references, which *are* forward-reference-tolerant.
+variable/stage/animation references, which *are* forward-reference-tolerant
+-- and, since gamequeer#427's review, an *enforced* one: a bare `const`
+identifier referenced ahead of its own declaration is a fatal compile error
+(`parser.check_pending_int_refs`), not a silent fall-through to treating it
+as an always-undefined variable.
 """
 
 import pytest
@@ -342,37 +346,55 @@ def test_const_initialized_from_a_variable_rejects(compile_gq):
     assert_no_traceback(stderr)
 
 
-# --- scoping: declare-before-use (documented, deliberate limitation) --------
+# --- scoping: declare-before-use is an enforced, fatal error ----------------
 
 
-def test_const_referenced_before_its_declaration_does_not_error_at_parse_time(
-    compile_gq,
-):
-    # Pins the documented declare-before-use scoping decision (see this
-    # module's docstring and datamodel.Constant's): a `const` referenced
-    # textually before its own declaration is not in Constant.const_table
-    # yet, so parser.parse_int_operand's identifier branch falls through to
-    # treating "LATER" as an ordinary (variable) reference instead, exactly
-    # as it would for any other not-yet-defined name.
+def test_const_referenced_before_its_declaration_rejects(compile_gq):
+    # gamequeer#427 review: a `const` referenced textually before its own
+    # declaration used to compile clean (exit 0) with the reference
+    # silently left at `arg2 == 0` -- Constant.const_table didn't have
+    # "LATER" in it yet when parser.parse_int_operand's identifier branch
+    # ran, so it fell through to treating "LATER" as an ordinary (and, in
+    # this case, always-undefined) variable reference instead, and a
+    # *separate* pre-existing gap in CommandWithIntExpressionArgument.
+    # resolve() (its int-operand branch was missing the "else:
+    # unresolved_symbols.append(...)" its own string-operand counterpart
+    # already had) meant that never even got reported as an unresolved
+    # symbol.
     #
-    # That reference is then silently left at arg2 == 0 rather than
-    # reported as an unresolved symbol -- a *separate*, pre-existing gap in
-    # CommandWithIntExpressionArgument.resolve() (its int-operand branch is
-    # missing the "else: unresolved_symbols.append(...)" its own
-    # string-operand counterpart, CommandWithStrExpressionArgument.resolve,
-    # already has), not something gamequeer#421 introduces or is
-    # responsible for fixing. Pinned here (gqc exits 0) so that gap is
-    # visible and cross-referenced rather than silently masked by this
-    # feature's own tests.
+    # parser.check_pending_int_refs closes the const/enum half of that gap
+    # directly (independent of whether the general unresolved-int-symbol
+    # gap above is ever fixed elsewhere): once the whole file is parsed,
+    # gqc knows "LATER" does eventually get defined as a const, so a
+    # forward reference to it is diagnosed as exactly that, not silently
+    # miscompiled.
     source = (
         f"{GAME_HEADER}"
         "volatile { int x = 0; }\n"
         "stage start { event enter { x = LATER; } }\n"
         "const LATER = 5;\n"
     )
+    exit_code, stderr, _out_dir = compile_gq(source)
+    assert exit_code == 1
+    # Split across two assertions for the same rich line-wrap reason as
+    # test_const_value_exceeding_int32_range_rejects, above.
+    assert "'LATER' is a const/enum member declared later" in stderr
+    assert "must be declared before their first use" in stderr
+    assert_no_traceback(stderr)
+
+
+def test_const_referenced_after_its_declaration_accepts(compile_gq):
+    # Same identifier, same reference, only the order swapped -- the
+    # accept side of the reject test above, so the new diagnostic is
+    # pinned as declare-before-use specifically, not "referencing a const
+    # named LATER" in general.
+    source = (
+        f"{GAME_HEADER}"
+        "const LATER = 5;\n"
+        "volatile { int x = 0; }\n"
+        "stage start { event enter { x = LATER; } }\n"
+    )
     exit_code, stderr, out_dir = compile_gq(source)
     assert exit_code == 0, stderr
     cmds = (out_dir / "cmds.gqasm").read_text()
-    setvar = one_event(cmds).ops[0]
-    assert not (setvar.flags & structs.OpFlags.LITERAL_ARG2)
-    assert setvar.arg2 == 0
+    assert _folded_setvar_value(cmds) == 5

@@ -436,6 +436,12 @@ def parse_int_operand(instring, loc, toks):
         # reference, exactly as before this feature existed.
         return GqcIntOperand(True, Constant.const_table[toks[0]])
     else:
+        # Not (yet) a known const/enum member -- could be an ordinary
+        # (forward-reference-tolerant) variable, or a const/enum used
+        # *before* its own declaration; can't tell which until the whole
+        # file has been parsed (see Constant.pending_int_refs' docstring
+        # and check_pending_int_refs, below).
+        Constant.pending_int_refs.append((toks[0], instring, loc))
         return GqcIntOperand(False, toks[0])
 
 def parse_int_expression(instring, loc, toks):
@@ -662,6 +668,38 @@ def parse_command(instring, loc, toks):
     except ValueError as ve:
         raise GqcParseError(str(ve), instring, loc)
 
+def check_pending_int_refs():
+    """Reject any `Constant.pending_int_refs` entry that turns out to name
+    a const/enum member after all (gamequeer#427 review) -- called once
+    parsing has fully finished, so `Constant.const_table` holds every
+    const/enum this file will ever define, including ones declared *after*
+    the offending reference.
+
+    Reports the first such reference in source order (`pending_int_refs`
+    is append-only, in parse order) and exits, matching every other
+    single-error `parser.parse` diagnostic -- there's no multi-error
+    reporting elsewhere in gqc to be consistent with.
+
+    Skips a name that's *also* a declared variable (`Variable.var_table`):
+    gqc doesn't otherwise stop a `const`/`enum` and a `volatile`/
+    `persistent` variable from sharing a name (a separate, pre-existing gap,
+    out of scope here), so in that rare collision case this defers to the
+    parser's own (variable) interpretation rather than guessing wrong.
+    """
+    for name, ref_instring, ref_loc in Constant.pending_int_refs:
+        if name in Constant.const_table and name not in Variable.var_table:
+            print(
+                GqcParseError(
+                    f"{name!r} is a const/enum member declared later in "
+                    "this file. const/enum references must be declared "
+                    "before their first use (they don't get the same "
+                    "forward-reference tolerance ordinary variables do).",
+                    ref_instring, ref_loc,
+                ),
+                file=sys.stderr,
+            )
+            exit(1)
+
 def parse(text):
     # Import here to avoid circular import
     from gqc import grammar
@@ -687,6 +725,13 @@ def parse(text):
             file=sys.stderr,
         )
         exit(1)
+
+    # gamequeer#427 review: a const/enum referenced before its own
+    # declaration couldn't be told apart from an ordinary forward-declared
+    # variable reference while parsing was still in progress -- now that
+    # it's finished, Constant.const_table is complete and this can be
+    # checked for real. See check_pending_int_refs' own docstring.
+    check_pending_int_refs()
 
     # gamequeer#420: game{} is no longer structurally locked to being the
     # first top-level section (it's just one more alternative in the
