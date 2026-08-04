@@ -18,13 +18,14 @@ concat/merge is explicitly out of scope here -- that's gamequeer#401):
     directory is self-contained regardless of where `gqc compile` is
     invoked from. `gqc new` scaffolds a fresh game directory in that shape.
 
-The "anywhere" cases also exercise two order-dependency traps that moving
-game{} out of its fixed first slot exposed (see datamodel.py's Stage,
-Game.__init__/add_stage, and parser.parse_fw_version_operand): Stage.__init__
-used to call Game.game.add_stage(self) unconditionally, and
-parse_fw_version_operand used to write straight to Game.game.needs_fw_probe
--- both would crash with AttributeError on `NoneType` if the stage in
-question was parsed before game{} itself.
+The "anywhere" cases also exercise order-dependency traps that moving game{}
+out of its fixed first slot exposed (see datamodel.py's Stage,
+Game.__init__/add_stage, and parser.parse_fw_version_operand/
+parse_random_operand): Stage.__init__ used to call Game.game.add_stage(self)
+unconditionally, and parse_fw_version_operand/parse_random_operand used to
+write straight to Game.game.needs_fw_probe/Game.game.needs_random -- all
+three would crash with AttributeError on `NoneType` if the stage in question
+was parsed before game{} itself.
 """
 
 import pathlib
@@ -99,6 +100,22 @@ def test_fw_version_call_before_game_block_accepts(compile_gq):
     # independent).
     source = (
         "stage start { event enter { x = fw_version(); } }\n"
+        + GAME_HEADER
+        + "volatile { int x = 0; }\n"
+    )
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+    assert "Traceback" not in stderr
+
+
+def test_random_call_before_game_block_accepts(compile_gq):
+    # Regression guard (gamequeer#427, Copilot finding): parse_random_operand
+    # used to write straight to Game.game.needs_random -- an AttributeError
+    # on `NoneType` if the calling stage was parsed before game{} existed,
+    # same hazard as fw_version() above (see Game.needs_random_seen in
+    # datamodel.py, which makes this order-independent too).
+    source = (
+        "stage start { event enter { x = random(0, 10); } }\n"
         + GAME_HEADER
         + "volatile { int x = 0; }\n"
     )

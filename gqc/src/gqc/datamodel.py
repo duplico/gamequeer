@@ -121,6 +121,12 @@ class Game:
     # see parse_fw_version_operand and Game.__init__ below.
     needs_fw_probe_seen = False
 
+    # Same hazard, same fix, for random() (gamequeer#422): set the first
+    # time any stage's event code calls random(), regardless of whether a
+    # Game instance exists yet -- see parse_random_operand and
+    # Game.__init__ below.
+    needs_random_seen = False
+
     def __init__(self, id : int, title : str, author : str, starting_stage : str = 'start'):
         self.addr = 0x00000000 # Set at link time
         self.stages = []
@@ -153,7 +159,12 @@ class Game:
         # ahead of a `volatile { ... }` section appearing later in the same
         # source file and falsely trip its one-declaration-per-game check
         # (parser.parse_variable_definition_storageclass).
-        self.needs_random = False
+        #
+        # Seeded from needs_random_seen rather than starting False, for the
+        # same gamequeer#420 reason as needs_fw_probe above: a random() call
+        # may already have been parsed (and recorded there) before this
+        # game{} block itself is reached.
+        self.needs_random = Game.needs_random_seen
 
         if Game.game is not None:
             raise ValueError("Game already defined")

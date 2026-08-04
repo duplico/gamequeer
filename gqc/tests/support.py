@@ -42,6 +42,7 @@ def reset_compiler_state():
     Game.game_name = None
     Game.game_dir = pathlib.Path()
     Game.needs_fw_probe_seen = False
+    Game.needs_random_seen = False
     Game.game = None
 
     Event.event_table.clear()

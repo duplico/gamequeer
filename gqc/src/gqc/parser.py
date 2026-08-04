@@ -326,7 +326,16 @@ def parse_random_operand(instring, loc, toks):
     # above) is what tells gqc.py to call
     # linker.create_random_state_variables after parsing: a game that never
     # calls random() gets no hidden LCG state/counter variables.
-    Game.game.needs_random = True
+    #
+    # gamequeer#420: game{} may not have been parsed yet (it's no longer
+    # required to be the first top-level section), so Game.game can still be
+    # None here -- record the flag on the class itself either way;
+    # Game.__init__ seeds a not-yet-constructed instance's needs_random from
+    # it, and it's still applied directly to Game.game when that instance
+    # already exists (the common case).
+    Game.needs_random_seen = True
+    if Game.game is not None:
+        Game.game.needs_random = True
     lo, hi = toks[0]
     return GqcRandomOperand(lo, hi)
 
