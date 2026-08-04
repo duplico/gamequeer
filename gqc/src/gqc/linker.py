@@ -146,7 +146,7 @@ def inject_fw_version_probe():
 
 def create_symbol_table(table_dest = sys.stdout, cmd_dest = sys.stdout):
     # Output order (.game .anim .stage .frame .framedata .cues .cuedata
-    # .menu .event .init .var):
+    # .menu .const .event .init .var):
     # header (fixed size)
     # animations (fixed size by count)
     # stages (fixed size by count)
@@ -155,6 +155,7 @@ def create_symbol_table(table_dest = sys.stdout, cmd_dest = sys.stdout):
     # light cues (fixed size by count)
     # light cue data (variable size)
     # menus (variable size)
+    # read-only string constant pool (variable size; gamequeer#418)
     # events code (variable size)
     # initialization code (variable size)
     # variable area (variable size)
@@ -221,6 +222,20 @@ def create_symbol_table(table_dest = sys.stdout, cmd_dest = sys.stdout):
         menu.set_addr(menus_ptr_start + menus_ptr_offset)
         menus_ptr_offset += menu.size()
 
+    # Place the read-only string constant pool: string literals and
+    # volatile-str `.init` shadows (gamequeer#418). These are never write
+    # targets after link time, so they're placed here in the read-only
+    # region alongside the other fixed, non-persistent tables, instead of
+    # the 4 KB-limited mutable persistent sector below -- that's what keeps
+    # the persistent sector's size independent of literal count. Ordinary
+    # `set_addr()` namespacing/CRC/write-through-cache machinery doesn't
+    # apply here: the pool is placed once and never touched again.
+    const_ptr_start = menus_ptr_start + menus_ptr_offset
+    const_ptr_offset = 0
+    for var in Variable.storageclass_table['const'].values():
+        var.set_addr(const_ptr_start + const_ptr_offset)
+        const_ptr_offset += var.size()
+
     # Allocation of volatile variables to the heap is required for event code
     #  to resolve correctly, so do that now. We'll have another pass later to
     #  generate their initialization code.
@@ -231,7 +246,7 @@ def create_symbol_table(table_dest = sys.stdout, cmd_dest = sys.stdout):
 
     # The event table's addresses are calculated as part of the placement of
     #  stages.
-    events_ptr_start = menus_ptr_start + menus_ptr_offset
+    events_ptr_start = const_ptr_start + const_ptr_offset
     events_ptr_offset = 0
 
     # Stages require two passes: first to assign addresses to the stages themselves,
@@ -339,6 +354,7 @@ def create_symbol_table(table_dest = sys.stdout, cmd_dest = sys.stdout):
         '.cues' : LightCue.link_table,
         '.cuedata' : LightCueFrame.link_table,
         '.menu' : Menu.link_table,
+        '.const' : Variable.const_link_table,
         '.event' : Event.link_table,
         '.init' : init_table,
         '.var' : Variable.link_table,

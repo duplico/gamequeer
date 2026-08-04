@@ -287,10 +287,20 @@ class Stage:
 
 class Variable:
     var_table = {}
-    storageclass_table = dict(persistent={}, volatile={}, builtin_int={}, builtin_str = {})
+    storageclass_table = dict(persistent={}, volatile={}, const={}, builtin_int={}, builtin_str = {})
     link_table = dict() # OrderedDict not needed to remember order since Python 3.7
+    # Read-only string constant pool (gamequeer#418): string literals and
+    # the compiler-generated volatile-str `.init` shadows below. These are
+    # never written after link time (the grammar has no literal lvalue, and
+    # `.init` vars are only ever a CommandSetStr *source*), so they're kept
+    # out of the mutable persistent section entirely -- see linker.py's
+    # placement of storageclass_table['const'] as its own section, and
+    # set_addr()'s routing into this table instead of link_table. That's
+    # what keeps the persistent 4 KB sector's size independent of literal
+    # count.
+    const_link_table = dict()
     heap_table = dict()
-    
+
     str_literals = dict()
 
     @classmethod
@@ -301,8 +311,11 @@ class Variable:
             name = f'S{len(cls.str_literals)}.strlit'
             cls.str_literals[value] = name
 
-            # Create a persistent variable to hold the string literal
-            Variable('str', name, value, storageclass='persistent')
+            # Create a read-only constant-pool variable to hold the string
+            # literal (gamequeer#418). It's never a write target -- the
+            # grammar has no literal lvalue -- so it doesn't need to live in
+            # the mutable persistent sector.
+            Variable('str', name, value, storageclass='const')
             return name
 
     def __init__(self, datatype : str, name : str, value, storageclass : str = None):
@@ -365,16 +378,20 @@ class Variable:
         return f"Variable({repr(self.datatype)}, {repr(self.name)}, {self.value}, storageclass={repr(self.storageclass)})"
 
     def set_storageclass(self, storageclass):
-        assert storageclass in ["volatile", "persistent", "builtin_int", "builtin_str"]
+        assert storageclass in ["volatile", "persistent", "const", "builtin_int", "builtin_str"]
         self.storageclass = storageclass
         Variable.storageclass_table[storageclass][self.name] = self
 
-        # If this variable is a volatile string, create a persistent variable to use for
-        #  initialization purposes.
-        # Volatile ints don't need this because they can be initialized with a literal-flagged 
+        # If this variable is a volatile string, create a read-only
+        # constant-pool variable to use for initialization purposes
+        # (gamequeer#418; a compiler-generated `.init` shadow is never a
+        # write target -- it's only ever a CommandSetStr *source* -- so it
+        # belongs in the same pool as string literals, not the mutable
+        # persistent section).
+        # Volatile ints don't need this because they can be initialized with a literal-flagged
         #  operation.
         if storageclass == "volatile" and self.datatype == "str":
-            init_var = Variable(self.datatype, f'{self.name}.init', self.value, storageclass="persistent")
+            init_var = Variable(self.datatype, f'{self.name}.init', self.value, storageclass="const")
             self.init_from = init_var
     
     def to_bytes(self):
@@ -421,7 +438,15 @@ class Variable:
     def set_addr(self, addr : int, namespace : int = structs.GQ_PTR_NS_CART):
         self.addr = structs.gq_ptr_apply_ns(namespace, addr)
         if namespace == structs.GQ_PTR_NS_CART:
-            Variable.link_table[self.addr] = self
+            # Const-pool variables (string literals, volatile-str `.init`
+            # shadows) get their own section/symbol-table entry, kept out
+            # of link_table (which backs the persistent '.var' section) so
+            # they don't inflate the 4 KB-limited persistent sector
+            # (gamequeer#418).
+            if self.storageclass == 'const':
+                Variable.const_link_table[self.addr] = self
+            else:
+                Variable.link_table[self.addr] = self
         elif namespace == structs.GQ_PTR_NS_HEAP:
             Variable.heap_table[self.addr] = self
         elif namespace in [structs.GQ_PTR_BUILTIN_INT, structs.GQ_PTR_BUILTIN_STR]:

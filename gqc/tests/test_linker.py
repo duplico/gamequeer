@@ -263,7 +263,8 @@ def test_section_order_matches_actual_layout(compile_gq):
     # linker.py's create_symbol_table() docstring comment claims the output
     # order is:
     #   header, animations, stages, frames, frame data, menus,
-    #   variable area, initialization code, events code
+    #   read-only string constant pool, variable area, initialization code,
+    #   events code
     # The actual order (both in map.txt and in the emitted .gqgame bytes,
     # driven by the `symbol_table` dict built at the end of that function)
     # omits lightcues from the comment entirely, and places the variable
@@ -273,6 +274,9 @@ def test_section_order_matches_actual_layout(compile_gq):
     # -- that one is informational only, since generate_code() skips any
     # symbol whose namespace isn't GQ_PTR_NS_CART when emitting .gqgame
     # bytes, so it's never actually part of the cart image.
+    # `.const` (gamequeer#418) always appears, even with no author-written
+    # string literals: GQ_REGISTERS_STR's `.init` shadows live there too,
+    # and those 4 string registers are always reserved.
     source = (
         f"{game_header()}"
         'animations { pmm <- "perf_mask_mask.gif"; }\n'
@@ -300,6 +304,7 @@ def test_section_order_matches_actual_layout(compile_gq):
         ".cues",
         ".cuedata",
         ".menu",
+        ".const",
         ".event",
         ".init",
         ".var",
@@ -322,12 +327,228 @@ def test_volatile_table_over_512_bytes_exits_2(compile_gq):
 
 
 def test_persistent_section_over_4kb_exits_2(compile_gq):
-    decls = "\n".join(f"int p{i} = 0;" for i in range(1000))
+    # 1200 declared ints (4 bytes each) plus the 10 reserved
+    # GQ_PERSISTENT_BADGES_* ints and the CRC16 var comfortably clears the
+    # 4096-byte sector on its own. (Pre-gamequeer#418, 1000 was enough
+    # because GQ_REGISTERS_STR's `.init` shadows also shared this sector;
+    # they've since moved to the read-only `.const` pool, which no longer
+    # counts against this limit -- exactly the property #418 exists for.)
+    decls = "\n".join(f"int p{i} = 0;" for i in range(1200))
     source = f"{game_header()}persistent {{ {decls} }}\nstage start {{ event enter {{ }} }}\n"
     exit_code, stderr, _ = compile_gq(source)
     assert exit_code == 2
     assert "Persistent variable section exceeds 4 KB sector boundary" in stderr
     assert "hardware limitation" in stderr
+
+
+# --- read-only string constant pool (gamequeer#418) ---------------------------
+# String literals (Variable.get_str_literal) and the volatile-str `.init`
+# initialization shadows it also backs are never write targets after link
+# time (no literal lvalue exists in the grammar; a `.init` var is only ever
+# a CommandSetStr *source*), so they're placed in their own `.const`
+# section -- a plain, unconstrained read-only region -- instead of the
+# 4 KB-limited mutable persistent sector. See the gamequeer#418 issue
+# comment for the full frozen-VM-contract justification: nothing in the
+# read path (old or new firmware) distinguishes a persistent-sector address
+# from any other GQ_PTR_NS_CART address.
+
+
+def test_string_literal_lands_in_const_section_not_var(compile_gq):
+    # A game's first user-authored string literal is always named
+    # `S0.strlit` (Variable.get_str_literal's per-process dedup counter --
+    # GQ_REGISTERS_STR's `.init` shadows are named `GQ_RSn.reg.init`, a
+    # disjoint namespace, so they never collide with this).
+    source = (
+        f"{game_header()}"
+        'volatile { str x := ""; }\n'
+        'stage start { event enter { x := "hello there"; } }\n'
+    )
+    gqgame_bytes, map_text = _compile_and_read(compile_gq, source, game_name="litplace")
+    del gqgame_bytes
+    sections, symbols = _parse_map_txt(map_text)
+
+    const_addr = _find_symbol_addr(symbols, "'S0.strlit'")
+    var_start, var_size = sections[".var"]
+    const_start, const_size = sections[".const"]
+
+    # The literal lives inside the .const section's address range...
+    assert const_start <= const_addr < const_start + const_size
+    # ...and nowhere inside .var (the persistent/cache/pad region).
+    assert not (var_start <= const_addr < var_start + var_size)
+
+    repr_str = next(r for a, _s, r in symbols if a == const_addr)
+    assert "storageclass='const'" in repr_str
+    assert "hello there" in repr_str
+
+
+def test_duplicate_string_literals_deduplicate_to_one_const_entry(compile_gq):
+    source = (
+        f"{game_header()}"
+        'volatile { str x := ""; }\n'
+        'stage start { event enter { x := "dup"; x := "dup"; x := "dup"; } }\n'
+    )
+    _gqgame_bytes, map_text = _compile_and_read(compile_gq, source, game_name="litdup")
+    _sections, symbols = _parse_map_txt(map_text)
+
+    matches = [addr for addr, _size, repr_str in symbols if "'S0.strlit'" in repr_str]
+    assert len(matches) == 1
+
+
+def test_volatile_str_init_shadow_lands_in_const_section(compile_gq):
+    # The compiler-generated `<name>.init` shadow that backs a volatile str
+    # variable's startup value is exactly as read-only as a literal (it's
+    # only ever a CommandSetStr source, in the init table) -- it belongs in
+    # the same pool, not the persistent sector.
+    source = (
+        f"{game_header()}"
+        'volatile { str greeting := "hi there"; }\n'
+        "stage start { event enter { } }\n"
+    )
+    _gqgame_bytes, map_text = _compile_and_read(compile_gq, source, game_name="initshadow")
+    _sections, symbols = _parse_map_txt(map_text)
+
+    repr_str = next(r for _a, _s, r in symbols if "'greeting.init'" in r)
+    assert "storageclass='const'" in repr_str
+
+
+def test_menu_prompt_literal_lands_in_const_section(compile_gq):
+    # `menu <name> prompt "...";` routes its prompt through the same
+    # string_operand -> get_str_literal() grammar path as any other string
+    # literal (Stage.resolve() looks the prompt up by name in
+    # Variable.var_table, same as a CommandSetStr operand) -- it's not a
+    # special case, but it's a distinct grammar rule from a plain
+    # assignment RHS, so pin it directly rather than relying on golden/
+    # ctest coverage (menu_choice.gq) alone.
+    source = (
+        f"{game_header()}"
+        'menus { m { 1: "One"; 2: "Two"; } }\n'
+        'stage start { menu m prompt "Pick one:"; event enter { } }\n'
+    )
+    gqgame_bytes, map_text = _compile_and_read(compile_gq, source, game_name="menuprompt")
+    del gqgame_bytes
+    sections, symbols = _parse_map_txt(map_text)
+
+    const_start, const_size = sections[".const"]
+    # Not just "'S0.strlit'" -- the Stage's own repr also names it (as
+    # BoundMenu(..., menu_prompt='S0.strlit')), so that needle matches two
+    # symbols (the Stage and the Variable). Anchor on the Variable repr.
+    prompt_addr = _find_symbol_addr(symbols, "Variable('str', 'S0.strlit'")
+    assert const_start <= prompt_addr < const_start + const_size
+
+    repr_str = next(r for a, _s, r in symbols if a == prompt_addr)
+    assert "storageclass='const'" in repr_str
+    assert "Pick one:" in repr_str
+
+
+def test_empty_string_literal_assignment_rhs_lands_in_const_section(compile_gq):
+    # gamequeer#418 named `x := "";` (an *empty* literal used as an
+    # assignment RHS, not a declaration default) as an edge case distinct
+    # from test_volatile_str_init_shadow_lands_in_const_section's `str x :=
+    # "";` default-value form -- that one never calls get_str_literal() at
+    # all (the default value is stored directly on the `.init` shadow), so
+    # it doesn't exercise the same path this test does.
+    source = (
+        f"{game_header()}"
+        'volatile { str x := "nonempty"; }\n'
+        'stage start { event enter { x := ""; } }\n'
+    )
+    _gqgame_bytes, map_text = _compile_and_read(compile_gq, source, game_name="emptylit")
+    sections, symbols = _parse_map_txt(map_text)
+
+    const_start, const_size = sections[".const"]
+    empty_lit_addr = _find_symbol_addr(symbols, "'S0.strlit'")
+    assert const_start <= empty_lit_addr < const_start + const_size
+
+    repr_str = next(r for a, _s, r in symbols if a == empty_lit_addr)
+    # Variable.__repr__ doesn't repr() the value field, so an empty string
+    # shows up as nothing between the two commas either side of it.
+    assert repr_str == "Variable('str', 'S0.strlit', , storageclass='const')"
+
+
+def test_reserved_persistent_badges_offset_is_unchanged_by_literal_count(compile_gq):
+    # GQP_OFFSET_BADGES (gamequeer_bytecode.h) hardcodes offset 0 from
+    # persistent_var_ptr for the reserved badge-bitfield ints. Nothing about
+    # #418's placement of literals/`.init` shadows in the separate `.const`
+    # section may perturb that -- prove it holds both with zero literals and
+    # with a few dozen, not just by inspection.
+    def badges_offset(source, game_name):
+        _gqgame_bytes, map_text = _compile_and_read(compile_gq, source, game_name=game_name)
+        header = _unpack_header(_gqgame_bytes)
+        _sections, symbols = _parse_map_txt(map_text)
+        badges_addr = _find_symbol_addr(symbols, "'GQ_PERSISTENT_BADGES_0.builtin'")
+        # header.persistent_var_ptr is a bare offset (no namespace byte --
+        # see test_persistent_var_ptr_omits_its_namespace_byte above), but
+        # map.txt addresses always carry one; strip it before diffing.
+        return structs.gq_ptr_get_addr(badges_addr) - header.persistent_var_ptr
+
+    no_literals_source = f"{game_header()}stage start {{ event enter {{ }} }}\n"
+
+    literal_assigns = "\n".join(f'x := "lit{i}";' for i in range(40))
+    many_literals_source = (
+        f"{game_header()}"
+        'volatile { str x := ""; }\n'
+        f"stage start {{ event enter {{ {literal_assigns} }} }}\n"
+    )
+
+    offset_a = badges_offset(no_literals_source, "badges_a")
+    offset_b = badges_offset(many_literals_source, "badges_b")
+
+    assert offset_a == 0
+    assert offset_b == 0
+
+
+def test_literal_heavy_cart_keeps_persistent_sector_under_4kb(compile_gq):
+    # The Skippy-unblocking property (gamequeer#418): a cart with hundreds
+    # of distinct string literals and *no* author-declared persistent
+    # variables must still compile, because literals no longer live in the
+    # 4 KB-limited persistent sector at all.
+    #
+    # Pre-#418, every distinct literal cost a 22-byte (GQ_STR_SIZE)
+    # persistent slot alongside the 10 reserved GQ_PERSISTENT_BADGES_* ints
+    # (40 bytes) + the CRC16 var (4 bytes) + GQ_REGISTERS_STR's 4 `.init`
+    # shadows (88 bytes): a 300-literal cart would have needed
+    # 40 + 4 + 88 + 300*22 = 6732 bytes, comfortably over the 4096-byte
+    # sector and a hard compile error (see
+    # test_persistent_section_over_4kb_exits_2 above, and gamequeer#418's
+    # issue comment). This is exactly the cart shape that used to be
+    # unbuildable.
+    n_literals = 300
+    assert structs.GQ_STR_SIZE * n_literals + 40 + 4 + 4 * structs.GQ_STR_SIZE > 0x1000
+
+    literal_assigns = "\n".join(f'x := "literal number {i}";' for i in range(n_literals))
+    source = (
+        f"{game_header()}"
+        'volatile { str x := ""; }\n'
+        f"stage start {{ event enter {{ {literal_assigns} }} }}\n"
+    )
+    gqgame_bytes, map_text = _compile_and_read(compile_gq, source, game_name="litheavy")
+    header = _unpack_header(gqgame_bytes)
+    sections, symbols = _parse_map_txt(map_text)
+
+    # The persistent sector's *real* (non-pad, non-cache) content is
+    # unchanged by the literal count: just the 10 reserved badge ints + the
+    # CRC16 var. (`.var`'s other entries are `__pad.*` sentinels and the
+    # `__cache.*` write-through mirror, both storageclass='persistent' too.)
+    real_persistent = [
+        r for _a, _s, r in symbols
+        if "storageclass='persistent'" in r
+        and "'__pad." not in r
+        and "'__cache." not in r
+    ]
+    assert len(real_persistent) == 11  # 10 GQ_PERSISTENT_BADGES_* + __crc16.builtin
+
+    var_start, var_size = sections[".var"]
+    assert var_size == 0x2000  # persistent sector (0x1000) + its cache, unchanged
+    assert header.persistent_var_ptr % 0x1000 == 0
+
+    # The const pool, meanwhile, is free to grow past 4 KB with the literal
+    # count -- it holds all 300 literals, GQ_REGISTERS_STR's 4 `.init`
+    # shadows, and `x`'s own `.init` shadow (its `""` starting value),
+    # uncapped.
+    const_start, const_size = sections[".const"]
+    assert const_size == (n_literals + 4 + 1) * structs.GQ_STR_SIZE
+    assert const_size > 0x1000
+    del var_start, const_start
 
 
 # --- same-source recompile determinism ---------------------------------------

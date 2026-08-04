@@ -47,6 +47,7 @@ def reset_compiler_state():
     for storageclass_table in Variable.storageclass_table.values():
         storageclass_table.clear()
     Variable.link_table.clear()
+    Variable.const_link_table.clear()
     Variable.heap_table.clear()
     Variable.str_literals.clear()
 

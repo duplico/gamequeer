@@ -53,6 +53,28 @@ def _compile_and_read(compile_gq, source: str, game_name: str = "game"):
     return gqgame_bytes, cmds_text, map_text
 
 
+def _map_section(map_text: str, section_name: str) -> str:
+    """The lines belonging to one linker-summary section (e.g. ".init"),
+    header included. A naive `map_text.split(section_name, 1)` breaks once a
+    *symbol name* can itself contain the section-name substring -- e.g. the
+    read-only string constant pool's `.const` section (gamequeer#418) holds
+    volatile-str `.init` shadow variables literally named `*.init`, so the
+    substring ".init" first appears inside a `.const` row, well before the
+    real `.init` section header. Section header rows are unindented (start
+    at column 0); every other row in the tabulate-formatted summary is
+    indented, so that's used as the section boundary instead of a plain
+    substring search."""
+    lines = map_text.splitlines()
+    start = next(
+        i for i, line in enumerate(lines)
+        if line.split() and line.split()[0] == section_name
+    )
+    end = start + 1
+    while end < len(lines) and lines[end].startswith(" "):
+        end += 1
+    return "\n".join(lines[start:end])
+
+
 def _unpack_header(gqgame_bytes: bytes) -> structs.GqHeader:
     return structs.GqHeader._make(
         struct.unpack(structs.GQ_HEADER_FORMAT, gqgame_bytes[: structs.GQ_HEADER_SIZE])
@@ -237,7 +259,7 @@ def test_fw_version_hidden_result_variable_zero_initialized(compile_gq):
         ).split()[0],
         16,
     )
-    init_lines = map_text.split(".init", 1)[1].split(".var", 1)[0]
+    init_lines = _map_section(map_text, ".init")
     matches = [
         line for line in init_lines.splitlines()
         if "SETVAR" in line and f"{result_var_addr:#0{10}x}" in line
