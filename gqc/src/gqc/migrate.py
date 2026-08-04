@@ -202,6 +202,16 @@ def _find_asset_bindings(tree: "cst.CstFile") -> list:
     below is unambiguous under the current grammar; if a future grammar
     change ever adds another `<-` production, this comment (and the
     unit test pinning the ambiguity claim) is the place to revisit.
+
+    The triplet check runs *before* the section-keyword check: grammar.py's
+    `identifier` (used for an animation/lightcue's own name) is a plain
+    `Word`, not lexically reserved against any of `_SECTION_KEYWORDS` --
+    a binding legitimately named `stage <- "foo.png";` is valid `.gq`
+    source. Since the triplet shape is unambiguous on its own (see above),
+    checking it first means such a name is always classified correctly as
+    a binding, regardless of what its own text happens to be; only a bare
+    word *not* immediately followed by `<-` and a string is ever treated
+    as a section-keyword marker.
     """
     bindings = []
 
@@ -210,14 +220,6 @@ def _find_asset_bindings(tree: "cst.CstFile") -> list:
         n = len(children)
         while i < n:
             node = children[i]
-            if (
-                isinstance(node, cst.Token)
-                and node.kind == "word"
-                and node.text in _SECTION_KEYWORDS
-            ):
-                section = node.text
-                i += 1
-                continue
             if (
                 isinstance(node, cst.Token)
                 and node.kind == "word"
@@ -239,6 +241,14 @@ def _find_asset_bindings(tree: "cst.CstFile") -> list:
                         )
                     )
                 i += 3
+                continue
+            if (
+                isinstance(node, cst.Token)
+                and node.kind == "word"
+                and node.text in _SECTION_KEYWORDS
+            ):
+                section = node.text
+                i += 1
                 continue
             if isinstance(node, cst.Group):
                 scan(node.children, section)

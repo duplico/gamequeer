@@ -103,6 +103,37 @@ def test_migrate_moves_animations_lightcues_and_preserves_comments(tmp_path):
     assert "{ w = 8; h = 8; }" in new_source
 
 
+def test_migrate_binding_named_like_a_section_keyword_is_not_misclassified(tmp_path):
+    # grammar.py's `identifier` (an animation/lightcue's own name) is a
+    # plain Word, not lexically reserved against "stage"/"game"/etc. -- a
+    # binding literally named "stage" is valid .gq source and must still
+    # be recognized as a binding, not misread as a stage_definition_section
+    # marker that would make everything after it disappear from the
+    # animations{} section's scan.
+    source = (
+        GAME_HEADER.format(title="T")
+        + "animations {\n"
+        + '    stage <- "mygame/circle.bmp";\n'
+        + '    after  <- "mygame/circle.bmp";\n'
+        + "}\n"
+        + STAGE
+    )
+    ws = _write_flat_workspace(tmp_path, {"mygame": source})
+    _seed_asset(ws, "animations", "mygame/circle.bmp", CIRCLE_BMP)
+
+    exit_code, stdout, stderr = _run(
+        tmp_path, ["migrate", "mygame", "--workspace", str(ws), "--dry-run"]
+    )
+    assert exit_code == 0, stderr
+    assert "used by: after, stage" in stdout
+
+    exit_code, stdout, stderr = _run(tmp_path, ["migrate", "mygame", "--workspace", str(ws)])
+    assert exit_code == 0, stderr
+    new_source = (ws / "mygame" / "mygame.gq").read_text()
+    assert 'stage <- "circle.bmp"' in new_source
+    assert 'after  <- "circle.bmp"' in new_source
+
+
 def test_migrate_dry_run_makes_no_filesystem_changes(tmp_path):
     source = (
         GAME_HEADER.format(title="T")
