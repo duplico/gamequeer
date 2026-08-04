@@ -90,3 +90,48 @@ def compile_gq(tmp_path):
         return proc.returncode, proc.stderr, out_dir
 
     return _compile_gq
+
+
+@pytest.fixture
+def fmt_gq(tmp_path):
+    """Run `python -m gqc fmt` on a .gq source string as a subprocess, same
+    hermetic-CWD-per-call convention as `compile_gq` above (gqc's
+    class-level compiler-state registries aren't used by `fmt`, but a fresh
+    process per call keeps this fixture's behavior easy to reason about and
+    consistent with `compile_gq`'s).
+
+    Returns a `(exit_code, stdout, stderr, src_path)` tuple. `extra_args`
+    (e.g. `["--check"]` or `["--write"]`) are appended after the input
+    file path; `src_path` lets a `--write` test read the file back.
+    """
+
+    def _fmt_gq(
+        source: str,
+        game_name: str = "game",
+        extra_args: list[str] | None = None,
+    ) -> tuple[int, str, str, pathlib.Path]:
+        src_path = tmp_path / f"{game_name}.gq"
+        src_path.write_text(source)
+
+        cmd = [sys.executable, "-m", "gqc", "fmt", str(src_path)]
+        if extra_args:
+            cmd.extend(extra_args)
+
+        try:
+            proc = subprocess.run(
+                cmd,
+                cwd=tmp_path,
+                capture_output=True,
+                text=True,
+                timeout=COMPILE_TIMEOUT_S,
+            )
+        except subprocess.TimeoutExpired as exc:
+            pytest.fail(
+                f"gqc fmt did not finish within {COMPILE_TIMEOUT_S}s "
+                f"(cmd={cmd!r}); stdout so far: {exc.stdout!r}; "
+                f"stderr so far: {exc.stderr!r}"
+            )
+
+        return proc.returncode, proc.stdout, proc.stderr, src_path
+
+    return _fmt_gq
