@@ -74,10 +74,10 @@ stages the migrated form in a separate temp directory, compiles that too,
 and requires the two `.gqgame` outputs to be **byte-identical** before
 committing anything to the workspace. Any mismatch (or either compile
 failing) aborts loudly and leaves the original completely untouched.
-Once gamequeer#434 (layout-detected legacy resolution) lands, a flat game
-will compile directly again, and `_compile_flat_baseline`'s symlink
-harness can be simplified to a direct in-place compile of the original
-entry file.
+gqc has exactly one asset-resolution rule (game-dir-relative, #420) and no
+CWD-relative fallback for a flat entry file: a flat game genuinely does
+not compile in place, so `_compile_flat_baseline`'s symlink harness is the
+permanent way to establish the pre-migration baseline, not a stopgap.
 """
 
 import dataclasses

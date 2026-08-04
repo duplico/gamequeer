@@ -27,17 +27,13 @@ write straight to Game.game.needs_fw_probe/Game.game.needs_random -- all
 three would crash with AttributeError on `NoneType` if the stage in question
 was parsed before game{} itself.
 
-The suite's final section (gamequeer#434) covers layout *detection*: an
-entry file only gets #420's game_dir-relative resolution if its parent
-directory is actually named for it (`<name>/<name>.gq`); anything else --
-including the entire pre-#420 gq-games corpus, whose games live flat in a
-shared `games/` directory next to a sibling top-level `assets/` -- falls
-back to legacy (pre-#420), CWD-relative resolution, with a one-line
-deprecation notice on stderr pointing at `gqc migrate`. There is no
-try-both-and-see fallback: a directory-layout game never consults the CWD
-(see the existing negative-control tests above, unchanged by #434), and a
-flat entry file whose parent coincidentally matches the convention (e.g.
-`games/games.gq`) is treated as directory layout, not flat.
+gqc has exactly one asset-resolution rule: `animations{}`/`lightcues{}`
+sources always resolve relative to the entry file's own parent directory
+(`Game.game_dir = input.parent`), i.e. the game-as-directory layout only.
+There is no CWD-relative fallback for a flat entry file -- see
+test_animation_source_at_old_cwd_relative_location_is_not_found and its
+lightcue counterpart below, and migrate.py's `gqc migrate` for moving an
+old flat-layout game onto this layout.
 """
 
 import pathlib
@@ -67,6 +63,18 @@ def _run(cwd, args, timeout=COMPILE_TIMEOUT_S):
         timeout=timeout,
     )
     return proc.returncode, proc.stderr, proc.stdout
+
+
+def _unwrapped(stderr: str) -> str:
+    # `parser.parse`'s error path prints via `rich.print`, which soft- (and,
+    # for a single long token like an absolute resolved path, hard-) wraps
+    # output to the console width whenever stderr isn't a real terminal --
+    # always true here, under a capture_output subprocess. That can inject a
+    # bare "\n" in the *middle* of a path component (e.g. "animatio\nns"),
+    # so a substring check against the raw text is flaky depending on the
+    # tmp_path's length. Stripping newlines recovers the original text,
+    # since rich's hard-wrap never inserts a space, only "\n".
+    return stderr.replace("\n", "")
 
 
 # --- game{}: anywhere in the top-level section stream (accept) --------------
@@ -214,6 +222,9 @@ def test_animation_source_at_old_cwd_relative_location_is_not_found(tmp_path):
     )
     assert exit_code != 0
     assert "circle.bmp" in stderr
+    # gqc has no CWD-relative fallback, so this is exactly the "old flat
+    # game, assets not moved yet" case the migrate hint below exists for.
+    assert "gqc migrate mygame" in _unwrapped(stderr)
 
 
 def test_lightcue_source_resolves_relative_to_game_dir_not_cwd(tmp_path):
@@ -247,6 +258,51 @@ def test_lightcue_source_at_old_cwd_relative_location_is_not_found(tmp_path):
     )
     assert exit_code != 0
     assert "test.gqcue" in stderr
+    assert "gqc migrate mygame" in _unwrapped(stderr)
+
+
+# --- missing-asset diagnostic: `gqc migrate` hint ---------------------------
+
+
+def test_missing_animation_asset_mentions_resolved_path_and_migrate_hint(compile_gq):
+    # compile_gq puts the entry file directly at its hermetic CWD (no
+    # "assets/" subdirectory created), so this is the plain missing-asset
+    # case -- no relocation trickery needed to trigger it.
+    exit_code, stderr, _ = compile_gq(
+        GAME_HEADER + 'animations { c <- "circle.bmp"; }\n' + STAGE,
+        game_name="mygame",
+    )
+    assert exit_code != 0
+    unwrapped = _unwrapped(stderr)
+    # The resolved (game-dir-relative) path, not just the bare filename --
+    # an author needs to see *where* gqc looked.
+    assert str(pathlib.Path("assets") / "animations" / "circle.bmp") in unwrapped
+    assert "does not exist" in unwrapped
+    assert "gqc migrate mygame" in unwrapped
+
+
+def test_missing_lightcue_asset_mentions_resolved_path_and_migrate_hint(compile_gq):
+    exit_code, stderr, _ = compile_gq(
+        GAME_HEADER + 'lightcues { c1 <- "test.gqcue"; }\n' + STAGE,
+        game_name="mygame",
+    )
+    assert exit_code != 0
+    unwrapped = _unwrapped(stderr)
+    assert str(pathlib.Path("assets") / "lighting" / "test.gqcue") in unwrapped
+    assert "not found" in unwrapped
+    assert "gqc migrate mygame" in unwrapped
+
+
+def test_missing_asset_diagnostic_is_silent_when_asset_present(compile_gq):
+    # Companion positive control: the hint text is specific to a missing
+    # asset, not appended to every compile's stderr unconditionally.
+    exit_code, stderr, _ = compile_gq(
+        GAME_HEADER + 'animations { c <- "circle.bmp"; }\n' + STAGE,
+        assets={"assets/animations/circle.bmp": CIRCLE_BMP},
+        game_name="mygame",
+    )
+    assert exit_code == 0, stderr
+    assert "gqc migrate" not in stderr
 
 
 # --- `gqc new`: scaffolding a fresh game-as-directory game -------------------
@@ -298,152 +354,3 @@ def test_new_force_overwrites_existing_game(tmp_path):
     exit_code, stderr, _ = _run(tmp_path, ["new", "mygame", "--force"])
     assert exit_code == 0, stderr
     assert entry_path.read_text() != "MODIFIED"
-
-
-# --- gamequeer#434: layout detection / legacy flat-layout fallback ---------
-
-
-def test_legacy_flat_layout_compiles_and_resolves_assets_at_cwd(tmp_path):
-    # Flat layout (pre-#420, the shape of the whole pre-migration gq-games
-    # corpus): the entry file lives in a `games/` directory whose name
-    # doesn't match the entry's own stem, with a *sibling* top-level
-    # `assets/` (not nested under `games/`). That fails the
-    # `<name>/<name>.gq` directory-layout check, so resolution falls back
-    # to the process CWD -- exactly how gqc resolved assets before #420.
-    games_dir = tmp_path / "games"
-    games_dir.mkdir()
-    (games_dir / "foo.gq").write_text(
-        GAME_HEADER + 'animations { c <- "circle.bmp"; }\n' + STAGE
-    )
-    assets_dir = tmp_path / "assets" / "animations"
-    assets_dir.mkdir(parents=True)
-    shutil.copyfile(CIRCLE_BMP, assets_dir / "circle.bmp")
-
-    out_dir = tmp_path / "build"
-    exit_code, stderr, _ = _run(
-        tmp_path,
-        ["compile", "-o", str(out_dir), str(games_dir / "foo.gq")],
-    )
-    assert exit_code == 0, stderr
-
-
-def test_legacy_flat_layout_does_not_find_game_dir_relative_assets(tmp_path):
-    # Companion negative control: the same flat entry file, but the asset
-    # sits at the *directory-layout*-style location (nested under the
-    # entry's own parent) instead of the real legacy CWD-relative spot --
-    # pins that legacy mode doesn't also try game_dir-relative as a
-    # fallback.
-    games_dir = tmp_path / "games"
-    games_dir.mkdir()
-    (games_dir / "foo.gq").write_text(
-        GAME_HEADER + 'animations { c <- "circle.bmp"; }\n' + STAGE
-    )
-    dir_layout_style_assets = games_dir / "assets" / "animations"
-    dir_layout_style_assets.mkdir(parents=True)
-    shutil.copyfile(CIRCLE_BMP, dir_layout_style_assets / "circle.bmp")
-
-    out_dir = tmp_path / "build"
-    exit_code, stderr, _ = _run(
-        tmp_path,
-        ["compile", "-o", str(out_dir), str(games_dir / "foo.gq")],
-    )
-    assert exit_code != 0
-    assert "circle.bmp" in stderr
-
-
-def test_directory_layout_game_emits_no_deprecation_notice(tmp_path):
-    # Companion to the animation/lightcue game_dir-relative tests above:
-    # pins that a real directory-layout game gets #420's resolution with no
-    # legacy notice, even when invoked (as here) from its own parent
-    # directory, one level up from the game directory itself.
-    game_dir = _write_game_dir(
-        tmp_path, "mygame", 'animations { c <- "circle.bmp"; }\n'
-    )
-    assets_dir = game_dir / "assets" / "animations"
-    assets_dir.mkdir(parents=True)
-    shutil.copyfile(CIRCLE_BMP, assets_dir / "circle.bmp")
-
-    out_dir = tmp_path / "build"
-    exit_code, stderr, _ = _run(
-        tmp_path,
-        ["compile", "-o", str(out_dir), str(game_dir / "mygame.gq")],
-    )
-    assert exit_code == 0, stderr
-    assert "legacy" not in stderr.lower()
-    assert "gqc migrate" not in stderr
-
-
-def test_flat_entry_matching_directory_convention_is_treated_as_directory_layout(tmp_path):
-    # Edge case (gamequeer#434): a flat entry file whose parent directory
-    # happens to share its own name -- e.g. a top-level `games/games.gq` --
-    # is structurally indistinguishable from a real directory-layout game
-    # (`<name>/<name>.gq`), and there's no fallback to try both: directory
-    # layout wins unconditionally, so its assets must live *inside*
-    # `games/`, not at a sibling top-level `assets/`.
-    games_dir = tmp_path / "games"
-    games_dir.mkdir()
-    (games_dir / "games.gq").write_text(
-        GAME_HEADER + 'animations { c <- "circle.bmp"; }\n' + STAGE
-    )
-    dir_layout_assets = games_dir / "assets" / "animations"
-    dir_layout_assets.mkdir(parents=True)
-    shutil.copyfile(CIRCLE_BMP, dir_layout_assets / "circle.bmp")
-
-    out_dir = tmp_path / "build"
-    exit_code, stderr, _ = _run(
-        tmp_path,
-        ["compile", "-o", str(out_dir), str(games_dir / "games.gq")],
-    )
-    assert exit_code == 0, stderr
-    assert "legacy" not in stderr.lower()
-
-
-def test_flat_entry_matching_directory_convention_ignores_sibling_assets(tmp_path):
-    # Same edge case, but the asset sits at the legacy CWD-relative spot
-    # instead -- must NOT be found, since `games/games.gq` resolved as
-    # directory layout (see test above) never falls back to the CWD.
-    games_dir = tmp_path / "games"
-    games_dir.mkdir()
-    (games_dir / "games.gq").write_text(
-        GAME_HEADER + 'animations { c <- "circle.bmp"; }\n' + STAGE
-    )
-    legacy_style_assets = tmp_path / "assets" / "animations"
-    legacy_style_assets.mkdir(parents=True)
-    shutil.copyfile(CIRCLE_BMP, legacy_style_assets / "circle.bmp")
-
-    out_dir = tmp_path / "build"
-    exit_code, stderr, _ = _run(
-        tmp_path,
-        ["compile", "-o", str(out_dir), str(games_dir / "games.gq")],
-    )
-    assert exit_code != 0
-    assert "circle.bmp" in stderr
-
-
-def test_deprecation_notice_emitted_in_legacy_mode(compile_gq):
-    # compile_gq's entry file is always named "game" by default and sits
-    # directly in the hermetic tmp_path CWD, whose own name never matches
-    # -- always legacy under gamequeer#434's detection rule.
-    exit_code, stderr, _ = compile_gq(GAME_HEADER + STAGE)
-    assert exit_code == 0, stderr
-    assert "legacy" in stderr.lower()
-    assert "gqc migrate" in stderr
-
-
-def test_deprecation_notice_goes_to_stderr_not_stdout(tmp_path):
-    # Uses `_run` (not `compile_gq`) specifically because it's the only
-    # fixture here that captures stdout separately from stderr --
-    # `compile_gq` only returns stderr, so it can't actually prove the
-    # notice *isn't* on stdout.
-    src_path = tmp_path / "game.gq"
-    src_path.write_text(GAME_HEADER + STAGE)
-    out_dir = tmp_path / "build"
-
-    exit_code, stderr, stdout = _run(
-        tmp_path, ["compile", "-o", str(out_dir), str(src_path)]
-    )
-    assert exit_code == 0, stderr
-    assert "legacy" in stderr.lower()
-    assert "legacy" not in stdout.lower()
-    # Machine-parsed output must be untouched by the notice.
-    assert (out_dir / "game.gqgame").exists()

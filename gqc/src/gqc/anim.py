@@ -6,6 +6,8 @@ from PIL.Image import Dither
 
 from rich.progress import Progress
 
+from . import GqcAssetNotFoundError
+
 def make_animation_from_video(progress: Progress, anim_src_path : pathlib.Path, output_dir : pathlib.Path, dithering : str = 'none', frame_rate : int = 25, height : int = 128, width : int = 128):
     # Load the source file
     in_file = ffmpeg.input(anim_src_path)
@@ -79,7 +81,7 @@ def make_animation(progress: Progress, anim_src_path : pathlib.Path, output_dir 
 
     # Check whether the source file exists and raise a value error if it doesn't
     if not anim_src_path.exists():
-        raise ValueError(f"Animation source file {anim_src_path} does not exist")
+        raise GqcAssetNotFoundError(f"Animation source file {anim_src_path} does not exist")
     
     # Check whether the source file is a video or an image
     if anim_src_path.suffix in ['.bmp', '.png', '.jpg', '.jpeg']:

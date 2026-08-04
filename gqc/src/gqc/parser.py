@@ -13,7 +13,22 @@ from .commands import CommandPlay, CommandGoStage, CommandCue, CommandCastStr
 from .commands import CommandSetStr, CommandSetInt, CommandWithIntExpressionArgument
 from .commands import CommandTimer, CommandIf, CommandGoto, CommandLoop, Command, CommandType
 from .structs import EventType
-from . import structs, GqcParseError
+from . import structs, GqcAssetNotFoundError, GqcParseError
+
+def _migrate_hint(message):
+    # gqc has exactly one asset-resolution rule: animations{}/lightcues{}
+    # sources resolve relative to the entry file's own parent directory
+    # (game-as-directory layout, gamequeer#420), never the process CWD.
+    # A "does not exist" miss here is very often a still-flat game (assets
+    # in a shared top-level assets/ tree, or the invocation CWD) that just
+    # hasn't been moved onto that layout yet -- point authors at the fix
+    # rather than leaving them to guess from the raw resolved path alone.
+    return (
+        f"{message}\nIf {Game.game_name} is a flat-layout game (its assets "
+        "haven't been moved into its own directory yet), run "
+        f"`gqc migrate {Game.game_name}` to move it onto the current "
+        "game-as-directory layout."
+    )
 
 def parse_game_definition(instring, loc, toks):
     toks = toks[0]
@@ -152,6 +167,8 @@ def parse_animation_definition(instring, loc, toks):
 
     try:
         return Animation(name, source, **kwargs)
+    except GqcAssetNotFoundError as ve:
+        raise GqcParseError(_migrate_hint(str(ve)), instring, loc)
     except ValueError as ve:
         raise GqcParseError(str(ve), instring, loc)
 
@@ -249,7 +266,10 @@ def parse_lightcue_definition_section(instring, loc, toks):
         print(f"[blue]Light cue [italic]{cue_name}[/italic][/blue] from [underline]{cue_source}[/underline]")
         
         if not cue_source.exists():
-            raise GqcParseError(f"Light cue {cue_name} source {cue_source} not found", instring, loc)
+            raise GqcParseError(
+                _migrate_hint(f"Light cue {cue_name} source {cue_source} not found"),
+                instring, loc,
+            )
         
         with open(cue_source, 'r') as f:
             parsed_cue = parse_cue(f)
