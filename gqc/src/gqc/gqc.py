@@ -103,6 +103,21 @@ def fmt(input : pathlib.Path, write : bool, check : bool):
     else:
         click.echo(formatted, nl=False)
 
+def _is_directory_layout(input : pathlib.Path) -> bool:
+    """Detect gamequeer#420's game-as-directory layout: the entry file's
+    parent directory is named for the game itself (`<name>/<name>.gq`).
+
+    Purely structural/deterministic -- no filesystem probing beyond the
+    entry path itself, no "try both and see what resolves" fallback (see
+    gamequeer#434). A flat entry file whose parent *happens* to share its
+    name (e.g. a top-level `games/games.gq`, or any `<x>/<x>.gq`) is
+    indistinguishable from a real directory-layout game and is treated as
+    one -- there is no reliable way to tell them apart from the entry path
+    alone, and #420's own convention doesn't require the directory to
+    contain anything else."""
+    return input.parent.name == input.stem
+
+
 @gqc_cli.command()
 @click.option('--no-mem-map', '-n', is_flag=True)
 @click.option('--out-dir', '-o', type=click.Path(file_okay=False, dir_okay=True, writable=True, path_type=pathlib.Path), default=None)
@@ -115,7 +130,29 @@ def compile(input : pathlib.Path, no_mem_map : bool, out_dir : pathlib.Path):
     # This is what makes `gqc compile some/other/dir/foo.gq` work correctly
     # from outside that directory, and is a no-op for the common case where
     # the entry file is already at the top of the invocation directory.
-    Game.game_dir = input.parent
+    #
+    # gamequeer#434: that's only true for entry files that actually follow
+    # #420's `<name>/<name>.gq` convention. #420 set Game.game_dir =
+    # input.parent unconditionally, which broke every *flat*-layout game
+    # (`games/<name>.gq` next to a shared top-level `assets/` dir, sibling
+    # of `games/` -- the entire pre-#420 gq-games corpus, and this repo's
+    # own `examples/skel` fixtures) by resolving assets against
+    # `games/assets/...` instead of the real `assets/...` at the workspace
+    # root. Detect which convention this entry file actually uses and
+    # branch resolution accordingly, so a flat game keeps compiling exactly
+    # as it did before #420 (CWD-relative -- not "entry's grandparent
+    # directory", which breaks for a nested entry like
+    # `games/<subdir>/<name>.gq`; see examples/skel/games/working_samples/).
+    if _is_directory_layout(input):
+        Game.game_dir = input.parent
+    else:
+        Game.game_dir = pathlib.Path.cwd()
+        click.echo(
+            f"{input}: legacy flat-layout asset resolution (pre-gamequeer#420, "
+            "CWD-relative) -- run `gqc migrate` to move this game onto the "
+            "self-contained game-as-directory layout and silence this notice.",
+            err=True,
+        )
 
     # output_path is the directory where the output of the project will be placed
     if out_dir is None:
