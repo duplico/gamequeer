@@ -226,10 +226,11 @@ def test_animation_source_at_old_cwd_relative_location_is_not_found(tmp_path):
         ["compile", "-o", str(out_dir), str(game_dir / "mygame.gq")],
     )
     assert exit_code != 0
-    assert "circle.bmp" in stderr
+    unwrapped = _unwrapped(stderr)
+    assert "circle.bmp" in unwrapped
     # gqc has no CWD-relative fallback, so this is exactly the "old flat
     # game, assets not moved yet" case the migrate hint below exists for.
-    assert "gqc migrate mygame" in _unwrapped(stderr)
+    assert "gqc migrate mygame" in unwrapped
 
 
 def test_lightcue_source_resolves_relative_to_game_dir_not_cwd(tmp_path):
@@ -262,8 +263,9 @@ def test_lightcue_source_at_old_cwd_relative_location_is_not_found(tmp_path):
         ["compile", "-o", str(out_dir), str(game_dir / "mygame.gq")],
     )
     assert exit_code != 0
-    assert "test.gqcue" in stderr
-    assert "gqc migrate mygame" in _unwrapped(stderr)
+    unwrapped = _unwrapped(stderr)
+    assert "test.gqcue" in unwrapped
+    assert "gqc migrate mygame" in unwrapped
 
 
 # --- missing-asset diagnostic: `gqc migrate` hint ---------------------------
