@@ -44,6 +44,17 @@ module uses -- without needing to touch this file's tokenizer.
 
 Trivia attachment and the string-escaping simplification are two smaller
 documented gaps; see `Trivia`/`_tokenize` below.
+
+Two more, smaller lexical divergences from `grammar.py`, both deliberate
+simplifications of this generic tokenizer rather than bugs: `_WORD_START`
+accepts a leading `_` in identifiers/keywords (`pp.alphas + "_"`), where
+`grammar.py`'s `identifier` (`pp.Word(pp.alphas, ...)`) requires an
+alphabetic first character and hard-rejects a leading `_`; and this
+tokenizer's whitespace set (`_tokenize`'s ` \t\r\n\f\v`) includes form feed
+(`\f`) and vertical tab (`\v`), which aren't in pyparsing's default
+whitespace (`' \n\t\r'`) and so would be rejected between tokens by
+`grammar.py`'s grammar. Neither is exercised by the corpus this step
+round-trips against.
 """
 
 from dataclasses import dataclass, field

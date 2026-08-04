@@ -25,11 +25,14 @@ compile. What matters here is the round-trip/losslessness guarantee itself:
     lex.
 """
 
+import os
 import pathlib
 
 import pytest
+from click.testing import CliRunner
 
 from gqc import cst
+from gqc import gqc as gqc_module
 from gqc import GqcParseError
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -265,3 +268,55 @@ def test_fmt_reports_a_clean_error_on_unlexable_input(fmt_gq):
     assert exit_code != 0
     assert "Traceback" not in stderr
     assert "Unterminated" in stderr
+
+
+def test_fmt_reports_a_clean_error_on_non_utf8_input(tmp_path):
+    """gamequeer#429 review: the initial `open(input).read()` used to sit
+    outside fmt's try/except, so non-UTF-8 input surfaced as a raw
+    `UnicodeDecodeError` traceback instead of the same clean CLI error
+    style used for unlexable (but decodable) input."""
+    src_path = tmp_path / "game.gq"
+    src_path.write_bytes(b"game { id = 1; title := \"\xff\xfe bad utf-8\"; }")
+
+    result = CliRunner().invoke(gqc_module.fmt, [str(src_path)])
+
+    assert result.exit_code != 0
+    assert "Traceback" not in result.output
+    assert "cannot decode as UTF-8" in result.output
+
+
+def test_fmt_write_failure_leaves_source_intact_and_no_temp_leak(tmp_path, monkeypatch):
+    """gamequeer#429 review: `fmt --write` used to `open(input, 'w')`
+    directly, which truncates INPUT the instant it's opened -- a failure
+    anywhere between that open and a completed write destroys the source
+    with no way back. It now writes to a sibling temp file and
+    `os.replace()`s it into place, so a mid-write failure must leave INPUT
+    byte-for-byte untouched and must not leak the temp file. Simulated here
+    by monkeypatching `os.fdopen` (used internally by the write path) to
+    hand back a file object whose `write` raises partway through."""
+    original = (
+        'game { id = 1; title := "T"; author := "A"; starting_stage = s; }\n'
+        "stage s { event enter { } }\n"
+    )
+    src_path = tmp_path / "game.gq"
+    src_path.write_text(original)
+
+    real_fdopen = os.fdopen
+
+    def boom_fdopen(fd, *args, **kwargs):
+        f = real_fdopen(fd, *args, **kwargs)
+
+        def boom_write(*_args, **_kwargs):
+            raise OSError("simulated mid-write failure")
+
+        f.write = boom_write
+        return f
+
+    monkeypatch.setattr(os, "fdopen", boom_fdopen)
+
+    result = CliRunner().invoke(gqc_module.fmt, [str(src_path), "--write"])
+
+    assert result.exit_code != 0
+    assert src_path.read_text() == original, "a failed write must not corrupt the original source"
+    leaked = [p for p in tmp_path.iterdir() if p != src_path]
+    assert leaked == [], f"temp file(s) leaked: {leaked}"

@@ -1,6 +1,7 @@
 import os
 import sys
 import pathlib
+import tempfile
 from collections import namedtuple
 
 import click
@@ -49,8 +50,12 @@ def fmt(input : pathlib.Path, write : bool, check : bool):
     follow-on step; see gqc.cst's module docstring) -- so today this is
     mainly useful as a `--check` round-trip/lossless-parse validator, and
     as the CST's own proof of concept."""
-    with open(input, 'r') as f:
-        source = f.read()
+    try:
+        with open(input, 'r') as f:
+            source = f.read()
+    except UnicodeDecodeError as ue:
+        click.echo(f"{input}: cannot decode as UTF-8: {ue}", err=True)
+        raise SystemExit(1)
 
     try:
         tree = cst.parse_cst(source)
@@ -67,8 +72,21 @@ def fmt(input : pathlib.Path, write : bool, check : bool):
         return
 
     if write:
-        with open(input, 'w') as f:
-            f.write(formatted)
+        # Write to a sibling temp file and os.replace() it into place instead
+        # of truncating INPUT in place (`open(input, 'w')`) -- the latter
+        # destroys the source the instant it's opened, so any failure between
+        # open and a completed write (disk full, process killed, ...) leaves
+        # INPUT empty/truncated with no way back. os.replace() is atomic on
+        # the same filesystem, so INPUT is either untouched or fully
+        # replaced, never partially written.
+        fd, tmp_path = tempfile.mkstemp(prefix=f'.{input.name}.', suffix='.tmp', dir=input.parent)
+        try:
+            with os.fdopen(fd, 'w') as f:
+                f.write(formatted)
+            os.replace(tmp_path, input)
+        except BaseException:
+            os.unlink(tmp_path)
+            raise
     else:
         click.echo(formatted, nl=False)
 
