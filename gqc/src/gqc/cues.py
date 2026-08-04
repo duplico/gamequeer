@@ -6,7 +6,7 @@ import pyparsing as pp
 from rich.progress import Progress
 from rich import print
 
-from . import GqcParseError
+from . import GqcAssetNotFoundError, GqcParseError
 from .datamodel import CueColor, LightCueFrame, LightCue
 
 def parse_cue(text) -> LightCue:
@@ -84,9 +84,17 @@ def make_cue(progress : Progress, src_path : pathlib.Path, output_dir : pathlib.
     task = progress.add_task(f"Parsing light cue '{src_path}'", total=1)
     # Set up the output directory
     output_dir.mkdir(parents=True, exist_ok=True)
-    # Check whether the source file exists and raise a value error if it doesn't
+    # Check whether the source file exists and raise a GqcAssetNotFoundError
+    # (a ValueError subclass) if it doesn't. NOTE (gamequeer#437 review):
+    # this function is only reached from gqc.py's `mkcue` CLI command
+    # (a library/tooling entry point, no Game context) -- the compile path
+    # never calls it. parser.parse_lightcue_definition_section does its own
+    # separate exists() check before ever opening a lightcue source, so this
+    # GqcAssetNotFoundError never reaches parser.py's `gqc migrate` hint
+    # (unlike the animation half of this same pattern in anim.py, which
+    # *is* reached from Animation.__init__ on the compile path).
     if not src_path.exists():
-        raise ValueError(f"Light cue source file {src_path} does not exist")
+        raise GqcAssetNotFoundError(f"Light cue source file {src_path} does not exist")
     
     with open(src_path, 'r') as f:
         parsed_cue = parse_cue(f)

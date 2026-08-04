@@ -12,7 +12,7 @@ from PIL import Image
 from rich import print
 from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn
 
-from . import structs
+from . import structs, GqcAssetNotFoundError
 from .structs import EventType
 from .anim import make_animation
 
@@ -637,6 +637,20 @@ class Animation:
             self.src_path = Game.game_dir / 'assets' / 'animations' / source
             self.dst_path = pathlib.Path() / 'build' / 'assets' / 'animations' / Game.game_name / name
             digest_path = self.dst_path / '.digest'
+
+            # gamequeer#437 review: anim.make_animation does its own
+            # existence check and raises GqcAssetNotFoundError, but that's
+            # only reached below on a cache *miss*. The cache-hit branch
+            # right below calls self.digest(), which opens self.src_path
+            # directly -- a stale build/ digest cache left over from a
+            # previous compile (the asset has since moved or been deleted,
+            # e.g. a still-flat game whose assets haven't been migrated yet)
+            # would otherwise hit that open() as a raw, unhandled
+            # FileNotFoundError instead of the same diagnostic + `gqc
+            # migrate` hint a fresh (no-cache) compile gets. Checking once,
+            # up front, covers both branches below.
+            if not self.src_path.exists():
+                raise GqcAssetNotFoundError(f"Animation source file {self.src_path} does not exist")
 
             # Check if the dst_path has a file in it called .digest and compare it to self.digest()
             # If they match, skip the ffmpeg conversion step

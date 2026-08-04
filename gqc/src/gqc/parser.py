@@ -13,7 +13,35 @@ from .commands import CommandPlay, CommandGoStage, CommandCue, CommandCastStr
 from .commands import CommandSetStr, CommandSetInt, CommandWithIntExpressionArgument
 from .commands import CommandTimer, CommandIf, CommandGoto, CommandLoop, Command, CommandType
 from .structs import EventType
-from . import structs, GqcParseError
+from . import structs, GqcAssetNotFoundError, GqcParseError
+
+def _migrate_hint(message):
+    # gqc has exactly one asset-resolution rule: animations{}/lightcues{}
+    # sources resolve relative to the entry file's own parent directory
+    # (game-as-directory layout, gamequeer#420), never the process CWD.
+    # A "does not exist" miss here is very often a still-flat game (assets
+    # in a shared top-level assets/ tree, or the invocation CWD) that just
+    # hasn't been moved onto that layout yet -- point authors at the fix
+    # rather than leaving them to guess from the raw resolved path alone.
+    #
+    # Game.game_name is only ever set by gqc.py's `compile` command; it's
+    # still None here for in-process callers that drive parser.parse()
+    # directly without going through it (e.g. tests using
+    # support.reset_compiler_state(), gamequeer#437 review). Fall back to
+    # generic phrasing rather than rendering the literal "None" into the
+    # hint.
+    if Game.game_name:
+        subject = Game.game_name
+        migrate_cmd = f"gqc migrate {Game.game_name}"
+    else:
+        subject = "this game"
+        migrate_cmd = "gqc migrate <name>"
+    return (
+        f"{message}\nIf {subject} is a flat-layout game (its assets "
+        "haven't been moved into its own directory yet), run "
+        f"`{migrate_cmd}` to move it onto the current "
+        "game-as-directory layout."
+    )
 
 def parse_game_definition(instring, loc, toks):
     toks = toks[0]
@@ -152,6 +180,8 @@ def parse_animation_definition(instring, loc, toks):
 
     try:
         return Animation(name, source, **kwargs)
+    except GqcAssetNotFoundError as ve:
+        raise GqcParseError(_migrate_hint(str(ve)), instring, loc)
     except ValueError as ve:
         raise GqcParseError(str(ve), instring, loc)
 
@@ -249,10 +279,26 @@ def parse_lightcue_definition_section(instring, loc, toks):
         print(f"[blue]Light cue [italic]{cue_name}[/italic][/blue] from [underline]{cue_source}[/underline]")
         
         if not cue_source.exists():
-            raise GqcParseError(f"Light cue {cue_name} source {cue_source} not found", instring, loc)
-        
-        with open(cue_source, 'r') as f:
-            parsed_cue = parse_cue(f)
+            raise GqcParseError(
+                _migrate_hint(f"Light cue {cue_name} source {cue_source} not found"),
+                instring, loc,
+            )
+
+        # gamequeer#437 review: the exists() check above doesn't guard the
+        # open() right below it -- unreadable (permissions) or removed
+        # between the check and the open still hit a raw, unhandled OSError
+        # here otherwise, undercutting the "clean diagnostic, never a raw
+        # traceback" intent this whole missing-asset path exists for. No
+        # migrate hint here: unlike a plain "not found", this is a
+        # filesystem-state problem the migrate flow wouldn't fix.
+        try:
+            with open(cue_source, 'r') as f:
+                parsed_cue = parse_cue(f)
+        except OSError as e:
+            raise GqcParseError(
+                f"Light cue {cue_name} source {cue_source} could not be opened: {e}",
+                instring, loc,
+            )
         try:
             parsed_cue.set_name(cue_name)
         except ValueError as ve:

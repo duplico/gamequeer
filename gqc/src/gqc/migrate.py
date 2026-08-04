@@ -74,10 +74,10 @@ stages the migrated form in a separate temp directory, compiles that too,
 and requires the two `.gqgame` outputs to be **byte-identical** before
 committing anything to the workspace. Any mismatch (or either compile
 failing) aborts loudly and leaves the original completely untouched.
-Once gamequeer#434 (layout-detected legacy resolution) lands, a flat game
-will compile directly again, and `_compile_flat_baseline`'s symlink
-harness can be simplified to a direct in-place compile of the original
-entry file.
+gqc has exactly one asset-resolution rule (game-dir-relative, #420) and no
+CWD-relative fallback for a flat entry file: a flat game genuinely does
+not compile in place, so `_compile_flat_baseline`'s symlink harness is the
+permanent way to establish the pre-migration baseline, not a stopgap.
 """
 
 import dataclasses
@@ -599,8 +599,21 @@ def _compile_flat_baseline(plan: MigrationPlan) -> bytes:
     with tempfile.TemporaryDirectory(prefix="gqc-migrate-pre-") as tmp:
         tmp_path = pathlib.Path(tmp)
         tmp_entry = tmp_path / plan.entry_path.name
-        shutil.copyfile(plan.entry_path, tmp_entry)
-        os.symlink(plan.workspace / "assets", tmp_path / "assets")
+        # Both of these only ever touch the throwaway tmp_path harness (the
+        # symlink's target, plan.workspace / "assets", is read, never
+        # written) -- this whole function runs before execute()'s first
+        # real workspace mutation, so there's nothing to roll back here,
+        # just the same "clean MigrateError, never a raw traceback"
+        # contract this module promises everywhere else (permissions, a
+        # filesystem/OS without symlink support, ...).
+        try:
+            shutil.copyfile(plan.entry_path, tmp_entry)
+            os.symlink(plan.workspace / "assets", tmp_path / "assets")
+        except OSError as exc:
+            raise MigrateError(
+                f"{plan.game_name}: building the pre-migration compile "
+                f"harness in {tmp_path} failed ({exc})"
+            ) from exc
         return _run_compile(tmp_entry, tmp_path / "build", cwd=tmp_path)
 
 
