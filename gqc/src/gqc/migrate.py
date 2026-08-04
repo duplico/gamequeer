@@ -617,6 +617,27 @@ def execute(plan: MigrationPlan) -> MigrationResult:
         # staged, byte-verified game directory into place, then remove the
         # original flat entry file. Never the shared assets/ tree -- other,
         # not-yet-migrated games may still reference it.
+        #
+        # build_plan() already rejected an existing new_game_dir up front,
+        # but the two compiles in between can take a while -- re-check
+        # right before the move narrows (doesn't eliminate; there's no
+        # cross-platform atomic "move only if absent") the window where
+        # something else creates new_game_dir in the meantime.
+        # shutil.move(src, dst) treats an *existing* dst directory as "move
+        # src inside dst", not "replace dst" -- so without this check the
+        # staged game would land nested at new_game_dir/game_name/ instead
+        # of new_game_dir/ itself, and the OSError handler's rollback below
+        # would rmtree() whatever was already in that pre-existing
+        # directory, not just what this migration wrote.
+        if plan.new_game_dir.exists():
+            raise MigrateError(
+                f"{plan.new_game_dir} was created after this migration's "
+                "precondition checks ran -- refusing to move the staged, "
+                "verified game directory into it (that would nest it inside "
+                "instead of replacing it). Remove it (if it's unrelated or "
+                "stale) and re-run migrate; original flat game left in place."
+            )
+
         try:
             shutil.move(str(staged_game_dir), str(plan.new_game_dir))
         except OSError as exc:

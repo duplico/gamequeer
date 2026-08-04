@@ -480,6 +480,34 @@ def test_migrate_move_failure_rolls_back_and_raises_migrate_error(tmp_path, monk
     assert plan.entry_path.read_bytes() == entry_before
 
 
+def test_migrate_destination_created_after_build_plan_is_not_clobbered(tmp_path):
+    # build_plan() rejects an existing new_game_dir up front, but the two
+    # compiles execute() runs in between can take a while -- if something
+    # else creates new_game_dir before the final move, shutil.move(src,
+    # existing_dir) moves src *inside* dst rather than replacing it (so the
+    # migrated game would land nested at new_game_dir/game_name/, not
+    # new_game_dir/, and be unreachable at its expected canonical
+    # location), and the OSError-handler's rollback would rmtree() whatever
+    # was already in that directory -- not just what this migration wrote.
+    # execute() must re-check immediately before the move and refuse
+    # cleanly, leaving both the original and the pre-existing directory's
+    # own content untouched.
+    plan = _build_single_game_plan(tmp_path)
+    entry_before = plan.entry_path.read_bytes()
+
+    plan.new_game_dir.mkdir()
+    preexisting = plan.new_game_dir / "unrelated_preexisting_file.txt"
+    preexisting.write_text("do not delete me")
+
+    with pytest.raises(migrate.MigrateError, match="was created after"):
+        migrate.execute(plan)
+
+    assert preexisting.read_text() == "do not delete me"
+    assert sorted(p.name for p in plan.new_game_dir.iterdir()) == [preexisting.name]
+    assert plan.entry_path.exists()
+    assert plan.entry_path.read_bytes() == entry_before
+
+
 def test_migrate_unlink_failure_rolls_back_move_and_raises_migrate_error(tmp_path, monkeypatch):
     # The *existing* rollback for execute()'s final plan.entry_path.unlink()
     # -- the migrated directory is already verified and moved into place,
