@@ -1,6 +1,7 @@
 import os
 import sys
 import pathlib
+import tempfile
 from collections import namedtuple
 
 import click
@@ -8,8 +9,10 @@ from rich.progress import Progress
 
 from . import parser
 from . import anim, cues
+from . import cst
 from . import makefile_src
 from . import linker
+from . import GqcParseError
 from .datamodel import Game
 
 DITHER_CHOICES = ('none', 'bayer', 'heckbert', 'floyd_steinberg', 'sierra2', 'sierra2_4a')
@@ -33,6 +36,72 @@ def mkanim(out_path : pathlib.Path, src_path : pathlib.Path, dither : str, frame
 def mkcue(out_path : pathlib.Path, src_path : pathlib.Path):
     with Progress() as progress:
         cues.make_cue(progress, src_path, out_path)
+
+@gqc_cli.command()
+@click.argument('input', type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True, path_type=pathlib.Path), required=True)
+@click.option('--write', '-w', is_flag=True, help="Write the formatted output back to INPUT instead of printing it to stdout.")
+@click.option('--check', is_flag=True, help="Don't write anything; exit nonzero if INPUT isn't already formatted.")
+def fmt(input : pathlib.Path, write : bool, check : bool):
+    """Parse INPUT to gqc's comment- and layout-preserving CST (gqc.cst)
+    and re-emit it, proving the CST round-trips (gamequeer#424 step 1).
+
+    This step's `render` is an identity transform -- no reindentation or
+    other pretty-printing happens yet (that's explicitly deferred to a
+    follow-on step; see gqc.cst's module docstring) -- so today this is
+    mainly useful as a `--check` round-trip/lossless-parse validator, and
+    as the CST's own proof of concept."""
+    if write and check:
+        click.echo("--write and --check are mutually exclusive", err=True)
+        raise SystemExit(1)
+
+    # encoding='utf-8': gqc source is UTF-8 (see the UnicodeDecodeError
+    # handling below); without an explicit encoding, open() falls back to
+    # locale.getpreferredencoding(), which varies by platform/locale and can
+    # silently misdecode non-UTF-8 bytes instead of raising. newline='':
+    # disables universal-newline translation, so a CRLF- or CR-terminated
+    # INPUT is read (and, on --write, written back out) exactly as-is --
+    # required for the byte-for-byte round-trip guarantee this module exists
+    # to prove (see test_round_trip_preserves_windows_line_endings).
+    try:
+        with open(input, 'r', encoding='utf-8', newline='') as f:
+            source = f.read()
+    except UnicodeDecodeError as ue:
+        click.echo(f"{input}: cannot decode as UTF-8: {ue}", err=True)
+        raise SystemExit(1)
+
+    try:
+        tree = cst.parse_cst(source)
+    except GqcParseError as ge:
+        click.echo(str(ge), err=True)
+        raise SystemExit(1)
+
+    formatted = cst.render(tree)
+
+    if check:
+        if formatted != source:
+            click.echo(f"{input} is not formatted", err=True)
+            raise SystemExit(1)
+        return
+
+    if write:
+        # Write to a sibling temp file and os.replace() it into place instead
+        # of truncating INPUT in place (`open(input, 'w')`) -- the latter
+        # destroys the source the instant it's opened, so any failure between
+        # open and a completed write (disk full, process killed, ...) leaves
+        # INPUT empty/truncated with no way back. os.replace() is atomic on
+        # the same filesystem, so INPUT is either untouched or fully
+        # replaced, never partially written.
+        fd, tmp_path = tempfile.mkstemp(prefix=f'.{input.name}.', suffix='.tmp', dir=input.parent)
+        try:
+            # Same encoding='utf-8', newline='' rationale as the read above.
+            with os.fdopen(fd, 'w', encoding='utf-8', newline='') as f:
+                f.write(formatted)
+            os.replace(tmp_path, input)
+        except BaseException:
+            os.unlink(tmp_path)
+            raise
+    else:
+        click.echo(formatted, nl=False)
 
 @gqc_cli.command()
 @click.option('--no-mem-map', '-n', is_flag=True)
