@@ -206,6 +206,356 @@ def test_fw_version_write_rejects(compile_gq):
     assert "read-only" in stderr
 
 
+# --- random()/min()/max()/clamp()/abs() (gamequeer#422) -----------------------
+# Unlike badge_count()/fw_version() above, these all take one or more
+# int_expression *arguments* -- closer in grammar shape to str()'s
+# `str(<int_expression>)` cast (below) than to badge_count()'s empty parens.
+# test_random.py/test_math_intrinsics.py cover what they actually lower to;
+# test_constant_folding.py covers folding (min/max/clamp/abs fold when their
+# arguments do; random() never does). This section is just accept/reject
+# grammar coverage, including the same Keyword-not-bare-string/commits-on-
+# match care badge_count/fw_version/str already established.
+
+
+def test_random_call_accepts(compile_gq):
+    source = game_with_stage("x = random(1, 10);", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_random_combined_with_binary_op_accepts(compile_gq):
+    source = game_with_stage("x = random(1, 10) + 1;", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_random_accepts_full_expression_arguments(compile_gq):
+    # Unlike badge_count()/fw_version(), random()'s arguments are full
+    # int_expressions, not bare operands -- e.g. "y + 1", not just "y".
+    source = game_with_stage(
+        "x = random(y + 1, z * 2);", "volatile { int x = 0; int y = 0; int z = 5; }"
+    )
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_random_wrong_arity_too_few_rejects(compile_gq):
+    # random() is binary -- Keyword("random") commits (via the grammar's
+    # `-`) as soon as "random" itself matches, so a missing argument fails
+    # with a clean, source-located ParseSyntaxException rather than
+    # silently falling through to some other (wrong) interpretation.
+    source = game_with_stage("x = random(1);", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+    assert "ParseSyntaxException" in stderr
+
+
+def test_random_wrong_arity_too_many_rejects(compile_gq):
+    source = game_with_stage("x = random(1, 10, 100);", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+    assert "ParseSyntaxException" in stderr
+
+
+def test_random_bare_no_parens_rejects(compile_gq):
+    source = game_with_stage("x = random;", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+
+
+def test_random_prefixed_identifier_in_expression_accepts(compile_gq):
+    # "random" is matched via Keyword(), so it doesn't swallow a
+    # random-*prefixed* identifier -- same reasoning as
+    # test_badge_count_prefixed_identifier_in_expression_accepts above
+    # (gamequeer#354).
+    source = game_with_stage(
+        "y = random_seed + 1;",
+        "volatile { int random_seed = 0; int y = 0; }",
+    )
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_min_call_accepts(compile_gq):
+    source = game_with_stage("x = min(1, 2);", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_min_wrong_arity_rejects(compile_gq):
+    source = game_with_stage("x = min(1);", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+    assert "ParseSyntaxException" in stderr
+
+
+def test_min_prefixed_identifier_in_expression_accepts(compile_gq):
+    source = game_with_stage(
+        "y = minimum + 1;", "volatile { int minimum = 0; int y = 0; }"
+    )
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_max_call_accepts(compile_gq):
+    source = game_with_stage("x = max(1, 2);", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_max_wrong_arity_rejects(compile_gq):
+    source = game_with_stage("x = max(1, 2, 3);", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+    assert "ParseSyntaxException" in stderr
+
+
+def test_max_prefixed_identifier_in_expression_accepts(compile_gq):
+    source = game_with_stage(
+        "y = maximum + 1;", "volatile { int maximum = 0; int y = 0; }"
+    )
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_clamp_call_accepts(compile_gq):
+    source = game_with_stage("x = clamp(5, 0, 10);", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_clamp_wrong_arity_too_few_rejects(compile_gq):
+    source = game_with_stage("x = clamp(5, 0);", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+    assert "ParseSyntaxException" in stderr
+
+
+def test_clamp_wrong_arity_too_many_rejects(compile_gq):
+    source = game_with_stage("x = clamp(5, 0, 10, 20);", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+    assert "ParseSyntaxException" in stderr
+
+
+def test_clamp_prefixed_identifier_in_expression_accepts(compile_gq):
+    source = game_with_stage(
+        "y = clamped + 1;", "volatile { int clamped = 0; int y = 0; }"
+    )
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_abs_call_accepts(compile_gq):
+    source = game_with_stage("x = abs(-5);", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_abs_wrong_arity_rejects(compile_gq):
+    source = game_with_stage("x = abs(1, 2);", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+    assert "ParseSyntaxException" in stderr
+
+
+def test_abs_bare_no_parens_rejects(compile_gq):
+    source = game_with_stage("x = abs;", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+
+
+def test_abs_prefixed_identifier_in_expression_accepts(compile_gq):
+    source = game_with_stage(
+        "y = absolute + 1;", "volatile { int absolute = 0; int y = 0; }"
+    )
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+# --- social vocabulary (gamequeer#423, DEF CON sprint epic gamequeer#419) ----
+# cohort NAME = <lo>..<hi>; have_met(id); in_cohort(NAME, id); seen_self();
+# count_seen() / count_seen(NAME) -- all desugar to badge_get/badge_set/
+# badge_count() and ordinary comparisons, no VM change.
+
+
+def game_with_cohort_and_stage(body: str, cohort_decl: str, decls: str = "") -> str:
+    """Same as game_with_stage, but with a cohort declaration inserted
+    between the game header and any other top-level declarations -- cohort
+    declarations must precede any reference to them (single-pass parse,
+    same requirement as cue/menu/animation declarations elsewhere)."""
+    return f"{GAME_HEADER}{cohort_decl}\n{decls}\nstage start {{ event enter {{ {body} }} }}\n"
+
+
+def test_cohort_declaration_accepts(compile_gq):
+    source = game_with_cohort_and_stage("x = 1;", "cohort GUESTS = 300..319;", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_cohort_declaration_missing_range_rejects(compile_gq):
+    source = game_with_cohort_and_stage("x = 1;", "cohort GUESTS = 300;", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+
+
+def test_cohort_declaration_inverted_range_rejects(compile_gq):
+    # lo > hi -- an empty range is never useful and almost certainly a typo.
+    source = game_with_cohort_and_stage("x = 1;", "cohort GUESTS = 319..300;", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+
+
+def test_cohort_declaration_out_of_bounds_rejects(compile_gq):
+    # hi >= BADGES_ALLOWED (320) -- out of range for the badges-seen bitfield.
+    source = game_with_cohort_and_stage("x = 1;", "cohort GUESTS = 0..320;", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+
+
+def test_cohort_declaration_duplicate_name_rejects(compile_gq):
+    source = game_with_cohort_and_stage(
+        "x = 1;", "cohort GUESTS = 0..5;\ncohort GUESTS = 6..10;", "volatile { int x = 0; }"
+    )
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+
+
+def test_have_met_call_accepts(compile_gq):
+    source = game_with_stage("x = have_met(5);", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_have_met_no_argument_rejects(compile_gq):
+    # have_met(id) is unary -- the argument is mandatory.
+    source = game_with_stage("x = have_met();", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+    assert "ParseSyntaxException" in stderr
+
+
+def test_have_met_two_arguments_rejects(compile_gq):
+    source = game_with_stage("x = have_met(1, 2);", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+    assert "ParseSyntaxException" in stderr
+
+
+def test_in_cohort_call_accepts(compile_gq):
+    source = game_with_cohort_and_stage(
+        "x = in_cohort(GUESTS, y);", "cohort GUESTS = 300..319;", "volatile { int x = 0; int y = 0; }"
+    )
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_in_cohort_undefined_cohort_rejects(compile_gq):
+    source = game_with_stage("x = in_cohort(NOPE, y);", "volatile { int x = 0; int y = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+    assert "Undefined cohort" in stderr
+
+
+def test_in_cohort_used_before_declared_rejects(compile_gq):
+    # Single-pass parse, same requirement as cue/menu/animation references:
+    # a cohort must be declared above any use of it.
+    source = (
+        f"{GAME_HEADER}volatile {{ int x = 0; int y = 0; }}\n"
+        "stage start { event enter { x = in_cohort(GUESTS, y); } }\n"
+        "cohort GUESTS = 300..319;\n"
+    )
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+    assert "Undefined cohort" in stderr
+
+
+def test_in_cohort_one_argument_rejects(compile_gq):
+    source = game_with_cohort_and_stage(
+        "x = in_cohort(GUESTS);", "cohort GUESTS = 300..319;", "volatile { int x = 0; }"
+    )
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+    assert "ParseSyntaxException" in stderr
+
+
+def test_in_cohort_three_arguments_rejects(compile_gq):
+    source = game_with_cohort_and_stage(
+        "x = in_cohort(GUESTS, y, z);",
+        "cohort GUESTS = 300..319;",
+        "volatile { int x = 0; int y = 0; int z = 0; }",
+    )
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+    assert "ParseSyntaxException" in stderr
+
+
+def test_seen_self_call_accepts(compile_gq):
+    source = game_with_stage("seen_self();")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_seen_self_with_argument_rejects(compile_gq):
+    source = game_with_stage("seen_self(1);")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+    assert "ParseSyntaxException" in stderr
+
+
+def test_seen_self_bare_no_parens_rejects(compile_gq):
+    source = game_with_stage("seen_self;")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+
+
+def test_seen_self_as_expression_operand_rejects(compile_gq):
+    # seen_self() is a statement (like badge_set/badge_clear), not an
+    # int_operand -- it can't appear on the RHS of an assignment.
+    source = game_with_stage("x = seen_self();", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+
+
+def test_count_seen_bare_call_accepts(compile_gq):
+    source = game_with_stage("x = count_seen();", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_count_seen_with_cohort_accepts(compile_gq):
+    source = game_with_cohort_and_stage(
+        "x = count_seen(GUESTS);", "cohort GUESTS = 300..319;", "volatile { int x = 0; }"
+    )
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code == 0, stderr
+
+
+def test_count_seen_undefined_cohort_rejects(compile_gq):
+    source = game_with_stage("x = count_seen(NOPE);", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+    assert "Undefined cohort" in stderr
+
+
+def test_count_seen_two_arguments_rejects(compile_gq):
+    source = game_with_cohort_and_stage(
+        "x = count_seen(GUESTS, GUESTS);", "cohort GUESTS = 300..319;", "volatile { int x = 0; }"
+    )
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+    assert "ParseSyntaxException" in stderr
+
+
+def test_count_seen_literal_argument_rejects(compile_gq):
+    # count_seen()'s optional argument is a bare cohort name (an
+    # identifier), not an arbitrary int_expression.
+    source = game_with_stage("x = count_seen(1);", "volatile { int x = 0; }")
+    exit_code, stderr, _ = compile_gq(source)
+    assert exit_code != 0
+    assert "ParseSyntaxException" in stderr
+
+
 # --- str() cast: whole-RHS and inline (gamequeer#386) ------------------------
 
 
@@ -381,17 +731,19 @@ def test_game_block_missing_key_rejects(compile_gq, game_block, missing_key):
 
 
 def test_game_block_duplicate_key_rejects(compile_gq):
-    # Pins current behavior: pyparsing's "each" operator can't tell a
-    # duplicate `id` from a missing everything-else, so the diagnostic
-    # names the *other* three keys as "missing" rather than naming `id` as
-    # duplicated. See gamequeer#331 investigation notes.
+    # game_assignment is a plain repetition (gamequeer#420 cardinality
+    # follow-up), not pyparsing's `&` ("each") operator -- so unlike the
+    # `&`-based diagnostic this used to pin (which could only ever name the
+    # *other* three keys as "missing", never `id` itself as duplicated; see
+    # gamequeer#331's investigation notes), parser.parse_game_definition
+    # counts each key itself and names the specific duplicated one.
     source = (
         'game { id = 1; id = 2; title := "T"; author := "A"; starting_stage = start; }\n'
         "stage start { event enter { badge_set 1; } }\n"
     )
     exit_code, stderr, _ = compile_gq(source)
     assert exit_code != 0
-    assert "Missing one or more required elements" in stderr
+    assert "id" in stderr
 
 
 def test_game_block_shuffled_order_accepts(compile_gq):

@@ -38,6 +38,34 @@ int  score   = 0;      // '=' for ints
 str  name    := "ME";  // ':=' for strings
 ```
 
+### Named constants and enums
+
+`const NAME = <int-expr>;` and `enum Name { A, B, C }` (gamequeer#421) are
+compile-time-only sugar for magic numbers — every reference is substituted
+with a literal int at parse time (reusing the same constant folding a
+literal-only expression gets, so `const MAX_HP = 20 + 1;` never emits a
+runtime add), so there's no register/opcode cost and no on-cart trace of
+the name at all:
+
+```
+const MAX_HP = 21;
+enum Difficulty { Easy, Medium, Hard }   // auto-numbered 0, 1, 2
+
+stage start {
+    event enter {
+        hp = MAX_HP;
+        if (difficulty == Difficulty.Hard) { hp = hp - 5; }
+    }
+}
+```
+
+**Declare before use.** Unlike variables/stages/animations (which resolve
+forward references at link time), a `const`/`enum` has no runtime
+representation to stay "unresolved" as — it must already be a literal by
+the time its use is parsed, so it has to appear earlier in the file than
+any reference to it. A single flat, file-global namespace covers both
+forms; an enum member is referenced as `Name.Member`.
+
 ### Stage options
 
 - `bganim <anim>;` — background animation for the stage.
@@ -60,7 +88,10 @@ with `continue` / `break`, `badge_set`/`badge_clear`, and assignments
 `badge_get` is not a statement but a unary operator usable inside int
 expressions (e.g. `x = badge_get(5) + 1;`); `badge_count()` (nullary,
 parens mandatory) is a popcount over the whole badges-seen bitfield, e.g.
-`if (badge_count() >= 5) { ... }`.
+`if (badge_count() >= 5) { ... }`. `random(lo, hi)`, `min(a, b)`, `max(a,
+b)`, `clamp(x, lo, hi)`, and `abs(x)` (gamequeer#422) are also int-expression
+intrinsics, each taking one or more full `int_expression` arguments -- see
+"Randomness" below for `random()`'s details.
 
 **`badge_count()` is heavy -- a ~9-op runtime loop over all 320 badge
 slots, not an O(1) lookup.** Call it once (e.g. on a stage's `enter` event)
@@ -97,8 +128,54 @@ GQS_LABEL2 := "score=" + score_str;
 
 ### Randomness
 
-There is no RNG builtin. Build one from two pieces: an entropy source sampled
-at a human input event, and a deterministic generator.
+**`random(lo, hi)`** (gamequeer#422) returns a pseudo-random int in the
+*inclusive* range `[lo, hi]` (both full `int_expression`s, so e.g.
+`random(1, max_hp)` is valid):
+
+```
+roll = random(1, 6);          // 1..6 inclusive, like a d6
+dmg = random(low_dmg, high_dmg);
+```
+
+Its *multiplicative core* is the same Park-Miller "minimal standard" LCG
+the game corpus already hand-rolled before this existed (see e.g.
+`gq-games/games/donsol.gq`'s card-shuffle `lcg`), advanced one Schrage-method
+step on every call. Its *seeding* is NOT the same as donsol.gq's: the state
+is perturbed on every call with `GQI_PLAYER_ID` and a hidden counter that
+increments once per `random()` *call* (zero at boot) -- not donsol.gq's own
+`ctr`, which is sampled from a free-running timer counter for real
+wall-clock entropy. That means **the first `random()` call after a fresh
+cart boot is fully determined by the badge's `GQI_PLAYER_ID`** and repeats
+identically on every reboot of the same badge; only later calls within the
+same boot session diverge from each other. No setup required either way:
+the first call anywhere in a game lazily creates the hidden state; a game
+that never calls `random()` pays nothing for it. See
+`IntExpression._emit_random` (`gqc/src/gqc/datamodel.py`) for the full
+derivation.
+
+Also available: `min(a, b)`, `max(a, b)`, `clamp(x, lo, hi)` (`=
+min(max(x, lo), hi)`), and `abs(x)` -- all full `int_expression` arguments,
+all fold to a single literal at compile time when every argument is one
+(unlike `random()`, which never folds -- it reads live state).
+
+**If a game needs its first draw to actually vary from boot to boot**
+(e.g. a card shuffle that shouldn't replay identically every time the same
+badge boots the cart), `random()` alone doesn't provide that -- hand-roll
+real entropy the same way donsol.gq does, with the recipe below: arm a
+`timer` event on a menu/title screen so a counter free-runs while the
+player is looking at the screen, and salt an int variable with it (or feed
+it straight into your own LCG state) before relying on any random draw.
+The recipe is also useful for driving a full shuffle from one
+manually-managed seed, or matching a specific published LCG for
+cross-checking against another implementation. Note it predates `random()`
+and uses a *different* multiplier (16807, the original 1969 Lehmer/
+Park-Miller constant) than `random()`'s own (48271, the 1993 revised
+"minimal standard" constant, also used by donsol.gq) -- the two aren't
+interchangeable mid-sequence, but both are valid, full-period generators on
+their own terms.
+
+Build one from two pieces: an entropy source sampled at a human input event,
+and a deterministic generator.
 
 **Entropy**: run a self-re-arming counter while waiting for the player, and
 sample it the moment they act:
@@ -557,6 +634,19 @@ for the full in-system procedure.
   bare C `/` and `%` with no zero check — a zero divisor is undefined
   behavior/a trap on both the emulator and the badge. Guard any divisor that
   can be zero with an `if` before dividing.
+- **`random(lo, hi)`/`clamp(x, lo, hi)` with `hi < lo` is unguarded** — same
+  "author's responsibility, not gqc's" contract as the zero-divisor case
+  above. `random()` maps into the range via `% (hi - lo + 1)`, an
+  unguarded runtime divide if `hi - lo + 1 <= 0`; `clamp()` still compiles
+  and runs (it's `min(max(x, lo), hi)`, no division), just returns
+  whatever that composition works out to for an inverted range, not a
+  "clamp failed" signal.
+- **`random()`/`min()`/`max()`/`clamp()` each briefly hold 2-3 of gqc's 4
+  int registers** while evaluating (see `IntExpression._emit_random`/
+  `_emit_minmax` in `datamodel.py`) — same register-pressure caveat as
+  `badge_count()` above; combining two or more of these (or nesting them
+  inside an already register-heavy expression) can hit `No free registers
+  available`.
 - **RLE4 is unreachable** via the public pipeline (commented out in `Frame`).
 - Encoding is decided **per frame**, not per animation — a mixed-content
   animation can contain both RLE7 and UNCOMPRESSED frames.

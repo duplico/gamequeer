@@ -1,5 +1,4 @@
 import sys
-import pathlib
 from collections import namedtuple
 
 import pyparsing as pp
@@ -7,7 +6,9 @@ from rich import print
 
 from .datamodel import Animation, Game, Stage, Variable, Event, Menu, LightCue, StrExpression
 from .datamodel import IntExpression, GqcIntOperand, GqcStrCastOperand, GqcBadgeCountOperand
-from .datamodel import fold_constant_int_expression
+from .datamodel import GqcRandomOperand, GqcMinMaxOperand, GqcClampOperand, GqcAbsOperand
+from .datamodel import fold_constant_int_expression, Constant, Enum
+from .datamodel import Cohort, GqcHaveMetOperand, GqcInCohortOperand, GqcCountSeenRangeOperand
 from .commands import CommandPlay, CommandGoStage, CommandCue, CommandCastStr
 from .commands import CommandSetStr, CommandSetInt, CommandWithIntExpressionArgument
 from .commands import CommandTimer, CommandIf, CommandGoto, CommandLoop, Command, CommandType
@@ -17,27 +18,36 @@ from . import structs, GqcParseError
 def parse_game_definition(instring, loc, toks):
     toks = toks[0]
 
-    # Note: if we're already here, the parser has already enforced that each of the key
-    #       parameters for the game are uniquely defined.
-    id = None
-    title = None
-    author = None
-    starting_stage = None
+    # grammar.py's game_assignment is a plain repetition of the
+    # id/title/author/starting_stage alternation, in any order and any
+    # number of times -- not pyparsing's `&` ("each") operator, which could
+    # only ever raise a generic "missing one or more required elements"
+    # ParseException with no way to tell a duplicated key from a genuinely
+    # missing one (gamequeer#331's investigation notes). "Exactly one of
+    # each" is enforced here instead, the same semantic-cardinality
+    # approach gamequeer#420 already uses for zero/duplicate game{}
+    # *blocks* themselves (see parser.parse's Game.game is None check and
+    # Game.__init__'s "Game already defined" check) -- each of toks[1:] is
+    # one already-parsed [key, value] assignment group (game_id_assignment/
+    # game_title_assignment/game_author_assignment/
+    # game_starting_stage_assignment); counting them by key lets a missing
+    # or duplicated key be named specifically in the resulting error.
+    values = {}
+    counts = {"id": 0, "title": 0, "author": 0, "starting_stage": 0}
+
+    for assignment in toks[1:]:
+        key, value = assignment
+        counts[key] += 1
+        values[key] = value
+
+    for key, count in counts.items():
+        if count == 0:
+            raise GqcParseError(f"Missing required game key '{key}'", instring, loc)
+        if count > 1:
+            raise GqcParseError(f"Duplicate game key '{key}'", instring, loc)
 
     try:
-        for assignment in toks[1]:
-            if assignment[0] == "id":
-                id = assignment[1]
-            elif assignment[0] == "title":
-                title = assignment[1]
-            elif assignment[0] == "author":
-                author = assignment[1]
-            elif assignment[0] == "starting_stage":
-                starting_stage = assignment[1]
-            else:
-                raise ValueError(f"Invalid assignment {assignment[0]}")
-        
-        return Game(id, title, author, starting_stage)
+        return Game(values["id"], values["title"], values["author"], values["starting_stage"])
     except ValueError as ve:
         raise GqcParseError(str(ve), instring, loc)
 
@@ -183,6 +193,47 @@ def parse_variable_definition_storageclass(instring, loc, toks):
     for var in toks[1]:
         var.set_storageclass(storageclass)
 
+def parse_const_definition(instring, loc, toks):
+    # gamequeer#421: `const NAME = <int-expression>;`. `value` is whatever
+    # int_expression's own parse action already produced -- a literal
+    # GqcIntOperand if the RHS folded to a compile-time constant (gamequeer
+    # #385's fold_constant_int_expression, reused as-is via int_expression),
+    # or an IntExpression if it didn't (e.g. it references a variable, or a
+    # not-yet-defined name that reads as one -- see Constant's docstring in
+    # datamodel.py for why forward references aren't supported). Either way,
+    # a `const` has no runtime representation to fall back to, so anything
+    # short of an already-folded literal is rejected right here.
+    toks = toks[0]
+    name = toks[1]
+    value_operand = toks[2]
+
+    if not (isinstance(value_operand, GqcIntOperand) and value_operand.is_literal):
+        raise GqcParseError(
+            f"Constant {name} must be initialized with a compile-time "
+            "constant integer expression",
+            instring, loc,
+        )
+
+    try:
+        Constant.define(name, value_operand.value)
+    except ValueError as ve:
+        raise GqcParseError(str(ve), instring, loc)
+
+def parse_enum_definition(instring, loc, toks):
+    # gamequeer#421: `enum Name { A, B, C }`, auto-numbered from 0 in
+    # declaration order. Enum.define does the actual work (including
+    # registering each member into Constant.const_table under
+    # "Name.Member", see its docstring), so it can share the same
+    # duplicate-name and range-checking machinery as a plain `const`.
+    toks = toks[0]
+    name = toks[1]
+    members = list(toks[2])
+
+    try:
+        Enum.define(name, members)
+    except ValueError as ve:
+        raise GqcParseError(str(ve), instring, loc)
+
 def parse_lightcue_definition_section(instring, loc, toks):
     # Import here to avoid circular import
     from .cues import parse_cue
@@ -190,7 +241,10 @@ def parse_lightcue_definition_section(instring, loc, toks):
 
     for cue in toks:
         cue_name = cue[0]
-        cue_source = pathlib.Path() / 'assets' / 'lighting' / cue[1]
+        # gamequeer#420: resolved relative to the game's own directory
+        # (Game.game_dir), not the process CWD -- see the matching comment
+        # on Animation.src_path in datamodel.py.
+        cue_source = Game.game_dir / 'assets' / 'lighting' / cue[1]
 
         print(f"[blue]Light cue [italic]{cue_name}[/italic][/blue] from [underline]{cue_source}[/underline]")
         
@@ -238,15 +292,165 @@ def parse_fw_version_operand(instring, loc, toks):
     # inject_fw_version_probe after parsing: a game that never calls
     # fw_version() gets no probe stage, and pays none of its ~1s cost on
     # original firmware.
-    Game.game.needs_fw_probe = True
+    #
+    # gamequeer#420: game{} may not have been parsed yet (it's no longer
+    # required to be the first top-level section), so Game.game can still be
+    # None here -- record the flag on the class itself either way;
+    # Game.__init__ seeds a not-yet-constructed instance's needs_fw_probe
+    # from it, and it's still applied directly to Game.game when that
+    # instance already exists (the common case).
+    Game.needs_fw_probe_seen = True
+    if Game.game is not None:
+        Game.game.needs_fw_probe = True
     return GqcIntOperand(False, structs.GQ_FW_PROBE_RESULT_VAR)
 
+def parse_enum_member_operand(instring, loc, toks):
+    # `Name.Member` (gamequeer#421): resolved to its int value right here,
+    # at parse time, same as badge_count() above is resolved to its
+    # sentinel here -- by the time int_operand's own parse action
+    # (parse_int_operand, below) sees this, it's already a literal
+    # GqcIntOperand, indistinguishable from a bare int literal.
+    enum_name, member_name = toks[0]
+    try:
+        value = Enum.get_member_value(enum_name, member_name)
+    except ValueError as ve:
+        raise GqcParseError(str(ve), instring, loc)
+    return GqcIntOperand(is_literal=True, value=value)
+
+def parse_random_operand(instring, loc, toks):
+    # random(lo, hi) (gamequeer#422): toks[0] is random_call's own pp.Group,
+    # holding exactly its two already-parsed int_expression arguments (the
+    # "random" keyword itself is suppressed in the grammar, same as
+    # string_cast's "str" -- see parse_string_cast_operand). Setting
+    # needs_random here (mirroring parse_fw_version_operand's needs_fw_probe
+    # above) is what tells gqc.py to call
+    # linker.create_random_state_variables after parsing: a game that never
+    # calls random() gets no hidden LCG state/counter variables.
+    #
+    # gamequeer#420: game{} may not have been parsed yet (it's no longer
+    # required to be the first top-level section), so Game.game can still be
+    # None here -- record the flag on the class itself either way;
+    # Game.__init__ seeds a not-yet-constructed instance's needs_random from
+    # it, and it's still applied directly to Game.game when that instance
+    # already exists (the common case).
+    Game.needs_random_seen = True
+    if Game.game is not None:
+        Game.game.needs_random = True
+    lo, hi = toks[0]
+    return GqcRandomOperand(lo, hi)
+
+def parse_min_operand(instring, loc, toks):
+    a, b = toks[0]
+    return GqcMinMaxOperand(a, b, False)
+
+def parse_max_operand(instring, loc, toks):
+    a, b = toks[0]
+    return GqcMinMaxOperand(a, b, True)
+
+def parse_clamp_operand(instring, loc, toks):
+    x, lo, hi = toks[0]
+    return GqcClampOperand(x, lo, hi)
+
+def parse_abs_operand(instring, loc, toks):
+    x = toks[0][0]
+    return GqcAbsOperand(x)
+
+# The social vocabulary (gamequeer#423, DEF CON sprint epic gamequeer#419).
+# Each parse action below produces one of the datamodel.py marker
+# namedtuples documented there, following the exact same
+# parse_int_operand/parse_int_expression/IntExpression.get_result_symbol/
+# fold_constant_int_expression recognition pattern parse_badge_count_operand
+# and GqcBadgeCountOperand already established for gamequeer#387.
+
+def parse_have_met_operand(instring, loc, toks):
+    # toks[0] is have_met_call's own pp.Group: ['have_met', arg], where arg
+    # is whatever this call's own int_expression sub-rule already reduced
+    # the argument to (a GqcIntOperand or IntExpression).
+    return GqcHaveMetOperand(id_operand=toks[0][1])
+
+def parse_in_cohort_operand(instring, loc, toks):
+    # toks[0] is in_cohort_call's own pp.Group: ['in_cohort', cohort_name, id].
+    _, cohort_name, id_operand = toks[0]
+
+    if cohort_name not in Cohort.cohort_table:
+        raise GqcParseError(f"Undefined cohort {cohort_name}", instring, loc)
+    cohort = Cohort.cohort_table[cohort_name]
+
+    return GqcInCohortOperand(id_operand=id_operand, lo=cohort.lo, hi=cohort.hi)
+
+def parse_count_seen_operand(instring, loc, toks):
+    # toks[0] is count_seen_call's own pp.Group: either ['count_seen']
+    # (the bare-call form) or ['count_seen', cohort_name].
+    toks = toks[0]
+
+    if len(toks) == 1:
+        # count_seen() with no argument is badge_count() itself
+        # (gamequeer#423) -- the same marker, same lowering, same op-stream.
+        return GqcBadgeCountOperand()
+
+    cohort_name = toks[1]
+    if cohort_name not in Cohort.cohort_table:
+        raise GqcParseError(f"Undefined cohort {cohort_name}", instring, loc)
+    cohort = Cohort.cohort_table[cohort_name]
+
+    return GqcCountSeenRangeOperand(lo=cohort.lo, hi=cohort.hi)
+
+def parse_cohort_definition(instring, loc, toks):
+    toks = toks[0]
+    _, name, lo, hi = toks
+
+    try:
+        return Cohort(name, lo, hi)
+    except ValueError as ve:
+        raise GqcParseError(str(ve), instring, loc)
+
+def parse_seen_self(instring, loc):
+    # seen_self() (gamequeer#423) desugars to the copy-pasted-verbatim idiom
+    # "if (badge_get(GQI_PLAYER_ID)==0) badge_set GQI_PLAYER_ID;" -- built
+    # by hand here rather than via the grammar (there's no source text for
+    # it to parse), mirroring the manual Command construction
+    # IntExpression._emit_badge_count already does for badge_count()'s own
+    # fixed shape.
+    id_operand = GqcIntOperand(is_literal=False, value='GQI_PLAYER_ID')
+    condition = IntExpression(
+        [['badge_get', id_operand], '==', GqcIntOperand(is_literal=True, value=0)],
+        instring, loc,
+    )
+    true_cmds = [CommandWithIntExpressionArgument(CommandType.QCSET, instring, loc, id_operand)]
+
+    return CommandIf(instring, loc, condition, true_cmds)
+
+# Every intrinsic/social-vocabulary operand marker (see datamodel.py) that
+# parse_int_operand/parse_int_expression need to pass through unchanged
+# rather than wrap in a GqcIntOperand -- the same role GqcBadgeCountOperand
+# already plays for badge_count(). Combines gamequeer#422's math intrinsics
+# (random/min/max/clamp/abs) and gamequeer#423's social vocabulary
+# (have_met/in_cohort/count_seen).
+_INTRINSIC_OPERAND_MARKER_TYPES = (
+    GqcBadgeCountOperand, GqcRandomOperand, GqcMinMaxOperand, GqcClampOperand, GqcAbsOperand,
+    GqcHaveMetOperand, GqcInCohortOperand, GqcCountSeenRangeOperand,
+)
+
 def parse_int_operand(instring, loc, toks):
-    if isinstance(toks[0], (GqcIntOperand, GqcBadgeCountOperand)):
+    if isinstance(toks[0], (GqcIntOperand,) + _INTRINSIC_OPERAND_MARKER_TYPES):
         return toks[0]
     elif isinstance(toks[0], int):
         return GqcIntOperand(True, toks[0])
+    elif toks[0] in Constant.const_table:
+        # A bare `const NAME` reference (gamequeer#421) -- substitute its
+        # value immediately, same as a literal int would parse. Must be
+        # declared earlier in the file (see Constant's docstring in
+        # datamodel.py); anything not already in the table by now is
+        # treated as an ordinary (possibly forward-declared) variable
+        # reference, exactly as before this feature existed.
+        return GqcIntOperand(True, Constant.const_table[toks[0]])
     else:
+        # Not (yet) a known const/enum member -- could be an ordinary
+        # (forward-reference-tolerant) variable, or a const/enum used
+        # *before* its own declaration; can't tell which until the whole
+        # file has been parsed (see Constant.pending_int_refs' docstring
+        # and check_pending_int_refs, below).
+        Constant.pending_int_refs.append((toks[0], instring, loc))
         return GqcIntOperand(False, toks[0])
 
 def parse_int_expression(instring, loc, toks):
@@ -264,15 +468,40 @@ def parse_int_expression(instring, loc, toks):
         # re-folding/re-constructing it (which would double-alloc its
         # registers -- see gamequeer#345).
         return toks
-    if isinstance(toks, GqcBadgeCountOperand):
-        # badge_count() as the *entire* RHS, e.g. "x = badge_count();" --
+    if isinstance(toks, _INTRINSIC_OPERAND_MARKER_TYPES):
+        # badge_count() (gamequeer#387), one of gamequeer#422's math
+        # intrinsics (random/min/max/clamp/abs), or one of gamequeer#423's
+        # social-vocabulary markers (have_met/in_cohort/count_seen) as the
+        # *entire* RHS, e.g. "x = badge_count();" or "x = min(3, 7);" --
         # with no sibling operator at this nesting level, infix_notation
-        # hands this back as a bare atom rather than a
-        # [operand, op, operand] token group. Unlike a bare variable
-        # reference, badge_count() always emits real commands (its
-        # popcount loop), so it needs an IntExpression wrapper even here;
-        # get_result_symbol recognizes the same sentinel to build that
-        # loop (see IntExpression._emit_badge_count).
+        # hands this back as a bare atom rather than a [operand, op,
+        # operand] token group.
+        #
+        # min()/max()/clamp()/abs() (unlike badge_count()/random()/
+        # have_met()/count_seen(), which never fold -- see
+        # fold_constant_int_expression) fold to a single literal here too
+        # when their own arguments do, and in_cohort(NAME, id) folds
+        # whenever `id` itself does (it's a pure range compare, no badge
+        # state involved) -- this is the *only* place a bare-atom marker
+        # like this reaches fold_constant_int_expression directly; the
+        # generic fold attempt further down only ever sees a real
+        # [operand, op, operand] node, so without this a whole-RHS
+        # "x = min(3, 7);" (or "x = in_cohort(NAME, 5);") would never fold
+        # even though "x = min(3, 7) + 1;" already does (via that generic
+        # path recursing into the marker as one of its two operands).
+        folded = fold_constant_int_expression(toks)
+        if folded is not None:
+            return GqcIntOperand(is_literal=True, value=folded)
+
+        # Otherwise, every one of these always emits real commands (a
+        # popcount loop, LCG arithmetic, a compare-and-conditionally-
+        # overwrite, a badge_get delegation, or a bare comparison -- see
+        # IntExpression._emit_badge_count/_emit_random/_emit_minmax/
+        # _emit_clamp/_emit_abs/_emit_count_seen_range and the
+        # GqcHaveMetOperand/GqcInCohortOperand branches of
+        # get_result_symbol), so each needs an IntExpression wrapper even
+        # here; get_result_symbol recognizes the same markers to build that
+        # lowering.
         try:
             return IntExpression([toks], instring, loc)
         except ValueError as ve:
@@ -440,11 +669,45 @@ def parse_command(instring, loc, toks):
             return CommandWithIntExpressionArgument(CommandType.QCSET, instring, loc, toks[1])
         elif command == 'badge_clear':
             return CommandWithIntExpressionArgument(CommandType.QCCLR, instring, loc, toks[1])
+        elif command == 'seen_self':
+            return parse_seen_self(instring, loc)
         else:
             raise GqcParseError(f"Invalid command {command}", instring, loc)
         
     except ValueError as ve:
         raise GqcParseError(str(ve), instring, loc)
+
+def check_pending_int_refs():
+    """Reject any `Constant.pending_int_refs` entry that turns out to name
+    a const/enum member after all (gamequeer#427 review) -- called once
+    parsing has fully finished, so `Constant.const_table` holds every
+    const/enum this file will ever define, including ones declared *after*
+    the offending reference.
+
+    Reports the first such reference in source order (`pending_int_refs`
+    is append-only, in parse order) and exits, matching every other
+    single-error `parser.parse` diagnostic -- there's no multi-error
+    reporting elsewhere in gqc to be consistent with.
+
+    Skips a name that's *also* a declared variable (`Variable.var_table`):
+    gqc doesn't otherwise stop a `const`/`enum` and a `volatile`/
+    `persistent` variable from sharing a name (a separate, pre-existing gap,
+    out of scope here), so in that rare collision case this defers to the
+    parser's own (variable) interpretation rather than guessing wrong.
+    """
+    for name, ref_instring, ref_loc in Constant.pending_int_refs:
+        if name in Constant.const_table and name not in Variable.var_table:
+            print(
+                GqcParseError(
+                    f"{name!r} is a const/enum member declared later in "
+                    "this file. const/enum references must be declared "
+                    "before their first use (they don't get the same "
+                    "forward-reference tolerance ordinary variables do).",
+                    ref_instring, ref_loc,
+                ),
+                file=sys.stderr,
+            )
+            exit(1)
 
 def parse(text):
     # Import here to avoid circular import
@@ -468,6 +731,28 @@ def parse(text):
         print(
             "Error: expression nesting is too deep for gqc to parse. "
             "Split it into intermediate variables.",
+            file=sys.stderr,
+        )
+        exit(1)
+
+    # gamequeer#427 review: a const/enum referenced before its own
+    # declaration couldn't be told apart from an ordinary forward-declared
+    # variable reference while parsing was still in progress -- now that
+    # it's finished, Constant.const_table is complete and this can be
+    # checked for real. See check_pending_int_refs' own docstring.
+    check_pending_int_refs()
+
+    # gamequeer#420: game{} is no longer structurally locked to being the
+    # first top-level section (it's just one more alternative in the
+    # top-level section repetition in grammar.py), so the grammar alone
+    # can no longer enforce "exactly one" -- a *second* game{} block is
+    # still caught structurally (Game.__init__ raises "Game already
+    # defined", surfaced as a GqcParseError above), but *zero* game{}
+    # blocks parses cleanly with nothing left to reject it. Check for that
+    # here instead, once parsing is otherwise known to have succeeded.
+    if Game.game is None:
+        print(
+            "Error: no `game { ... }` block found (exactly one is required).",
             file=sys.stderr,
         )
         exit(1)

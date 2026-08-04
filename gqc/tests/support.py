@@ -15,10 +15,15 @@ in-process test modules in this package for callers. It is additive only:
 nothing in this file changes any production behavior.
 """
 
+import pathlib
+
 from gqc import structs
 from gqc.commands import Command
 from gqc.datamodel import (
     Animation,
+    Cohort,
+    Constant,
+    Enum,
     Event,
     Frame,
     FrameData,
@@ -35,6 +40,9 @@ def reset_compiler_state():
     """Clear every class-level compiler registry back to its startup state."""
     Game.link_table.clear()
     Game.game_name = None
+    Game.game_dir = pathlib.Path()
+    Game.needs_fw_probe_seen = False
+    Game.needs_random_seen = False
     Game.game = None
 
     Event.event_table.clear()
@@ -64,6 +72,11 @@ def reset_compiler_state():
     LightCue.link_table.clear()
     LightCue.cue_table.clear()
     LightCueFrame.link_table.clear()
+
+    Constant.const_table.clear()
+    Constant.pending_int_refs.clear()
+    Enum.enum_table.clear()
+    Cohort.cohort_table.clear()
 
     Command.command_list.clear()
 

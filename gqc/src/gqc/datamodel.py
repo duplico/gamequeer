@@ -44,10 +44,88 @@ GqcStrCastOperand = namedtuple('GqcStrCastOperand', 'int_expr')
 # same role `GqcStrCastOperand` plays for an inline `str(x)` cast.
 GqcBadgeCountOperand = namedtuple('GqcBadgeCountOperand', [])
 
+# random(lo, hi), min(a, b), max(a, b), clamp(x, lo, hi), abs(x) --
+# gamequeer#422's math intrinsics. Same role as `GqcBadgeCountOperand`
+# above: each carries its own (already-parsed, i.e. each field is itself a
+# `GqcIntOperand` or `IntExpression`) argument sub-expressions, but -- like
+# `badge_count()` -- can never be handed back as-is as a subexpression's
+# result; `parser.parse_random_operand`/`parse_min_operand`/
+# `parse_max_operand`/`parse_clamp_operand`/`parse_abs_operand` build these,
+# and `IntExpression.get_result_symbol` (`_emit_random`/`_emit_minmax`/
+# `_emit_clamp`/`_emit_abs`) lowers them to real arithmetic/compare ops.
+# `want_max` lets min() and max() share one marker/one lowering method
+# (`_emit_minmax`) since they're identical but for that one comparison sense.
+GqcRandomOperand = namedtuple('GqcRandomOperand', 'lo hi')
+GqcMinMaxOperand = namedtuple('GqcMinMaxOperand', 'a b want_max')
+GqcClampOperand = namedtuple('GqcClampOperand', 'x lo hi')
+GqcAbsOperand = namedtuple('GqcAbsOperand', 'x')
+
+# The social vocabulary (gamequeer#423, DEF CON sprint epic gamequeer#419):
+# `have_met(id)`, `in_cohort(NAME, id)`, and `count_seen(NAME)` (the
+# one-argument overload of `count_seen`; the bare `count_seen()` form
+# reuses `GqcBadgeCountOperand` directly -- see `parser.parse_count_seen_operand`).
+# FROZEN VM CONTRACT: all three desugar entirely to *existing* opcodes --
+# `badge_get` (`QCGET`), the comparison/logical ops, and the same
+# loop-over-`badge_get` shape `badge_count()` already uses -- never a new
+# opcode or register. Each is a marker `parser.py`'s own parse action
+# returns for `parse_int_operand`/`parse_int_expression`/
+# `IntExpression.get_result_symbol`/`fold_constant_int_expression` to
+# recognize and lower, the same role `GqcBadgeCountOperand` already plays
+# for `badge_count()`.
+#
+# `have_met(id)` is a bare rename of `badge_get(id)` -- `id_operand` is
+# whatever `int_expression` already reduced the argument to (a
+# `GqcIntOperand` or `IntExpression`); `IntExpression.get_result_symbol`
+# lowers it by delegating straight to the existing unary-`badge_get`
+# codegen path (see the `GqcHaveMetOperand` branch there).
+GqcHaveMetOperand = namedtuple('GqcHaveMetOperand', 'id_operand')
+
+# `in_cohort(NAME, id)` -- `NAME` is resolved against `Cohort.cohort_table`
+# at parse time (`parser.parse_in_cohort_operand`); `lo`/`hi` are that
+# cohort's own already-validated bounds (plain `int`s, not `GqcIntOperand`s
+# -- there's no register/variable to reference, just two compile-time
+# constants), so this lowers to a bare `(id_operand >= lo) && (id_operand
+# <= hi)` range compare over the *existing* `GE`/`LE`/`AND` opcodes -- see
+# the `GqcInCohortOperand` branches of `fold_constant_int_expression` (this
+# one folds if `id_operand` does) and `IntExpression.get_result_symbol`.
+GqcInCohortOperand = namedtuple('GqcInCohortOperand', 'id_operand lo hi')
+
+# `count_seen(NAME)` -- like `GqcInCohortOperand`, `lo`/`hi` are `NAME`'s
+# own resolved `Cohort` bounds. Lowers to a `badge_get` popcount loop
+# bounded to `[lo, hi]` instead of `badge_count()`'s full `[0,
+# BADGES_ALLOWED)` sweep -- see `IntExpression._emit_count_seen_range`.
+# Reads live badge state, not a constant, so -- like `GqcBadgeCountOperand`
+# -- this never folds even when `lo`/`hi` are themselves compile-time
+# constants (they always are).
+GqcCountSeenRangeOperand = namedtuple('GqcCountSeenRangeOperand', 'lo hi')
+
 class Game:
     link_table = dict() # OrderedDict not needed to remember order since Python 3.7
     game_name : str = None
+    # The directory containing the game's entry `.gq` file (gamequeer#420's
+    # game-as-directory convention). Set by gqc.py's `compile` command (and
+    # by tests that drive the parser directly) before parsing, so
+    # animations{}/lightcues{} sources -- and Game.__init__ below, via the
+    # game{}-anywhere relaxation -- never have to assume anything about
+    # *when* the game{} block itself is parsed relative to those sections.
+    # Defaults to the CWD, matching gqc's historical CWD-relative asset
+    # resolution for the common case where the entry file lives at the top
+    # of the invocation directory.
+    game_dir : pathlib.Path = pathlib.Path()
     game = None
+
+    # Set (regardless of whether a Game instance exists yet) the first time
+    # any stage's event code calls fw_version() (gamequeer#411), so the
+    # game{}-anywhere relaxation (gamequeer#420) can't lose the signal to a
+    # fw_version() call that's parsed *before* the game{} block itself --
+    # see parse_fw_version_operand and Game.__init__ below.
+    needs_fw_probe_seen = False
+
+    # Same hazard, same fix, for random() (gamequeer#422): set the first
+    # time any stage's event code calls random(), regardless of whether a
+    # Game instance exists yet -- see parse_random_operand and
+    # Game.__init__ below.
+    needs_random_seen = False
 
     def __init__(self, id : int, title : str, author : str, starting_stage : str = 'start'):
         self.addr = 0x00000000 # Set at link time
@@ -66,7 +144,27 @@ class Game:
         # only synthesizes the probe stage -- and its firmware pays for the
         # probe's BGDONE/TIMER race -- when this is True, so a game that
         # never calls fw_version() has zero footprint from this feature.
-        self.needs_fw_probe = False
+        # Seeded from needs_fw_probe_seen rather than starting False: since
+        # gamequeer#420, a fw_version() call may already have been parsed
+        # (and recorded there) before this game{} block itself is reached.
+        self.needs_fw_probe = Game.needs_fw_probe_seen
+
+        # Set by parser.parse_random_operand the first time a game calls
+        # random() (gamequeer#422). linker.create_random_state_variables
+        # only creates the hidden LCG state/counter variables when this is
+        # True, so a game that never calls random() has zero footprint from
+        # this feature. Deferred until after parsing completes (same reason
+        # as needs_fw_probe/inject_fw_version_probe above): creating those
+        # variables eagerly, the first time random() is *parsed*, could run
+        # ahead of a `volatile { ... }` section appearing later in the same
+        # source file and falsely trip its one-declaration-per-game check
+        # (parser.parse_variable_definition_storageclass).
+        #
+        # Seeded from needs_random_seen rather than starting False, for the
+        # same gamequeer#420 reason as needs_fw_probe above: a random() call
+        # may already have been parsed (and recorded there) before this
+        # game{} block itself is reached.
+        self.needs_random = Game.needs_random_seen
 
         if Game.game is not None:
             raise ValueError("Game already defined")
@@ -76,11 +174,21 @@ class Game:
         self.title = title
         self.author = author
 
+        # gamequeer#420: game{} may now be parsed after some/all of a
+        # game's stages (it no longer has to be the first top-level
+        # section), so a stage matching starting_stage may already be
+        # sitting in Stage.stage_table by the time we get here -- add_stage()
+        # only runs this same check for a stage parsed *after* this point.
+        for stage in Stage.stage_table.values():
+            if stage.name == self.starting_stage_name:
+                self.starting_stage = stage
+                break
+
     def add_stage(self, stage):
         self.stages.append(stage)
         if stage.name == self.starting_stage_name:
             self.starting_stage = stage
-    
+
     def __repr__(self) -> str:
         return f"Game({self.id}, {repr(self.title)}, {repr(self.author)}, crc_ptr={self.persistent_crc16_ptr:#0{10}x})"
     
@@ -181,7 +289,13 @@ class Stage:
 
         self.resolve()
 
-        Game.game.add_stage(self)
+        # gamequeer#420: game{} may not have been parsed yet (it's no
+        # longer required to be the first top-level section) -- in that
+        # case Game.__init__ itself scans Stage.stage_table for a
+        # starting_stage match once it *is* parsed, so there's nothing to
+        # register here yet.
+        if Game.game is not None:
+            Game.game.add_stage(self)
 
     def resolve(self) -> bool:
         # Don't bother trying to resolve symbols if we've already done so.
@@ -515,7 +629,12 @@ class Animation:
             if self.height:
                 make_animation_kwargs['height'] = self.height
 
-            self.src_path = pathlib.Path() / 'assets' / 'animations' / source
+            # gamequeer#420: resolved relative to the game's own directory
+            # (Game.game_dir), not the process CWD -- an absolute `source`
+            # still bypasses this entirely (pathlib truncates a `/`-joined
+            # absolute right-hand side), which linker.py's fw_version()
+            # probe-frame synthesis relies on.
+            self.src_path = Game.game_dir / 'assets' / 'animations' / source
             self.dst_path = pathlib.Path() / 'build' / 'assets' / 'animations' / Game.game_name / name
             digest_path = self.dst_path / '.digest'
 
@@ -867,6 +986,48 @@ class Menu:
         self.addr = structs.gq_ptr_apply_ns(namespace, addr)
         Menu.link_table[self.addr] = self
 
+class Cohort:
+    """A `cohort NAME = <lo>..<hi>;` declaration (gamequeer#423, DEF CON
+    sprint epic gamequeer#419): a named, inclusive player-ID range, resolved
+    entirely at compile time (`cohort_table` is a compiler-only symbol
+    table, consulted by `parser.parse_in_cohort_operand`/
+    `parse_count_seen_operand`). Unlike `Menu`/`LightCue`/`Animation`, a
+    cohort has no on-cart footprint of its own -- it never appears in the
+    compiled `.gqgame` at all, only as the already-resolved `lo`/`hi`
+    literals baked into the range-compare/bounded-popcount codegen its
+    references desugar to (see `GqcInCohortOperand`/
+    `GqcCountSeenRangeOperand` in this module). No `addr`, `set_addr`, or
+    `to_bytes` -- there's nothing to link or serialize.
+
+    `lo`/`hi` are bounded to `[0, BADGES_ALLOWED)` -- the same bound the
+    badges-seen bitfield itself uses (`structs.BADGES_ALLOWED`) -- not just
+    because `count_seen(NAME)` walks that bitfield directly, but so a
+    cohort declared partly or wholly outside it doesn't silently behave as
+    "always empty" for that usage instead of failing to compile.
+    """
+
+    cohort_table = dict()
+
+    def __init__(self, name: str, lo: int, hi: int):
+        if name in Cohort.cohort_table:
+            raise ValueError(f"Cohort {name} already defined")
+        if lo > hi:
+            raise ValueError(f"Cohort {name} has an empty/invalid range {lo}..{hi} (lo must be <= hi)")
+        if lo < 0 or hi >= structs.BADGES_ALLOWED:
+            raise ValueError(
+                f"Cohort {name} range {lo}..{hi} is out of bounds for the badges-seen "
+                f"bitfield (valid player IDs are 0..{structs.BADGES_ALLOWED - 1})"
+            )
+
+        self.name = name
+        self.lo = lo
+        self.hi = hi
+
+        Cohort.cohort_table[name] = self
+
+    def __repr__(self) -> str:
+        return f"Cohort({self.name}, {self.lo}..{self.hi})"
+
 class LightCue:
     link_table = dict() # OrderedDict not needed to remember order since Python 3.7
     cue_table = dict()
@@ -1046,10 +1207,12 @@ def fold_constant_int_expression(node):
     from the VM's actual runtime behavior:
       - any operand references a variable or a register, rather than being
         a literal;
-      - the operator is `badge_get`, or the node is a `badge_count()` call
-        -- both read live badge state, not a constant, regardless of
-        whether `badge_get`'s own operand is a literal (`badge_count()`
-        never has one);
+      - the operator is `badge_get`, or the node is a `badge_count()`,
+        `have_met(id)`, or `count_seen(NAME)` call -- all read live badge
+        state, not a constant, regardless of whether their own operand (if
+        any) is a literal (`in_cohort(NAME, id)`, gamequeer#423, is the one
+        exception: it's a pure range compare with no badge state involved,
+        so it folds whenever `id` does);
       - a `/` or `%` whose literal divisor is 0 -- the VM leaves this
         unguarded at runtime (see `run_arithmetic`), so folding it would
         turn a runtime behavior into either a compile-time crash or a
@@ -1089,6 +1252,74 @@ def fold_constant_int_expression(node):
         # `len() == 0`), but that's incidental; this is the intentional,
         # explicit no-fold.
         return None
+
+    if isinstance(node, GqcRandomOperand):
+        # random() reads (and mutates) live LCG state seeded from
+        # GQI_PLAYER_ID and a per-call counter, not a constant -- same
+        # no-fold reasoning as badge_get/badge_count() above (gamequeer#422).
+        # Explicit rather than left to duck-typing: `GqcRandomOperand` has 2
+        # fields, the same length `node_len` a couple of lines down treats
+        # as a valid `[operand, op, operand]` shape's arity minus one --
+        # relying on that coincidence to decline would be fragile.
+        return None
+
+    if isinstance(node, GqcAbsOperand):
+        # abs(x) (gamequeer#422): folds when its argument does, same as any
+        # other unary op. Declines (like the shift-amount/overflow guards
+        # below) when the result wouldn't fit t_gq_int -- e.g. abs(INT32_MIN)
+        # is 2**31, one past T_GQ_INT_MAX.
+        value = fold_constant_int_expression(node.x)
+        if value is None:
+            return None
+        result = abs(value)
+        return result if _fits_t_gq_int(result) else None
+
+    if isinstance(node, GqcMinMaxOperand):
+        # min(a, b)/max(a, b) (gamequeer#422): fold when both arguments do.
+        # Always representable -- the result is exactly one of the two
+        # already-representable inputs, never a new computed value.
+        left = fold_constant_int_expression(node.a)
+        right = fold_constant_int_expression(node.b)
+        if left is None or right is None:
+            return None
+        return max(left, right) if node.want_max else min(left, right)
+
+    if isinstance(node, GqcClampOperand):
+        # clamp(x, lo, hi) (gamequeer#422): fold when all three arguments
+        # do, via the exact same min(max(x, lo), hi) composition
+        # `IntExpression._emit_clamp` lowers to at runtime -- so a folded
+        # result can never diverge from what the unfolded bytecode would
+        # have computed for lo > hi (an out-of-contract but not rejected
+        # input; see _emit_clamp's docstring).
+        x = fold_constant_int_expression(node.x)
+        lo = fold_constant_int_expression(node.lo)
+        hi = fold_constant_int_expression(node.hi)
+        if x is None or lo is None or hi is None:
+            return None
+        return min(max(x, lo), hi)
+
+    if isinstance(node, GqcHaveMetOperand):
+        # have_met(id) is a bare rename of badge_get(id) (gamequeer#423) --
+        # reads live badge state, not a constant, regardless of whether
+        # `id_operand` itself is a literal. Same reasoning as badge_get
+        # below.
+        return None
+
+    if isinstance(node, GqcCountSeenRangeOperand):
+        # count_seen(NAME) reads live badge state the same way badge_count()
+        # does, just bounded to NAME's own range (gamequeer#423) -- never a
+        # constant, even though `lo`/`hi` themselves always are.
+        return None
+
+    if isinstance(node, GqcInCohortOperand):
+        # in_cohort(NAME, id) is a pure `(id >= lo) && (id <= hi)` range
+        # compare (gamequeer#423) -- unlike badge_get/badge_count/
+        # count_seen, it never touches live badge state, so it folds
+        # whenever `id_operand` itself does.
+        id_value = fold_constant_int_expression(node.id_operand)
+        if id_value is None:
+            return None
+        return int(node.lo <= id_value <= node.hi)
 
     # The remaining shape is a raw `[operand, op, operand]` / `[op, operand]`
     # token group -- a plain `list` when built by this module's own
@@ -1182,6 +1413,120 @@ def fold_constant_int_expression(node):
 
     return result if _fits_t_gq_int(result) else None
 
+# --- named compile-time constants and enums (gamequeer#421) ------------------
+# `const NAME = <int-expression>;` and `enum Name { A, B, C }` are pure
+# compile-time sugar: every reference gqc emits is *already* the literal
+# int value substituted in at parse time (see parser.parse_int_operand and
+# parser.parse_enum_member_operand, below), by construction the exact same
+# GqcIntOperand shape a bare int literal produces -- so there is nothing
+# new for the linker or the VM to do with them (FROZEN VM CONTRACT: no new
+# opcode, register, or on-cart format change).
+#
+# Scoping (the "keep it simple" decision gamequeer#421 asks for): a single
+# flat, file-global namespace, resolved eagerly in source order -- a
+# `const`/`enum` must be declared *before* its first use, like a `#define`
+# in a single-pass C preprocessor. This is a deliberate departure from
+# ordinary variable/stage/animation references, which *are*
+# forward-reference-tolerant (see linker.py's multi-pass resolve sweep):
+# those all keep a name unresolved until link time, but a constant has no
+# runtime representation to stay unresolved *as* -- it has to already be a
+# literal by the time its use is parsed. gqc does not run a separate
+# constant-only pre-pass to lift this restriction; that's left as a
+# possible future enhancement if declare-before-use ever proves too
+# restrictive in practice.
+#
+# A `const`/`enum` name used before its own declaration is diagnosed, not
+# silently miscompiled: `parser.parse_int_operand`'s identifier branch
+# can't tell at parse time whether an as-yet-undefined name is an ordinary
+# (forward-reference-tolerant) variable or a not-yet-declared const/enum
+# member, so it records every such fallback reference in
+# `Constant.pending_int_refs`; once the whole file has been parsed (and
+# `const_table` therefore holds every const/enum name the file will ever
+# define), `parser.parse` cross-checks that list and rejects any entry that
+# turns out to name a const/enum member after all -- see
+# `parser.check_pending_int_refs`.
+
+
+class Constant:
+    """A named compile-time integer constant (`const NAME = <int-expr>;`).
+
+    `const_table` is also where `Enum` registers each of its members, under
+    the composite key `"EnumName.Member"` (see `Enum.define`, below) --
+    that key can never collide with a plain `const` name because the
+    grammar's bare `identifier` token can't contain a `.`, so one flat
+    dict safely serves both forms and gives them a single shared
+    duplicate-name check.
+
+    `pending_int_refs` is a *separate* table, for a separate purpose: every
+    identifier `parser.parse_int_operand` couldn't resolve against
+    `const_table` at the point it was parsed (so fell through to treating
+    it as an ordinary variable reference), recorded as `(name, instring,
+    loc)`. Declare-before-use for const/enum (see the module-level comment
+    above this class) means that fallback is *correct* for a genuine
+    variable, but *wrong* for a const/enum referenced ahead of its own
+    declaration -- which this file can't yet tell apart at that point in
+    the parse, since the name might still get defined later. Once the
+    whole file is parsed, `parser.check_pending_int_refs` re-checks every
+    entry here against the now-complete `const_table` and rejects any that
+    do turn out to name a const/enum member.
+    """
+
+    const_table: dict[str, int] = {}
+    pending_int_refs: list = []
+
+    @classmethod
+    def define(cls, name: str, value: int) -> None:
+        if name in cls.const_table:
+            raise ValueError(f"Duplicate definition of constant {name}")
+        if not _fits_t_gq_int(value):
+            raise ValueError(
+                f"Constant {name} value {value} is out of range for a "
+                "32-bit int (t_gq_int)"
+            )
+        cls.const_table[name] = value
+
+
+class Enum:
+    """`enum Name { A, B, C }`: a named group of compile-time int constants,
+    auto-numbered from 0 in declaration order, referenced as `Name.Member`.
+
+    An enum is just sugar for a block of `const`s that share a name prefix
+    and get their values auto-assigned -- each member is registered into
+    `Constant.const_table` (under `"Name.Member"`) exactly as if the user
+    had written `const Name.Member = <index>;` themselves, so lookup,
+    duplicate-name rejection, and range-checking all reuse Constant's own
+    machinery rather than duplicating it.
+    """
+
+    enum_table: dict[str, list[str]] = {}
+
+    @classmethod
+    def define(cls, name: str, members: list[str]) -> None:
+        if name in cls.enum_table:
+            raise ValueError(f"Duplicate definition of enum {name}")
+
+        seen = set()
+        for member in members:
+            if member in seen:
+                raise ValueError(f"Duplicate member {member} in enum {name}")
+            seen.add(member)
+
+        cls.enum_table[name] = list(members)
+        for index, member in enumerate(members):
+            # Can't collide with Constant.define's own duplicate check
+            # (distinct enum names give distinct composite keys), so the
+            # only way this raises is the _fits_t_gq_int range check --
+            # unreachable in practice (it would take over 2**31 members).
+            Constant.define(f"{name}.{member}", index)
+
+    @classmethod
+    def get_member_value(cls, enum_name: str, member_name: str) -> int:
+        if enum_name not in cls.enum_table:
+            raise ValueError(f"Unknown enum {enum_name}")
+        if member_name not in cls.enum_table[enum_name]:
+            raise ValueError(f"Unknown member {member_name} of enum {enum_name}")
+        return Constant.const_table[f"{enum_name}.{member_name}"]
+
 class IntExpression:
     def __init__(self, expression_toks : list[GqcIntOperand], instring, loc):
         self.expression_toks = expression_toks
@@ -1233,16 +1578,69 @@ class IntExpression:
             # call subexpr[0] bare, not wrapped in a list) -- gamequeer#387.
             return self._emit_badge_count()
 
+        # random()/min()/max()/clamp()/abs() (gamequeer#422) leaves reached
+        # directly, same "one operand of a binary op hands this bare"
+        # reasoning as badge_count() above. These checks have to come before
+        # the generic length-based dispatch below: each marker's own field
+        # count (2 for GqcRandomOperand, 3 for GqcMinMaxOperand/
+        # GqcClampOperand, 1 for GqcAbsOperand) would otherwise coincide with
+        # a real `[operand, operator, operand]`/`[operator, operand]`/bare-
+        # atom shape and get silently (and wrongly) unpacked as one.
+        if isinstance(subexpr, GqcRandomOperand):
+            return self._emit_random(subexpr.lo, subexpr.hi)
+
+        if isinstance(subexpr, GqcMinMaxOperand):
+            return self._emit_minmax(subexpr.a, subexpr.b, subexpr.want_max)
+
+        if isinstance(subexpr, GqcClampOperand):
+            return self._emit_clamp(subexpr.x, subexpr.lo, subexpr.hi)
+
+        if isinstance(subexpr, GqcAbsOperand):
+            return self._emit_abs(subexpr.x)
+
+        if isinstance(subexpr, GqcHaveMetOperand):
+            # have_met(id) (gamequeer#423) is a bare rename of badge_get(id)
+            # -- delegate straight to the existing unary-badge_get codegen
+            # path by handing it the exact same ['badge_get', operand] shape
+            # infix_notation itself would produce for a literal `badge_get`
+            # invocation, rather than duplicating that branch's logic here.
+            return self.get_result_symbol(['badge_get', subexpr.id_operand])
+
+        if isinstance(subexpr, GqcInCohortOperand):
+            # in_cohort(NAME, id) (gamequeer#423) is a bare `(id >= lo) &&
+            # (id <= hi)` range compare -- delegate to the ordinary binary-op
+            # branches below via the same raw [operand, op, operand] shape a
+            # hand-written `id >= lo && id <= hi` would produce, reusing the
+            # existing GE/LE/AND opcodes instead of a dedicated range-check
+            # op. `subexpr.id_operand` is referenced twice (once per side of
+            # the `&&`); if it's an already-built IntExpression, the
+            # IntExpression-unwrap branch above runs once per reference,
+            # safely re-deriving it under this expression's own register
+            # pool each time (see unregister_orphaned_commands's docstring) at
+            # the cost of evaluating it twice at runtime -- acceptable for a
+            # side-effect-free int expression, the same tradeoff
+            # badge_count() used twice in one expression already accepts.
+            return self.get_result_symbol([
+                [subexpr.id_operand, '>=', GqcIntOperand(is_literal=True, value=subexpr.lo)],
+                '&&',
+                [subexpr.id_operand, '<=', GqcIntOperand(is_literal=True, value=subexpr.hi)],
+            ])
+
+        if isinstance(subexpr, GqcCountSeenRangeOperand):
+            # count_seen(NAME) (gamequeer#423) -- a badge_count()-style
+            # popcount loop bounded to NAME's own [lo, hi] range.
+            return self._emit_count_seen_range(subexpr.lo, subexpr.hi)
+
         if isinstance(subexpr, GqcIntOperand):
             return subexpr
         elif len(subexpr) == 1:
-            # subexpr[0] may itself be a bare GqcBadgeCountOperand -- e.g.
-            # the sole atom of "x = badge_count();", which
-            # parser.parse_int_expression wraps as
-            # IntExpression([GqcBadgeCountOperand()], ...). Recurse instead
-            # of handing it back unresolved; every other len-1 shape here is
-            # already a GqcIntOperand (or an IntExpression to unwrap), so
-            # this recursion is a no-op passthrough for them.
+            # subexpr[0] may itself be a bare GqcBadgeCountOperand (or one
+            # of the gamequeer#422/#423 markers above) -- e.g. the sole
+            # atom of "x = badge_count();", which parser.parse_int_expression wraps
+            # as IntExpression([GqcBadgeCountOperand()], ...). Recurse
+            # instead of handing it back unresolved; every other len-1 shape
+            # here is already a GqcIntOperand (or an IntExpression to
+            # unwrap), so this recursion is a no-op passthrough for them.
             return self.get_result_symbol(subexpr[0])
         elif len(subexpr) > 3:
             raise ValueError(f"Invalid subexpression length {len(subexpr)}: should be [operand, operator, operand] or [operator operand]")
@@ -1371,6 +1769,320 @@ class IntExpression:
         # built; acc is this method's result and stays allocated, exactly
         # like a unary op's freshly-allocated destination register does at
         # this same point in the len(subexpr) == 2 branch above.
+        self.free_register(bit_reg)
+        self.free_register(idx_reg)
+
+        return acc_operand
+
+    def _emit_negate_if_negative(self, operand : GqcIntOperand):
+        """Emit `if (operand < 0) { operand = -operand; }` in place, i.e.
+        the abs()-by-comparison idiom the game corpus already hand-rolls
+        (e.g. donsol.gq's `if (lcg < 0) { lcg = -lcg; }` seed
+        normalization) -- shared by `_emit_random` and `_emit_abs`
+        (gamequeer#422).
+
+        `operand` may be any writable variable or register (its own
+        register, if it's one, is untouched by this method -- the caller
+        keeps owning it). A `<` comparison can't test `operand < 0` in
+        place without clobbering `operand` itself (every `CommandArithmetic`
+        op, comparisons included, overwrites its own destination), so this
+        allocates one scratch register for the comparison snapshot/result,
+        freed again before returning.
+        """
+        from .commands import CommandSetInt, CommandArithmetic, CommandIf
+
+        cmp_reg = self.alloc_register()
+        cmp_operand = GqcIntOperand(is_literal=False, value=cmp_reg)
+        self.commands.append(CommandSetInt(self.instring, self.loc, cmp_reg, operand))
+        self.commands.append(CommandArithmetic(structs.OpCode.LT, self.instring, self.loc, cmp_operand, GqcIntOperand(is_literal=True, value=0)))
+        self.commands.append(CommandIf(
+            self.instring, self.loc, cmp_operand,
+            [CommandArithmetic(structs.OpCode.NEG, self.instring, self.loc, operand, operand)],
+        ))
+        self.free_register(cmp_reg)
+
+    def _emit_random(self, lo, hi) -> GqcIntOperand:
+        """Lower a `random(lo, hi)` leaf (gamequeer#422) to the Park-Miller
+        "minimal standard" LCG (multiplier `structs.GQ_RANDOM_LCG_MULTIPLIER`,
+        modulus `structs.GQ_RANDOM_LCG_MODULUS` = 2**31 - 1), advanced via
+        Schrage's method so the multiply-by-48271 step never has to leave
+        `t_gq_int`'s signed-32-bit range. FROZEN VM CONTRACT: no dedicated
+        opcode, no wider int type -- every step below is an existing
+        `CommandArithmetic`/`CommandIf` op.
+
+        The *multiplicative core* (this same modulus/multiplier, advanced
+        one Schrage step per draw) is the recurrence the game corpus already
+        hand-rolls at the source level -- see e.g. gq-games/games/donsol.gq's
+        card-shuffle `lcg`. The *seeding scheme* is deliberately NOT the
+        same, and callers should not assume it is:
+
+        `structs.GQ_RANDOM_STATE_VAR` is the persisted LCG state, carried
+        across *every* `random()` call for the life of the running cart
+        (it's a volatile/heap variable, zero-initialized at boot like any
+        other -- see `linker.create_random_state_variables`). Every call
+        perturbs it with `GQI_PLAYER_ID * GQ_RANDOM_SEED_MULTIPLIER` plus
+        `structs.GQ_RANDOM_CTR_VAR`, a counter incremented once per
+        `random()` *call* (also zero-initialized at boot) -- NOT donsol.gq's
+        `ctr`, which is a free-running counter driven by a re-armed `timer`
+        event while the player sits on a menu, i.e. real wall-clock entropy
+        that varies with how long the player waited before triggering the
+        first draw. `GQ_RANDOM_CTR_VAR` has no such source: it is 0 at boot
+        and only ever advances when `random()` itself is called, so the
+        *first* `random()` call after a fresh boot is `state = GQI_PLAYER_ID
+        * 7919 + 1` -- a value fully determined by the cart's badge ID,
+        identical and reproducible on every reboot of the same badge. (The
+        perturbation still folds into the *previous* call's already-mixed
+        state rather than replacing it outright, so calls made back-to-back
+        within the same boot session do diverge from each other and from
+        the first draw -- it's only the very first draw per boot that has no
+        real entropy behind it.)
+
+        Authors who need a genuinely per-boot-unpredictable first draw (e.g.
+        a card shuffle that shouldn't replay identically every time the same
+        badge boots the cart) need to hand-roll real entropy the same way
+        donsol.gq does: arm a `timer` event on a menu/title screen, let it
+        free-run while the player is looking at the screen, and salt an int
+        variable with that counter (via ordinary int-expression ops) before
+        the first `random()` call -- `random()` alone does not do this for
+        you.
+
+        Maps the result into the caller's *inclusive* `[lo, hi]` range via
+        `state % (hi - lo + 1) + lo`. Like every other gqc runtime `/`/`%`
+        (see `fold_constant_int_expression`'s zero-divisor case), `hi < lo`
+        (a non-positive range) is left undefined -- the author's
+        responsibility, not something gqc validates.
+
+        Register cost: up to 3 concurrently (one surviving the whole
+        method for `lo` if it's a non-literal sub-expression, one for the
+        `range = hi - lo + 1` accumulator, one scratch reused across the
+        seed-perturbation and Schrage-advance steps) -- plus whatever `lo`/
+        `hi` themselves need to resolve to a register. Same pre-existing
+        4-register-file limit `badge_count()` (gamequeer#387) and deep
+        arithmetic nesting already share.
+        """
+        from .commands import CommandSetInt, CommandArithmetic, CommandIf
+
+        state_operand = GqcIntOperand(is_literal=False, value=structs.GQ_RANDOM_STATE_VAR)
+        ctr_operand = GqcIntOperand(is_literal=False, value=structs.GQ_RANDOM_CTR_VAR)
+
+        lo_operand = self.get_result_symbol(lo)
+        hi_operand = self.get_result_symbol(hi)
+
+        # range = hi - lo + 1 (the caller's inclusive span). Computed into
+        #  its own register now, before hi_operand's register (if any) gets
+        #  freed below, and before lo_operand is needed again at the very
+        #  end -- both survive independently of the seed-perturbation/
+        #  Schrage-advance scratch work in between.
+        range_reg = self.alloc_register()
+        range_operand = GqcIntOperand(is_literal=False, value=range_reg)
+        self.commands.append(CommandSetInt(self.instring, self.loc, range_reg, hi_operand))
+        if not hi_operand.is_literal and hi_operand.value in structs.GQ_REGISTERS_INT:
+            self.free_register(hi_operand.value)
+        self.commands.append(CommandArithmetic(structs.OpCode.SUBBY, self.instring, self.loc, range_operand, lo_operand))
+        self.commands.append(CommandArithmetic(structs.OpCode.ADDBY, self.instring, self.loc, range_operand, GqcIntOperand(is_literal=True, value=1)))
+
+        # ctr += 1; state += GQI_PLAYER_ID * GQ_RANDOM_SEED_MULTIPLIER + ctr
+        #  -- the per-call seed perturbation (see docstring above).
+        self.commands.append(CommandArithmetic(structs.OpCode.ADDBY, self.instring, self.loc, ctr_operand, GqcIntOperand(is_literal=True, value=1)))
+        seed_reg = self.alloc_register()
+        seed_operand = GqcIntOperand(is_literal=False, value=seed_reg)
+        self.commands.append(CommandSetInt(self.instring, self.loc, seed_reg, GqcIntOperand(is_literal=False, value='GQI_PLAYER_ID')))
+        self.commands.append(CommandArithmetic(structs.OpCode.MULBY, self.instring, self.loc, seed_operand, GqcIntOperand(is_literal=True, value=structs.GQ_RANDOM_SEED_MULTIPLIER)))
+        self.commands.append(CommandArithmetic(structs.OpCode.ADDBY, self.instring, self.loc, seed_operand, ctr_operand))
+        self.commands.append(CommandArithmetic(structs.OpCode.ADDBY, self.instring, self.loc, state_operand, seed_operand))
+
+        # if (state < 0) { state = -state; }
+        self._emit_negate_if_negative(state_operand)
+
+        # state = state % (GQ_RANDOM_LCG_MODULUS - 1) + 1 -- normalize into
+        #  [1, modulus - 1], the valid nonzero-seed domain for the
+        #  multiplicative step below.
+        self.commands.append(CommandArithmetic(structs.OpCode.MODBY, self.instring, self.loc, state_operand, GqcIntOperand(is_literal=True, value=structs.GQ_RANDOM_LCG_MODULUS - 1)))
+        self.commands.append(CommandArithmetic(structs.OpCode.ADDBY, self.instring, self.loc, state_operand, GqcIntOperand(is_literal=True, value=1)))
+
+        # One step of Schrage's method for state = (multiplier * state) mod
+        #  modulus -- avoids the 32-bit signed overflow a direct
+        #  `multiplier * state` would hit for state values near the top of
+        #  its range. seed_reg is reused here as pure scratch; its
+        #  perturbation-term value from above is no longer needed.
+        self.commands.append(CommandSetInt(self.instring, self.loc, seed_reg, state_operand))
+        self.commands.append(CommandArithmetic(structs.OpCode.DIVBY, self.instring, self.loc, seed_operand, GqcIntOperand(is_literal=True, value=structs.GQ_RANDOM_LCG_Q)))
+        self.commands.append(CommandArithmetic(structs.OpCode.MODBY, self.instring, self.loc, state_operand, GqcIntOperand(is_literal=True, value=structs.GQ_RANDOM_LCG_Q)))
+        self.commands.append(CommandArithmetic(structs.OpCode.MULBY, self.instring, self.loc, state_operand, GqcIntOperand(is_literal=True, value=structs.GQ_RANDOM_LCG_MULTIPLIER)))
+        self.commands.append(CommandArithmetic(structs.OpCode.MULBY, self.instring, self.loc, seed_operand, GqcIntOperand(is_literal=True, value=structs.GQ_RANDOM_LCG_R)))
+        self.commands.append(CommandArithmetic(structs.OpCode.SUBBY, self.instring, self.loc, state_operand, seed_operand))
+
+        # if (state <= 0) { state = state + GQ_RANDOM_LCG_MODULUS; }
+        self.commands.append(CommandSetInt(self.instring, self.loc, seed_reg, state_operand))
+        self.commands.append(CommandArithmetic(structs.OpCode.LE, self.instring, self.loc, seed_operand, GqcIntOperand(is_literal=True, value=0)))
+        self.commands.append(CommandIf(
+            self.instring, self.loc, seed_operand,
+            [CommandArithmetic(structs.OpCode.ADDBY, self.instring, self.loc, state_operand, GqcIntOperand(is_literal=True, value=structs.GQ_RANDOM_LCG_MODULUS))],
+        ))
+        self.free_register(seed_reg)
+
+        # Map the now-uniform [1, modulus - 1] state into the caller's
+        #  inclusive [lo, hi] range, into a fresh result register -- NOT
+        #  back into state_operand itself, which must keep carrying its
+        #  full-quality Schrage output forward into the *next* random()
+        #  call, not the (likely much smaller, range-biased) mapped result.
+        result_reg = self.alloc_register()
+        result_operand = GqcIntOperand(is_literal=False, value=result_reg)
+        self.commands.append(CommandSetInt(self.instring, self.loc, result_reg, state_operand))
+        self.commands.append(CommandArithmetic(structs.OpCode.MODBY, self.instring, self.loc, result_operand, range_operand))
+        self.free_register(range_reg)
+        self.commands.append(CommandArithmetic(structs.OpCode.ADDBY, self.instring, self.loc, result_operand, lo_operand))
+        if not lo_operand.is_literal and lo_operand.value in structs.GQ_REGISTERS_INT:
+            self.free_register(lo_operand.value)
+
+        return result_operand
+
+    def _emit_minmax(self, a, b, want_max : bool) -> GqcIntOperand:
+        """Lower a `min(a, b)`/`max(a, b)` leaf (gamequeer#422) to a
+        compare-and-conditionally-overwrite: `result = a; if (want_max ?
+        b > result : b < result) { result = b; }` -- existing
+        `CommandArithmetic`/`CommandIf` ops only, no dedicated opcode.
+        Shared by both `min()` and `max()` (`_emit_random`'s dispatch in
+        `get_result_symbol` picks `want_max` from `GqcMinMaxOperand`), since
+        they're identical but for that one comparison sense.
+        """
+        from .commands import CommandSetInt, CommandArithmetic, CommandIf
+
+        # a/b are whatever int_expression's own parse action already
+        # produced for random()/min()/max()/clamp()'s arguments -- a
+        # GqcIntOperand *or* an independently-register-allocated
+        # IntExpression (e.g. the "a + 1" in "min(a + 1, b)"). Reduce each
+        # through get_result_symbol (like every other binary op's own
+        # operands) to fold it under *this* expression's shared register
+        # pool, rather than embedding its own separate expression section --
+        # see IntExpression.get_result_symbol's IntExpression-unwrap branch.
+        a = self.get_result_symbol(a)
+        b = self.get_result_symbol(b)
+
+        result_reg = self.alloc_register()
+        result_operand = GqcIntOperand(is_literal=False, value=result_reg)
+        self.commands.append(CommandSetInt(self.instring, self.loc, result_reg, a))
+        if not a.is_literal and a.value in structs.GQ_REGISTERS_INT:
+            self.free_register(a.value)
+
+        cmp_reg = self.alloc_register()
+        cmp_operand = GqcIntOperand(is_literal=False, value=cmp_reg)
+        self.commands.append(CommandSetInt(self.instring, self.loc, cmp_reg, b))
+        compare_op = structs.OpCode.GT if want_max else structs.OpCode.LT
+        self.commands.append(CommandArithmetic(compare_op, self.instring, self.loc, cmp_operand, result_operand))
+        self.commands.append(CommandIf(
+            self.instring, self.loc, cmp_operand,
+            [CommandSetInt(self.instring, self.loc, result_reg, b)],
+        ))
+        self.free_register(cmp_reg)
+        if not b.is_literal and b.value in structs.GQ_REGISTERS_INT:
+            self.free_register(b.value)
+
+        return result_operand
+
+    def _emit_clamp(self, x, lo, hi) -> GqcIntOperand:
+        """Lower a `clamp(x, lo, hi)` leaf (gamequeer#422) as
+        `min(max(x, lo), hi)`, composed directly from `_emit_minmax` --
+        matches `fold_constant_int_expression`'s `GqcClampOperand` folding,
+        which computes the same composition in Python, so a folded result
+        can never diverge from the unfolded bytecode's.
+
+        `hi < lo` (an empty/inverted range) is left undefined, same as
+        `_emit_random`'s `hi < lo` case -- the author's responsibility.
+        """
+        floored = self._emit_minmax(x, lo, want_max=True)
+        return self._emit_minmax(floored, hi, want_max=False)
+
+    def _emit_abs(self, x) -> GqcIntOperand:
+        """Lower an `abs(x)` leaf (gamequeer#422) as `result = x; if
+        (result < 0) { result = -result; }`, via the shared
+        `_emit_negate_if_negative` helper (also used by `_emit_random`'s
+        seed normalization) -- an existing `CommandArithmetic`/`CommandIf`
+        idiom, not a dedicated opcode.
+        """
+        from .commands import CommandSetInt
+
+        x = self.get_result_symbol(x)  # see _emit_minmax's a/b reduction comment
+
+        result_reg = self.alloc_register()
+        result_operand = GqcIntOperand(is_literal=False, value=result_reg)
+        self.commands.append(CommandSetInt(self.instring, self.loc, result_reg, x))
+        if not x.is_literal and x.value in structs.GQ_REGISTERS_INT:
+            self.free_register(x.value)
+
+        self._emit_negate_if_negative(result_operand)
+
+        return result_operand
+
+    def _emit_count_seen_range(self, lo: int, hi: int) -> GqcIntOperand:
+        """Lower a `count_seen(NAME)` leaf (gamequeer#423) to a runtime
+        popcount loop over `badge_get`, bounded to the inclusive `[lo, hi]`
+        range instead of `_emit_badge_count`'s full `[0, BADGES_ALLOWED)`
+        sweep -- `lo`/`hi` are `NAME`'s own `Cohort`-validated bounds, so
+        `0 <= lo <= hi < BADGES_ALLOWED` always holds here.
+
+        Same "count the loop variable down to a bare truthiness check"
+        strategy as `_emit_badge_count`, generalized with a compile-time
+        constant `lo` offset: `idx` counts down from `hi - lo + 1` (the
+        range's own size) to 0 -- so the loop-continue test is still just
+        `idx`'s own truthiness, no extra comparison register -- while the
+        actual badge id passed to `badge_get` is computed into `bit_reg` as
+        `idx + lo` before the `QCGET` overwrites it with the read result
+        (`QCGET`'s own dst/src *may* be the same register: the VM's
+        `run_arithmetic` always reads `arg2` into a local before writing
+        `arg1`, so this self-referential form is safe -- see
+        `gamequeer/src/bytecode.c`). When `lo == 0` (e.g. a cohort starting
+        at badge id 0) the `idx + lo` computation is skipped entirely --
+        `idx` is already the badge id -- keeping that case's bytecode
+        identical in shape to `_emit_badge_count`'s own loop body.
+
+        Register cost: identical to `_emit_badge_count` -- 3 of gqc's 4
+        `GQ_REGISTERS_INT` (accumulator, counter, per-iteration scratch),
+        not 4, despite computing both a "how many left" counter and a
+        separate "which badge id" value -- the `idx + lo` computation
+        reuses the same scratch register `QCGET`'s result lands in rather
+        than allocating a dedicated one. Only the accumulator survives past
+        this method, same as `_emit_badge_count`.
+        """
+        from .commands import CommandSetInt, CommandArithmetic, CommandIf, CommandGoto, CommandLoop
+
+        acc_reg = self.alloc_register()
+        idx_reg = self.alloc_register()
+        acc_operand = GqcIntOperand(is_literal=False, value=acc_reg)
+        idx_operand = GqcIntOperand(is_literal=False, value=idx_reg)
+
+        self.commands.append(CommandSetInt(self.instring, self.loc, acc_reg, GqcIntOperand(is_literal=True, value=0)))
+        self.commands.append(CommandSetInt(self.instring, self.loc, idx_reg, GqcIntOperand(is_literal=True, value=hi - lo + 1)))
+
+        bit_reg = self.alloc_register()
+        bit_operand = GqcIntOperand(is_literal=False, value=bit_reg)
+
+        # while (idx) { idx -= 1; bit = idx [+ lo]; bit = badge_get(bit); acc += bit; }
+        decrement_and_accumulate = [
+            CommandArithmetic(structs.OpCode.SUBBY, self.instring, self.loc, idx_operand, GqcIntOperand(is_literal=True, value=1)),
+        ]
+        if lo == 0:
+            decrement_and_accumulate.append(
+                CommandArithmetic(structs.OpCode.QCGET, self.instring, self.loc, bit_operand, idx_operand)
+            )
+        else:
+            decrement_and_accumulate += [
+                CommandSetInt(self.instring, self.loc, bit_reg, idx_operand),
+                CommandArithmetic(structs.OpCode.ADDBY, self.instring, self.loc, bit_operand, GqcIntOperand(is_literal=True, value=lo)),
+                CommandArithmetic(structs.OpCode.QCGET, self.instring, self.loc, bit_operand, bit_operand),
+            ]
+        decrement_and_accumulate.append(
+            CommandArithmetic(structs.OpCode.ADDBY, self.instring, self.loc, acc_operand, bit_operand)
+        )
+        guarded_body = [
+            CommandIf(
+                self.instring, self.loc, idx_operand,
+                decrement_and_accumulate,
+                [CommandGoto(self.instring, self.loc, form='break')],
+            )
+        ]
+        self.commands.append(CommandLoop(self.instring, self.loc, guarded_body))
+
         self.free_register(bit_reg)
         self.free_register(idx_reg)
 

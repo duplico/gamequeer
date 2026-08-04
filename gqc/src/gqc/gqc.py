@@ -40,6 +40,13 @@ def mkcue(out_path : pathlib.Path, src_path : pathlib.Path):
 @click.argument('input', type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True, path_type=pathlib.Path), required=True)
 def compile(input : pathlib.Path, no_mem_map : bool, out_dir : pathlib.Path):
     Game.game_name = input.stem
+    # gamequeer#420: animations{}/lightcues{} asset sources resolve relative
+    # to the game's own directory (the entry file's parent), not the
+    # process CWD -- see Animation.src_path/parse_lightcue_definition_section.
+    # This is what makes `gqc compile some/other/dir/foo.gq` work correctly
+    # from outside that directory, and is a no-op for the common case where
+    # the entry file is already at the top of the invocation directory.
+    Game.game_dir = input.parent
 
     # output_path is the directory where the output of the project will be placed
     if out_dir is None:
@@ -68,6 +75,12 @@ def compile(input : pathlib.Path, no_mem_map : bool, out_dir : pathlib.Path):
     if Game.game.needs_fw_probe:
         linker.inject_fw_version_probe()
 
+    # Same zero-footprint-when-unused convention for random() (gamequeer#422):
+    # only create its hidden LCG state/counter variables if the game
+    # actually calls random() somewhere.
+    if Game.game.needs_random:
+        linker.create_random_state_variables()
+
     # Place symbols into the symbol table
     mem_map_path = out_dir / 'map.txt'
     cmd_asm_path = out_dir / 'cmds.gqasm'
@@ -82,6 +95,65 @@ def compile(input : pathlib.Path, no_mem_map : bool, out_dir : pathlib.Path):
     output_code = linker.generate_code(parsed, symbol_table)
     with open(out_dir / f'{Game.game_name}.gqgame', 'wb') as out_file:
         out_file.write(output_code)
+
+# gamequeer#420: the game-as-directory layout convention -- a game is a
+# directory whose entry file is `<dirname>/<dirname>.gq`, with its own
+# `assets/animations/`/`assets/lighting/` subdirectories that
+# animations{}/lightcues{} sources resolve against (see
+# Animation.src_path / parser.parse_lightcue_definition_section), instead
+# of a shared top-level `assets/` root. `new` scaffolds exactly that shape
+# so a freshly-created game is born correctly-structured.
+GAME_SKEL = """\
+game {
+    // TODO: pick a real cart id (unique per physical cartridge).
+    id = 0;
+    title := "GQC_NEW_TITLE";
+    author := "Your Name";
+    starting_stage = start;
+}
+
+stage start {
+    event enter {
+    }
+}
+"""
+
+@gqc_cli.command()
+@click.argument('name', type=str, required=True)
+@click.option('--out-dir', '-o', type=click.Path(file_okay=False, dir_okay=True, writable=True, path_type=pathlib.Path), default=None)
+@click.option('--force', '-f', is_flag=True)
+def new(name : str, out_dir : pathlib.Path, force : bool):
+    """Scaffold a new game directory NAME in the game-as-directory layout
+    (gamequeer#420): NAME/NAME.gq (a starter game{} block and a placeholder
+    `start` stage) plus NAME/assets/animations/ and NAME/assets/lighting/.
+
+    NAME's own directory is created under --out-dir (default: the current
+    directory)."""
+    base_dir = (out_dir if out_dir is not None else pathlib.Path.cwd()) / name
+    entry_path = base_dir / f'{name}.gq'
+
+    directory_tree = [
+        'assets/animations',
+        'assets/lighting',
+    ]
+
+    # Check to see if the game directory or entry file already exist
+    if base_dir.exists() and not force:
+        click.echo(f"Directory {base_dir} already exists; aborting.")
+        return
+    if entry_path.exists() and not force:
+        click.echo(f"File {entry_path} already exists; aborting.")
+        return
+
+    # Create the directory tree
+    for dir in directory_tree:
+        (base_dir / dir).mkdir(parents=True, exist_ok=True)
+
+    # Drop the starter entry file, unless one's already there and --force
+    # wasn't passed (checked above).
+    entry_path.write_text(GAME_SKEL.replace('GQC_NEW_TITLE', name))
+
+    click.echo(f"Created new game {name!r} at {base_dir}")
 
 @gqc_cli.command()
 @click.argument('base_dir', type=click.Path(file_okay=False, dir_okay=True, writable=True, path_type=pathlib.Path))
