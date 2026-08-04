@@ -23,10 +23,23 @@ def _migrate_hint(message):
     # in a shared top-level assets/ tree, or the invocation CWD) that just
     # hasn't been moved onto that layout yet -- point authors at the fix
     # rather than leaving them to guess from the raw resolved path alone.
+    #
+    # Game.game_name is only ever set by gqc.py's `compile` command; it's
+    # still None here for in-process callers that drive parser.parse()
+    # directly without going through it (e.g. tests using
+    # support.reset_compiler_state(), gamequeer#437 review). Fall back to
+    # generic phrasing rather than rendering the literal "None" into the
+    # hint.
+    if Game.game_name:
+        subject = Game.game_name
+        migrate_cmd = f"gqc migrate {Game.game_name}"
+    else:
+        subject = "this game"
+        migrate_cmd = "gqc migrate <name>"
     return (
-        f"{message}\nIf {Game.game_name} is a flat-layout game (its assets "
+        f"{message}\nIf {subject} is a flat-layout game (its assets "
         "haven't been moved into its own directory yet), run "
-        f"`gqc migrate {Game.game_name}` to move it onto the current "
+        f"`{migrate_cmd}` to move it onto the current "
         "game-as-directory layout."
     )
 

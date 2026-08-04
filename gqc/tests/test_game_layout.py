@@ -36,6 +36,7 @@ lightcue counterpart below, and migrate.py's `gqc migrate` for moving an
 old flat-layout game onto this layout.
 """
 
+import io
 import pathlib
 import shutil
 import subprocess
@@ -43,6 +44,10 @@ import sys
 
 import pytest
 from PIL import Image
+
+from gqc import parser
+
+from .support import reset_compiler_state
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 CIRCLE_BMP = REPO_ROOT / "gqc" / "examples" / "skel" / "assets" / "animations" / "circle.bmp"
@@ -293,6 +298,32 @@ def test_missing_lightcue_asset_mentions_resolved_path_and_migrate_hint(compile_
     assert "gqc migrate mygame" in unwrapped
 
 
+def test_missing_lightcue_asset_migrate_hint_falls_back_when_game_name_unset(
+    tmp_path, monkeypatch, capsys
+):
+    # Regression guard (Copilot-suppressed finding on #437, not surfaced as
+    # an inline review comment): _migrate_hint interpolates Game.game_name
+    # into the "gqc migrate <name>" hint, but gqc.py's `compile` command is
+    # the only thing that ever sets it -- an in-process caller that drives
+    # parser.parse() directly via support.reset_compiler_state() (as
+    # test_assets.py and others do) leaves it at its class default of None.
+    # Confirms the hint degrades to generic phrasing instead of rendering
+    # the literal string "None" into the message.
+    monkeypatch.chdir(tmp_path)
+    reset_compiler_state()
+    source = GAME_HEADER + 'lightcues { c1 <- "test.gqcue"; }\n' + STAGE
+
+    with pytest.raises(SystemExit) as exc_info:
+        parser.parse(io.StringIO(source))
+    assert exc_info.value.code == 1
+
+    captured = capsys.readouterr()
+    unwrapped = captured.err.replace("\n", "")
+    assert "None" not in unwrapped
+    assert "this game" in unwrapped
+    assert "gqc migrate <name>" in unwrapped
+
+
 def test_missing_asset_diagnostic_is_silent_when_asset_present(compile_gq):
     # Companion positive control: the hint text is specific to a missing
     # asset, not appended to every compile's stderr unconditionally.
@@ -303,6 +334,41 @@ def test_missing_asset_diagnostic_is_silent_when_asset_present(compile_gq):
     )
     assert exit_code == 0, stderr
     assert "gqc migrate" not in stderr
+
+
+def test_missing_animation_asset_after_digest_cache_hit_gives_diagnostic_not_traceback(
+    compile_gq, tmp_path
+):
+    # Regression guard (gamequeer#437 review): Animation.__init__'s
+    # digest-cache *hit* branch (build/ is CWD-relative, independent of -o
+    # -- see its dst_path) reads self.digest(), which opens self.src_path
+    # directly, without going through anim.make_animation's own existence
+    # check -- that's only reached on a cache *miss*. Recompiling against a
+    # stale cache after the source asset has moved or been deleted (e.g. a
+    # still-flat game whose assets were never migrated) used to surface as
+    # a raw, unhandled FileNotFoundError traceback instead of the same
+    # GqcAssetNotFoundError + `gqc migrate` diagnostic a fresh (no-cache)
+    # compile gets.
+    source = GAME_HEADER + 'animations { c <- "circle.bmp"; }\n' + STAGE
+    asset_path = tmp_path / "assets" / "animations" / "circle.bmp"
+
+    # First compile succeeds and leaves a digest cache behind.
+    exit_code, stderr, _ = compile_gq(
+        source,
+        assets={"assets/animations/circle.bmp": CIRCLE_BMP},
+        game_name="mygame",
+    )
+    assert exit_code == 0, stderr
+    assert asset_path.exists()
+
+    # Remove the asset and recompile with the stale cache still present.
+    asset_path.unlink()
+    exit_code, stderr, _ = compile_gq(source, game_name="mygame")
+    assert exit_code != 0
+    unwrapped = _unwrapped(stderr)
+    assert "Traceback" not in unwrapped
+    assert "does not exist" in unwrapped
+    assert "gqc migrate mygame" in unwrapped
 
 
 # --- `gqc new`: scaffolding a fresh game-as-directory game -------------------
