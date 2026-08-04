@@ -11,7 +11,17 @@ to document and reproduce exactly how they were made.
 Usage (from the examples/ directory, inside the gamequeer builder container
 which provides Pillow):
 
-    python games/perf/gen_perf_assets.py assets/animations
+    python tools/perf/gen_perf_assets.py <out-dir>
+
+Each perf_*/ game directory keeps its own copy of the assets it references
+(gamequeer#420/#440's game-as-directory layout has no shared assets/ tree),
+so after regenerating into <out-dir>, copy the relevant file(s) into each
+consumer's own assets/animations/: perf_mask_fg.gif/perf_mask_mask.gif ->
+perf_mask/assets/animations/, perf_mask_dither_fg.gif/
+perf_mask_dither_mask.gif -> perf_mask_dither/assets/animations/,
+perf_flat.gif -> both perf_flat/assets/animations/ and
+perf_save/assets/animations/ (perf_save.gq reuses it), perf_dither.gif ->
+perf_dither/assets/animations/.
 
 Encoding intent (verified via map.txt's .frame section after `gqc compile`):
   * perf_mask_fg.gif / perf_mask_mask.gif frames -> RLE7 (flat, mask cart --

@@ -93,7 +93,8 @@ jobs:
       - name: Run vitest suite
         # No Docker/submodules needed: vitest only needs Node, and
         # test/golden.test.ts's fixture sweep reads .gq files straight from
-        # this checkout (gamequeer/tests/golden/, examples/games/,
+        # this checkout (gamequeer/tests/golden/, examples/ (recursively,
+        # every migrated game's own <name>/<name>.gq),
         # gqc/examples/skel/games/working_samples/ -- all plain paths
         # relative to the repo root, no submodule required).
         run: npm test
@@ -246,25 +247,28 @@ jobs:
 
       - name: Regenerate golden fixtures
         # `make golden-fixture` doesn't cover led_handback.gq or
-        # examples/games/tutorial_1.gq (neither is wired into that Makefile
-        # target), so those two are regenerated here directly, the same way
-        # the Makefile recipe compiles its own asset-bearing fixtures: cd
-        # into the fixture's own directory so gqc resolves its animation/
-        # lightcue asset paths relative to that CWD.
+        # examples/tutorial_1/tutorial_1.gq (neither is wired into that
+        # Makefile target), so those two are regenerated here directly, the
+        # same way the Makefile recipe compiles its own asset-bearing
+        # fixtures: cd into the fixture's own directory so gqc resolves its
+        # animation/lightcue asset paths relative to it (gqc resolves
+        # animations{}/lightcues{} sources against <input.gq>'s own parent
+        # directory, gamequeer#420/#440 -- not the process CWD, but running
+        # from that directory keeps the compile command itself simple).
         run: |
           make golden-fixture
           docker run --rm --workdir /workspaces/gamequeer/gamequeer/tests/golden \
             -v "$PWD":/workspaces/gamequeer --user "$(id -u)":"$(id -g)" \
             gamequeer-builder:latest \
             /bin/bash -c "PYTHONPATH=/workspaces/gamequeer/gqc/src python -m gqc compile --no-mem-map -o . led_handback.gq"
-          docker run --rm --workdir /workspaces/gamequeer/examples \
+          docker run --rm --workdir /workspaces/gamequeer/examples/tutorial_1 \
             -v "$PWD":/workspaces/gamequeer --user "$(id -u)":"$(id -g)" \
             gamequeer-builder:latest \
-            /bin/bash -c "PYTHONPATH=/workspaces/gamequeer/gqc/src python -m gqc compile --no-mem-map -o games games/tutorial_1.gq"
+            /bin/bash -c "PYTHONPATH=/workspaces/gamequeer/gqc/src python -m gqc compile --no-mem-map -o . tutorial_1.gq"
 
       - name: Fail on committed source/cart drift
         # If any regenerated .gqgame differs from what's committed, either a
         # .gq fixture was edited without regenerating its cart, or gqc's
         # output changed -- either way the golden suite above just compared
         # against a stale reference, and that should fail loudly here.
-        run: git diff --exit-code -- gamequeer/tests/golden examples/games/tutorial_1.gqgame
+        run: git diff --exit-code -- gamequeer/tests/golden examples/tutorial_1/tutorial_1.gqgame

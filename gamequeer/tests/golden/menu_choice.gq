@@ -5,8 +5,10 @@
  * touches menu chrome as well as text). This path is near-zero-covered by
  * existing golden fixtures -- none opens a menu at all before this one.
  *
- * Adapted from examples/games/perf/perf_menu_choice.gq
- * (duplico/gamequeer#298), which documents the full authoring rationale
+ * Adapted from examples/perf_menu_choice/perf_menu_choice.gq (as
+ * examples/games/perf/perf_menu_choice.gq at the time, duplico/gamequeer#298;
+ * moved onto the game-as-directory layout by #440), which documents the
+ * full authoring rationale
  * (see gqc/docs/authoring-and-perf-carts.md §3) -- this fixture keeps the
  * same content, re-headered for the golden-test convention.
  *

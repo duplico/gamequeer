@@ -6,9 +6,10 @@ import { createParse, lexerAndParserErrors } from './test-utils.js';
 
 // Real-world regression sweep (issue #321): every committed .gq fixture must
 // parse cleanly under the fixed grammar, and a well-formed `game {}` block
-// must not trip the new cardinality validator (fix 3). Recursive, so
-// sub-directories like examples/games/perf/ and examples/games/showcase/
-// are covered too (gamequeer#326/#328 review).
+// must not trip the new cardinality validator (fix 3). Recursive, so every
+// migrated game's own top-level directory under examples/ (e.g.
+// examples/perf_flat/, examples/showcase/, gamequeer#440) is covered too
+// (gamequeer#326/#328 review).
 //
 // gqc/examples/skel/games/working_samples/ is included deliberately:
 // sample_working_simple.gq is the fixture that demonstrates
@@ -24,7 +25,7 @@ const TEST_DIR = fileURLToPath(new URL('.', import.meta.url));
 const REPO_ROOT = join(TEST_DIR, '..', '..');
 const FIXTURE_DIRS = [
     join(REPO_ROOT, 'gamequeer', 'tests', 'golden'),
-    join(REPO_ROOT, 'examples', 'games'),
+    join(REPO_ROOT, 'examples'),
     join(REPO_ROOT, 'gqc', 'examples', 'skel', 'games', 'working_samples')
 ];
 

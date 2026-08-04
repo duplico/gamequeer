@@ -1,0 +1,105 @@
+frame {
+    duration = 10;
+    colors {
+        white,
+        black,
+        white,
+        black,
+        white
+    }
+}
+
+frame {
+    duration = 10;
+    colors {
+        black,
+        white,
+        black,
+        white,
+        black
+    }
+}
+frame {
+    duration = 10;
+    colors {
+        white,
+        black,
+        white,
+        black,
+        white
+    }
+}
+
+frame {
+    duration = 10;
+    colors {
+        black,
+        white,
+        black,
+        white,
+        black
+    }
+}
+frame {
+    duration = 10;
+    colors {
+        white,
+        black,
+        white,
+        black,
+        white
+    }
+}
+
+frame {
+    duration = 10;
+    colors {
+        black,
+        white,
+        black,
+        white,
+        black
+    }
+}
+frame {
+    duration = 10;
+    colors {
+        white,
+        black,
+        white,
+        black,
+        white
+    }
+}
+
+frame {
+    duration = 10;
+    colors {
+        black,
+        white,
+        black,
+        white,
+        black
+    }
+}
+frame {
+    duration = 10;
+    colors {
+        white,
+        black,
+        white,
+        black,
+        white
+    }
+}
+
+frame {
+    duration = 10;
+    colors {
+        black,
+        white,
+        black,
+        white,
+        black
+    }
+}

@@ -2,29 +2,39 @@
 
 Recompiles every committed golden fixture under `gamequeer/tests/golden/*.gq`
 (enumerated dynamically, so a new fixture is picked up with no edit here)
-plus `examples/games/tutorial_1.gq`, and byte-compares the result against the
-already-committed `.gqgame` next to each source. This is the same guarantee
-`make golden-fixture` gives a human running it by hand, just automated and
-run on every PR -- it catches any gqc behavior change the C-side pixel/CSV
-golden suites (gamequeer#268/#270/#275/#339) can't see (they only run
-against whatever `.gqgame` happens to be checked in), and it also catches
-source/cart drift: someone editing a `.gq` fixture without regenerating its
-`.gqgame`.
+plus `examples/tutorial_1/tutorial_1.gq`, and byte-compares the result
+against the already-committed `.gqgame` next to each source. This is the same
+guarantee `make golden-fixture` gives a human running it by hand, just
+automated and run on every PR -- it catches any gqc behavior change the
+C-side pixel/CSV golden suites (gamequeer#268/#270/#275/#339) can't see (they
+only run against whatever `.gqgame` happens to be checked in), and it also
+catches source/cart drift: someone editing a `.gq` fixture without
+regenerating its `.gqgame`.
 
 Each fixture is compiled as a subprocess (`python -m gqc compile`), matching
 test_grammar.py's `compile_gq` fixture: gqc keeps its compiled-program state
 in class-level registries meant to be used once per process (see
 tests/support.py), so a subprocess per fixture is the simplest way to get
 fresh state without reimplementing that reset logic here. Unlike
-`compile_gq`, this suite compiles the real committed sources in place
-(read-only) rather than copying a source string into a hermetic tmp_path,
-because gqc resolves `<- "foo.gif"` / `<- "foo.png"` animation sources and
-`<- "foo.gqcue"` lightcue sources relative to its CWD: the golden fixtures'
-assets only resolve correctly when compiled from `gamequeer/tests/golden`
-(see the `golden-fixture` Makefile target's own doc comment), and
-tutorial_1.gq's assets only resolve from `examples/`. Only the *output*
-directory is a tmp_path -- the committed `.gqgame` files themselves are
-never overwritten by a test run.
+`compile_gq`, this suite compiles the real committed sources in place rather
+than copying a source string into a hermetic tmp_path, because gqc resolves
+`<- "foo.gif"` / `<- "foo.png"` animation sources and `<- "foo.gqcue"`
+lightcue sources relative to `<input.gq>`'s own parent directory
+(gamequeer#420/#440), not the process CWD -- but a relative `<input.gq>`
+argument (used here, see `cmd` below) itself resolves against the
+subprocess's CWD, so the effect is the same: each fixture is compiled with
+`cwd` set to its own directory (`gamequeer/tests/golden` for the C-VM
+fixtures, `examples/tutorial_1` for tutorial_1.gq -- both game-as-directory-
+shaped). The `-o`/`--out-dir` *cart* output is a tmp_path, and the
+committed `.gqgame` files themselves are never overwritten -- but "in
+place" is not "read-only": `Animation.__init__` (datamodel.py) also writes
+a CWD-relative `build/assets/animations/<game>/<anim>/` decode cache next
+to each fixture as a side effect of compiling it (see gamequeer#442 for a
+real bug in that cache's invalidation), so a test run does leave that
+directory behind. It's gitignored (`gamequeer/.gitignore`'s top-level
+`build/` rule covers both `gamequeer/tests/golden/build/` and
+`examples/*/build/`) and irrelevant to the byte-compare below, but isn't
+nothing written to the fixture's directory.
 
 ffmpeg-gating: `gqc/src/gqc/anim.py` only routes an animation source through
 its `ffmpeg-python` binding when the source isn't a still image (`.bmp`,
@@ -125,7 +135,8 @@ def _fixture_param(gq_path: pathlib.Path, cwd: pathlib.Path):
 
 def _golden_fixture_params() -> list:
     params = [_fixture_param(p, GOLDEN_DIR) for p in sorted(GOLDEN_DIR.glob("*.gq"))]
-    params.append(_fixture_param(EXAMPLES_DIR / "games" / "tutorial_1.gq", EXAMPLES_DIR))
+    tutorial_1_dir = EXAMPLES_DIR / "tutorial_1"
+    params.append(_fixture_param(tutorial_1_dir / "tutorial_1.gq", tutorial_1_dir))
     return params
 
 

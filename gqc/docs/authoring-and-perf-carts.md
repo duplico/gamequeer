@@ -550,9 +550,8 @@ docker run --rm --workdir /workspaces/gamequeer \
 
 The flashable cart is `<workspace>/build/<name>/<name>.gqgame`.
 
-This repo's own `examples/` hasn't been moved onto this layout yet
-(gamequeer#440) and won't compile as shown above until it is; `gq-games`
-(a separate repo, the actual game library) is the current worked reference.
+This repo's own `examples/` is on this layout (gamequeer#440); `gq-games`
+(a separate repo, the actual game library) is the other worked reference.
 
 ### Validate rendering headlessly (emulator)
 
@@ -766,13 +765,12 @@ for the full in-system procedure.
 
 ## 9. The committed perf / regression-content test carts
 
-Under `examples/games/perf/` (assets under `examples/assets/animations/`,
-regenerable with `examples/games/perf/gen_perf_assets.py`). `examples/` is
-still on the flat layout and doesn't currently compile against tip `gqc`
-(gamequeer#440) — the table below describes each cart's content and render
-path, not a live, re-runnable recipe. Once `examples/` is migrated, verify a
-cart the same way as any other game: compile, check `map.txt` for frame
-encoding, and render it in the headless emulator (`--dump`/`--input`).
+Each is its own game-as-directory game at `examples/<name>/<name>.gq` (its
+own `assets/animations/`, gamequeer#440), e.g. `examples/perf_flat/perf_flat.gq`;
+`examples/tools/perf/gen_perf_assets.py` regenerates their (committed, so
+rarely needed) source assets. Verify a cart the same way as any other game:
+compile, check `map.txt` for frame encoding, and render it in the headless
+emulator (`--dump`/`--input`).
 
 | Cart | Path drives | Notes |
 |------|-------------|-------|
@@ -818,7 +816,7 @@ The golden harness gained an optional `INPUT` parameter to `add_golden_test()`
 (a scripted button-input file replayed via `--input`) so button-driven states
 can be captured, not just fixed tick counts.
 
-The carts under `examples/games/perf/` remain the **perf** fixtures (animated,
+The carts under `examples/perf_*/` remain the **perf** fixtures (animated,
 full-screen, run continuously). `perf_mask.gq` in particular has no golden
 counterpart — Stage 1's masked-blit path is golden-covered by
 `mask_encoding_{a,b,c}.gq`, but the animated full-screen masked-blit form
