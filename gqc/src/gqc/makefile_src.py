@@ -13,7 +13,12 @@ makefile_skel = """\
 #  `gqc new <name>` and just run `make` again.
 
 ifndef GQC_CMD
-# You'll want to alter this line if you need to invoke gqc with a different command:
+# Assumes `gqc` is installed and on PATH -- e.g. `uv tool install
+# /path/to/gamequeer/gqc` (see https://docs.astral.sh/uv/) from a gamequeer
+# checkout, which this workspace need not live inside or even near.
+# Override this if you're invoking gqc a different way instead, e.g.
+# `GQC_CMD := uv run --project /path/to/gamequeer/gqc -m gqc` to run
+# straight out of a checkout without installing it as a tool.
 GQC_CMD := GQCCMD
 endif
 
