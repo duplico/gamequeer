@@ -16,17 +16,25 @@ test_grammar.py's `compile_gq` fixture: gqc keeps its compiled-program state
 in class-level registries meant to be used once per process (see
 tests/support.py), so a subprocess per fixture is the simplest way to get
 fresh state without reimplementing that reset logic here. Unlike
-`compile_gq`, this suite compiles the real committed sources in place
-(read-only) rather than copying a source string into a hermetic tmp_path,
-because gqc resolves `<- "foo.gif"` / `<- "foo.png"` animation sources and
-`<- "foo.gqcue"` lightcue sources relative to `<input.gq>`'s own parent
-directory (gamequeer#420/#440), not the process CWD -- but a relative
-`<input.gq>` argument (used here, see `cmd` below) itself resolves against
-the subprocess's CWD, so the effect is the same: each fixture is compiled
-with `cwd` set to its own directory (`gamequeer/tests/golden` for the C-VM
+`compile_gq`, this suite compiles the real committed sources in place rather
+than copying a source string into a hermetic tmp_path, because gqc resolves
+`<- "foo.gif"` / `<- "foo.png"` animation sources and `<- "foo.gqcue"`
+lightcue sources relative to `<input.gq>`'s own parent directory
+(gamequeer#420/#440), not the process CWD -- but a relative `<input.gq>`
+argument (used here, see `cmd` below) itself resolves against the
+subprocess's CWD, so the effect is the same: each fixture is compiled with
+`cwd` set to its own directory (`gamequeer/tests/golden` for the C-VM
 fixtures, `examples/tutorial_1` for tutorial_1.gq -- both game-as-directory-
-shaped). Only the *output* directory is a tmp_path -- the committed
-`.gqgame` files themselves are never overwritten by a test run.
+shaped). The `-o`/`--out-dir` *cart* output is a tmp_path, and the
+committed `.gqgame` files themselves are never overwritten -- but "in
+place" is not "read-only": `Animation.__init__` (datamodel.py) also writes
+a CWD-relative `build/assets/animations/<game>/<anim>/` decode cache next
+to each fixture as a side effect of compiling it (see gamequeer#442 for a
+real bug in that cache's invalidation), so a test run does leave that
+directory behind. It's gitignored (`gamequeer/.gitignore`'s top-level
+`build/` rule covers both `gamequeer/tests/golden/build/` and
+`examples/*/build/`) and irrelevant to the byte-compare below, but isn't
+nothing written to the fixture's directory.
 
 ffmpeg-gating: `gqc/src/gqc/anim.py` only routes an animation source through
 its `ffmpeg-python` binding when the source isn't a still image (`.bmp`,
