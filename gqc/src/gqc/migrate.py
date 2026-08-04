@@ -273,22 +273,37 @@ def _resolve_flat_source(workspace: pathlib.Path, section: str, literal: str) ->
 def _resolve_entry_path(game: str, workspace: pathlib.Path) -> pathlib.Path:
     """Resolve GAME (a bare game name, or a path to its `.gq` entry file)
     against WORKSPACE, whether the game is currently flat
-    (`games/<name>.gq`) or already migrated (`<name>/<name>.gq`)."""
-    candidate = pathlib.Path(game)
-    if candidate.is_file():
-        return candidate.resolve()
+    (`games/<name>.gq`) or already migrated (`<name>/<name>.gq`).
 
+    An explicit path is only accepted if it resolves to exactly one of
+    those two canonical, in-workspace locations -- migrate always ends by
+    deleting the original entry file (see `execute`), so accepting an
+    arbitrary existing file path here (e.g. `../elsewhere/foo.gq`, or an
+    absolute path outside --workspace entirely) would let GAME name a file
+    outside the workspace migrate is meant to operate on, which `execute`
+    would then happily delete."""
+    candidate = pathlib.Path(game)
     name = candidate.name
     if name.endswith(".gq"):
         name = name[: -len(".gq")]
 
-    directory_style = workspace / name / f"{name}.gq"
-    if directory_style.is_file():
-        return directory_style.resolve()
+    directory_style = (workspace / name / f"{name}.gq").resolve()
+    flat = (workspace / "games" / f"{name}.gq").resolve()
 
-    flat = workspace / "games" / f"{name}.gq"
+    if candidate.is_file():
+        resolved = candidate.resolve()
+        if resolved not in (directory_style, flat):
+            raise MigrateError(
+                f"{resolved} is not {name!r}'s entry file under workspace "
+                f"{workspace} (expected {directory_style} or {flat}) -- "
+                "migrate only operates on games inside --workspace."
+            )
+        return resolved
+
+    if directory_style.is_file():
+        return directory_style
     if flat.is_file():
-        return flat.resolve()
+        return flat
 
     raise MigrateError(
         f"Could not find game {game!r} under workspace {workspace} "
@@ -400,6 +415,16 @@ def build_plan(game: str, workspace: pathlib.Path) -> MigrationPlan:
     tree = cst.parse_cst(source)
     bindings = _find_asset_bindings(tree)
 
+    # Parse every still-flat sibling exactly once (informational
+    # shared-asset stats only -- see AssetCopy.shared_with) rather than
+    # once per asset this game references, which would be an
+    # O(n_assets * n_siblings) reparse for a corpus with many shared-asset
+    # games (e.g. the queersafe/queersafe-lite pair, ~40 assets each).
+    sibling_sources = {
+        sibling: _flat_sources_for(sibling)
+        for sibling in _iter_sibling_flat_entries(workspace, entry_path)
+    }
+
     asset_copies = []
     for section in ("animations", "lightcues"):
         section_bindings = [b for b in bindings if b.section == section]
@@ -418,8 +443,8 @@ def build_plan(game: str, workspace: pathlib.Path) -> MigrationPlan:
             )
             shared_with = sorted(
                 sibling.stem
-                for sibling in _iter_sibling_flat_entries(workspace, entry_path)
-                if src_path in _flat_sources_for(sibling)
+                for sibling, sources in sibling_sources.items()
+                if src_path in sources
             )
             copy = AssetCopy(
                 section=section,
@@ -552,7 +577,22 @@ def execute(plan: MigrationPlan) -> MigrationResult:
         # not-yet-migrated games may still reference it.
         shutil.move(str(staged_game_dir), str(plan.new_game_dir))
 
-    plan.entry_path.unlink()
+    try:
+        plan.entry_path.unlink()
+    except OSError as exc:
+        # The migrated directory is already in place and byte-verified, but
+        # removing the original flat entry file failed (permissions, a
+        # concurrent edit, ...). Roll back the move so the workspace always
+        # ends up in exactly one of its two valid states -- fully flat, or
+        # fully migrated -- never a hybrid with both present, which is what
+        # this module's "leave the workspace untouched on failure" property
+        # promises.
+        shutil.rmtree(plan.new_game_dir, ignore_errors=True)
+        raise MigrateError(
+            f"{plan.game_name}: migrated directory verified and staged, but "
+            f"removing the original {plan.entry_path} failed ({exc}) -- "
+            "rolled back; original flat game left in place."
+        ) from exc
 
     return MigrationResult(plan=plan, pre_bytes=pre_bytes, post_bytes=post_bytes)
 

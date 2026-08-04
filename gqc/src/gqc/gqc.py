@@ -348,6 +348,12 @@ def migrate(game : str, workspace : pathlib.Path, dry_run : bool):
     except migrate_mod.MigrateError as me:
         click.echo(str(me), err=True)
         raise SystemExit(1)
+    except GqcParseError as ge:
+        # GAME's entry file doesn't tokenize cleanly (gqc.cst.parse_cst,
+        # called from build_plan) -- same clean-error convention as `gqc
+        # fmt` above, rather than a raw traceback.
+        click.echo(str(ge), err=True)
+        raise SystemExit(1)
 
     click.echo(migrate_mod.report_plan(plan))
 

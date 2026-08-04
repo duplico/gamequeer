@@ -35,10 +35,9 @@ def _run(cwd, args, timeout=COMPILE_TIMEOUT_S):
 
 def _write_flat_workspace(tmp_path, games: dict) -> pathlib.Path:
     """Build a flat workspace at tmp_path / "ws": games/<name>.gq for each
-    (name, source) pair in `games`, plus a shared assets/animations and
-    assets/lighting tree seeded with CIRCLE_BMP and TEST_GQCUE under every
-    subdirectory any game's source string references (callers pass
-    already-flat-style literals like "somedir/foo.bmp")."""
+    (name, source) pair in `games`, plus an empty shared assets/animations
+    and assets/lighting tree. Callers seed whatever specific asset files
+    their source literals reference with `_seed_asset` below."""
     ws = tmp_path / "ws"
     (ws / "games").mkdir(parents=True)
     (ws / "assets" / "animations").mkdir(parents=True)
@@ -322,3 +321,39 @@ def test_migrate_accepts_explicit_entry_path(tmp_path):
     )
     assert exit_code == 0, stderr
     assert (ws / "mygame" / "mygame.gq").exists()
+
+
+def test_migrate_rejects_explicit_path_outside_workspace(tmp_path):
+    # An existing .gq file that isn't actually GAME's canonical entry
+    # location under --workspace must be rejected outright, not read (and,
+    # on success, deleted -- see execute()'s final plan.entry_path.unlink())
+    # from wherever it happens to sit on disk.
+    outside = tmp_path / "elsewhere.gq"
+    outside.write_text(
+        GAME_HEADER.format(title="T") + STAGE
+    )
+    ws = _write_flat_workspace(tmp_path, {})
+
+    exit_code, stdout, stderr = _run(
+        tmp_path, ["migrate", str(outside), "--workspace", str(ws)]
+    )
+    assert exit_code != 0
+    assert "Traceback" not in stderr
+    assert "--workspace" in stderr
+    assert outside.exists()
+    assert outside.read_bytes()  # untouched, still has content
+
+
+# --- malformed source: clean error, not a raw traceback --------------------
+
+
+def test_migrate_unparseable_source_reports_clean_error(tmp_path):
+    ws = _write_flat_workspace(tmp_path, {})
+    # An unterminated string literal is a GqcParseError straight out of
+    # gqc.cst.parse_cst (called from build_plan), not a MigrateError --
+    # exercises gqc.py's migrate command catching both cleanly.
+    (ws / "games" / "broken.gq").write_text('animations { c <- "unterminated;\n')
+
+    exit_code, stdout, stderr = _run(tmp_path, ["migrate", "broken", "--workspace", str(ws)])
+    assert exit_code != 0
+    assert "Traceback" not in stderr
