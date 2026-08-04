@@ -83,15 +83,17 @@ and `input(BTN)` where `BTN` ∈ `A`, `B`, `<-`, `->`, `-` (click).
 ### Event-body statements
 
 `play`, `cue`, `gostage`, `timer <expr>`, `if (…) … else …`, `loop { … }`
-with `continue` / `break`, `badge_set`/`badge_clear`, and assignments
+with `continue` / `break`, `badge_set`/`badge_clear`/`seen_self()`
+(gamequeer#423 sugar -- see "Social vocabulary" below), and assignments
 (`x = expr;` int, `s := expr;` string with `+` concat and `str(int)` cast);
 `badge_get` is not a statement but a unary operator usable inside int
 expressions (e.g. `x = badge_get(5) + 1;`); `badge_count()` (nullary,
 parens mandatory) is a popcount over the whole badges-seen bitfield, e.g.
 `if (badge_count() >= 5) { ... }`. `random(lo, hi)`, `min(a, b)`, `max(a,
-b)`, `clamp(x, lo, hi)`, and `abs(x)` (gamequeer#422) are also int-expression
-intrinsics, each taking one or more full `int_expression` arguments -- see
-"Randomness" below for `random()`'s details.
+b)`, `clamp(x, lo, hi)`, `abs(x)` (gamequeer#422), and `have_met(id)`/
+`in_cohort(NAME, id)`/`count_seen([NAME])` (gamequeer#423) are also
+int-expression intrinsics, each taking one or more full `int_expression`
+arguments -- see "Randomness" and "Social vocabulary" below for detail.
 
 **`badge_count()` is heavy -- a ~9-op runtime loop over all 320 badge
 slots, not an O(1) lookup.** Call it once (e.g. on a stage's `enter` event)
@@ -229,6 +231,72 @@ if (state <= 0) {
 }
 // roll: r = state % N; for a 0..N-1 result
 ```
+
+### Social vocabulary: badge-tracking sugar
+
+`gamequeer#423` adds a first-class vocabulary over the same 320-bit
+badges-seen bitfield (`BADGES_ALLOWED = 320`) that `badge_get`/`badge_set`/
+`badge_count()` already expose, replacing hand-rolled range-compare chains
+and a copy-pasted new-badge-detection idiom.
+
+**`cohort NAME = <lo>..<hi>;`** — a top-level declaration (same
+declare-before-use rule as `const`/`enum`: it must appear earlier in the
+file than any `in_cohort`/`count_seen` reference to it) naming an inclusive
+player-ID range. `lo` must be `<= hi`, and both must fall within
+`0..BADGES_ALLOWED-1` (0..319), or the compile fails with a pointed error
+(`datamodel.Cohort.__init__`). Purely compile-time bookkeeping
+(`Cohort.cohort_table`) — no on-cart footprint of its own.
+
+```
+cohort Staff = 1..50;
+cohort Attendees = 51..319;
+```
+
+**`seen_self();`** (event-body statement) — new-badge detection in one
+call, desugaring exactly to the idiom it replaces:
+
+```
+if (badge_get(GQI_PLAYER_ID) == 0) { badge_set GQI_PLAYER_ID; }
+```
+
+**`have_met(id)`** — a bare rename of `badge_get(id)`; same O(1) single-bit
+read (`QCGET`), same int-expression usage (e.g.
+`if (have_met(other_id)) { ... }`).
+
+**`in_cohort(NAME, id)`** — desugars to `(id >= NAME.lo) && (id <= NAME.hi)`
+over the existing `GE`/`LE`/`AND` ops; O(1), and folds to a compile-time
+constant when `id` itself does (`NAME`'s own bounds always are).
+
+**`count_seen()`** / **`count_seen(NAME)`** — the bare, no-argument form is
+`badge_count()` itself (a popcount over the full `[0, BADGES_ALLOWED)`
+range); `count_seen(NAME)` is the same popcount loop, bounded to `NAME`'s
+declared range instead (`IntExpression._emit_count_seen_range`). **Same
+cost profile as `badge_count()`, not O(1)**: a runtime loop over
+`badge_get`, holding 3 of gqc's 4 int registers (`GQ_REGISTERS_INT`) for its
+duration — call once and cache the result rather than re-evaluating from a
+per-tick or per-frame handler, same advice as `badge_count()` above.
+
+All five forms lower entirely to *existing* opcodes -- `QCGET`/`QCSET` for
+the bit read/write, `GE`/`LE`/`AND` for the range compare, the same
+loop-over-`badge_get` shape `badge_count()` already used -- FROZEN VM
+CONTRACT: no new opcode, ever.
+
+```
+cohort Staff = 1..50;
+
+volatile { int met_count = 0; int in_staff = 0; }
+
+stage start {
+    event enter {
+        seen_self();
+        in_staff = in_cohort(Staff, GQI_PLAYER_ID);
+        met_count = count_seen(Staff);
+    }
+}
+```
+
+(Compiles clean against tip `gqc`; disassembly confirms only existing
+opcodes, no new one.)
 
 ### Firmware detection: `fw_version()`
 
