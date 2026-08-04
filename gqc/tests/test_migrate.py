@@ -249,6 +249,49 @@ def test_migrate_parent_traversal_source_rejected(tmp_path):
     assert not (ws / "mygame").exists()
 
 
+def test_migrate_windows_drive_letter_source_rejected(tmp_path):
+    # PurePosixPath("C:/Windows/System32/evil.bmp").is_absolute() is False
+    # (only a leading "/" counts on POSIX), but a real pathlib.Path *does*
+    # treat it as absolute on Windows -- and Path.__truediv__ discards the
+    # workspace prefix entirely when the right operand is absolute -- so
+    # this must be rejected explicitly, not just left to the (POSIX-only)
+    # is_absolute() check above.
+    source = (
+        GAME_HEADER.format(title="T")
+        + 'animations { c <- "C:/Windows/System32/evil.bmp"; }\n'
+        + STAGE
+    )
+    ws = _write_flat_workspace(tmp_path, {"mygame": source})
+
+    exit_code, stdout, stderr = _run(tmp_path, ["migrate", "mygame", "--workspace", str(ws)])
+    assert exit_code != 0
+    assert "drive-letter" in stderr
+    assert (ws / "games" / "mygame.gq").exists()
+    assert not (ws / "mygame").exists()
+
+
+def test_migrate_backslash_source_rejected(tmp_path):
+    # PurePosixPath never treats "\" as a separator, so a literal like
+    # "..\\..\\etc\\passwd" (a genuine parent-directory escape on Windows,
+    # where pathlib.Path *does* split on "\") would parse here as a single,
+    # inert, non-".." path component and sail through the '..'-component
+    # check undetected. The .gq source below double-escapes each backslash
+    # (the file's own `\`-escaping convention) so the decoded literal
+    # contains one real backslash: "..\escape.bmp".
+    source = (
+        GAME_HEADER.format(title="T")
+        + 'animations { c <- "..\\\\escape.bmp"; }\n'
+        + STAGE
+    )
+    ws = _write_flat_workspace(tmp_path, {"mygame": source})
+
+    exit_code, stdout, stderr = _run(tmp_path, ["migrate", "mygame", "--workspace", str(ws)])
+    assert exit_code != 0
+    assert "backslash" in stderr
+    assert (ws / "games" / "mygame.gq").exists()
+    assert not (ws / "mygame").exists()
+
+
 def test_migrate_basename_collision_rejected(tmp_path):
     source = (
         GAME_HEADER.format(title="T")

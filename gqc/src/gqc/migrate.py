@@ -83,6 +83,7 @@ entry file.
 import dataclasses
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -262,7 +263,38 @@ def _find_asset_bindings(tree: "cst.CstFile") -> list:
     return bindings
 
 
+# A Windows drive-letter prefix ("C:", "c:...") -- pathlib.PurePosixPath
+# doesn't treat this as absolute (only a leading "/" is), but a real
+# pathlib.Path *does* on Windows, and Path.__truediv__ discards everything
+# to its left when the right operand is absolute -- so `workspace / ... /
+# literal` in `_resolve_flat_source` would silently escape the workspace
+# on Windows if this weren't rejected here too.
+_WINDOWS_DRIVE_RE = re.compile(r"^[A-Za-z]:")
+
+
 def _validate_relative_asset_literal(literal: str, *, context: str) -> pathlib.PurePosixPath:
+    # Every asset literal in the corpus (and everywhere else in this
+    # module) uses "/" exclusively. PurePosixPath below never treats "\"
+    # as a separator, so a backslash-containing literal like
+    # "..\\..\\etc\\passwd" parses as one inert, non-".." path component
+    # here and would sail through both checks below undetected -- but a
+    # real pathlib.Path *does* split on "\" on Windows, so it would still
+    # be a genuine parent-directory (or, combined with a leading "\\",
+    # UNC-path) escape there. Reject outright rather than trying to
+    # validate backslash-containing literals correctly on every platform.
+    if "\\" in literal:
+        raise MigrateError(
+            f"{context}: asset source {literal!r} contains a backslash -- "
+            "migrate's path literals are always '/'-separated; a "
+            "backslash could hide a Windows-style '..' escape or UNC/"
+            "absolute path from the checks below."
+        )
+    if _WINDOWS_DRIVE_RE.match(literal):
+        raise MigrateError(
+            f"{context}: asset source {literal!r} looks like a Windows "
+            "drive-letter path -- migrate doesn't support relocating an "
+            "asset outside the workspace's shared asset tree."
+        )
     path = pathlib.PurePosixPath(literal)
     if path.is_absolute():
         raise MigrateError(
