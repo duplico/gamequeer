@@ -251,10 +251,10 @@ def build_game_parser():
     # "cohort NAME = <lo>..<hi>;" -- a named, inclusive player-ID range,
     # resolved entirely at compile time (Cohort.cohort_table). No on-cart
     # footprint of its own; only in_cohort()/count_seen() below ever
-    # reference it. `lo`/`hi` are bare integer literals for now (gqc has no
-    # named-constant feature yet -- see gamequeer#421); once that lands,
-    # this is the one place that would need to switch to whatever operand
-    # rule #421 introduces.
+    # reference it. `lo`/`hi` are bare integer literals only: gqc does have
+    # named constants/enums now (gamequeer#421), but this rule doesn't yet
+    # accept their operand forms here -- switching it to whatever operand
+    # rule #421 introduces would be the fix.
     cohort_definition_section = pp.Group(pp.Keyword("cohort") - identifier - pp.Suppress("=") - integer - pp.Suppress("..") - integer - pp.Suppress(";")).set_name("cohort_definition_section")
     cohort_definition_section.set_parse_action(parse_cohort_definition)
 
