@@ -12,6 +12,7 @@ from . import anim, cues
 from . import cst
 from . import makefile_src
 from . import linker
+from . import migrate as migrate_mod
 from . import GqcParseError
 from .datamodel import Game
 
@@ -317,6 +318,49 @@ def update_makefile_local(base_dir : pathlib.Path):
             f.write(f'\t$(GQC_CMD) compile -o {dest_dir} $<\n\n')
             all_list.append(f'{dest_file.relative_to(base_dir)}')
         f.write('all: ' + ' '.join(all_list) + '\n')
+
+@gqc_cli.command()
+@click.argument('game', type=str, required=True)
+@click.option(
+    '--workspace', '-w',
+    type=click.Path(file_okay=False, dir_okay=True, exists=True, path_type=pathlib.Path),
+    default=pathlib.Path('.'),
+    help="Workspace root (contains games/ and assets/). Defaults to the current directory.",
+)
+@click.option('--dry-run', '-n', is_flag=True, help="Print the migration plan without touching anything.")
+def migrate(game : str, workspace : pathlib.Path, dry_run : bool):
+    """Migrate GAME from the flat workspace layout (games/GAME.gq + a
+    shared assets/ tree) to the self-contained game-as-directory layout
+    (gamequeer#420): GAME/GAME.gq, with only the assets it actually
+    references copied into GAME/assets/ and their path literals rewritten
+    to match (surgically, via gqc.cst -- comments and formatting survive
+    untouched).
+
+    GAME may be a bare game name (looked up under --workspace) or a path
+    to its entry .gq file directly. Idempotent: migrating an
+    already-migrated game is a no-op. Verifies the migrated game compiles
+    to byte-identical .gqgame output before committing anything -- on any
+    failure, the original flat game is left completely untouched. See
+    gqc.migrate's module docstring for the full design rationale
+    (destination layout, path-flattening, and the shared-asset policy)."""
+    try:
+        plan = migrate_mod.build_plan(game, workspace)
+    except migrate_mod.MigrateError as me:
+        click.echo(str(me), err=True)
+        raise SystemExit(1)
+
+    click.echo(migrate_mod.report_plan(plan))
+
+    if dry_run or plan.already_migrated:
+        return
+
+    try:
+        result = migrate_mod.execute(plan)
+    except migrate_mod.MigrateError as me:
+        click.echo(str(me), err=True)
+        raise SystemExit(1)
+
+    click.echo(migrate_mod.report_result(result))
 
 if __name__ == '__main__':
     gqc_cli()
