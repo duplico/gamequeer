@@ -21,6 +21,9 @@ from gqc import structs
 from gqc.commands import Command
 from gqc.datamodel import (
     Animation,
+    Cohort,
+    Constant,
+    Enum,
     Event,
     Frame,
     FrameData,
@@ -67,6 +70,11 @@ def reset_compiler_state():
     LightCue.link_table.clear()
     LightCue.cue_table.clear()
     LightCueFrame.link_table.clear()
+
+    Constant.const_table.clear()
+    Constant.pending_int_refs.clear()
+    Enum.enum_table.clear()
+    Cohort.cohort_table.clear()
 
     Command.command_list.clear()
 
