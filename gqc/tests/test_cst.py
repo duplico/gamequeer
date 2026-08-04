@@ -253,6 +253,30 @@ def test_fmt_write_updates_the_file_in_place(fmt_gq):
     assert src_path.read_text() == source
 
 
+def test_fmt_write_preserves_crlf_line_endings_on_disk(fmt_gq):
+    """gamequeer#429 review: `open(input)`/`os.fdopen(fd, 'w')` without an
+    explicit `newline=''` enable universal-newline translation, which would
+    silently rewrite a CRLF-terminated INPUT to LF on the way through
+    --write -- exactly the byte-for-byte round-trip guarantee this module
+    exists to prove. Checked via raw bytes on disk (not `src_path.read_text()`
+    or the subprocess's captured stdout, both of which do their own
+    newline-translation that would mask the bug)."""
+    source = (
+        'game {\r\n id = 1; title := "T"; author := "A"; starting_stage = s;\r\n}\r\n'
+        "stage s { event enter { } }\r\n"
+    )
+    exit_code, stdout, stderr, src_path = fmt_gq(source, extra_args=["--write"])
+    assert exit_code == 0, stderr
+    assert src_path.read_bytes() == source.encode("utf-8")
+
+
+def test_fmt_rejects_write_and_check_together(fmt_gq):
+    source = 'game { id = 1; title := "T"; author := "A"; starting_stage = s; }\nstage s { event enter { } }\n'
+    exit_code, stdout, stderr, _ = fmt_gq(source, extra_args=["--write", "--check"])
+    assert exit_code != 0
+    assert "mutually exclusive" in stderr
+
+
 def test_fmt_of_fmt_output_is_a_fixed_point(fmt_gq, tmp_path):
     """The issue's own idempotence phrasing: fmt(fmt(x)) == fmt(x)."""
     source = REPRESENTATIVE_GAMES[0].read_text()

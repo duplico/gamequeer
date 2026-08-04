@@ -50,8 +50,20 @@ def fmt(input : pathlib.Path, write : bool, check : bool):
     follow-on step; see gqc.cst's module docstring) -- so today this is
     mainly useful as a `--check` round-trip/lossless-parse validator, and
     as the CST's own proof of concept."""
+    if write and check:
+        click.echo("--write and --check are mutually exclusive", err=True)
+        raise SystemExit(1)
+
+    # encoding='utf-8': gqc source is UTF-8 (see the UnicodeDecodeError
+    # handling below); without an explicit encoding, open() falls back to
+    # locale.getpreferredencoding(), which varies by platform/locale and can
+    # silently misdecode non-UTF-8 bytes instead of raising. newline='':
+    # disables universal-newline translation, so a CRLF- or CR-terminated
+    # INPUT is read (and, on --write, written back out) exactly as-is --
+    # required for the byte-for-byte round-trip guarantee this module exists
+    # to prove (see test_round_trip_preserves_windows_line_endings).
     try:
-        with open(input, 'r') as f:
+        with open(input, 'r', encoding='utf-8', newline='') as f:
             source = f.read()
     except UnicodeDecodeError as ue:
         click.echo(f"{input}: cannot decode as UTF-8: {ue}", err=True)
@@ -81,7 +93,8 @@ def fmt(input : pathlib.Path, write : bool, check : bool):
         # replaced, never partially written.
         fd, tmp_path = tempfile.mkstemp(prefix=f'.{input.name}.', suffix='.tmp', dir=input.parent)
         try:
-            with os.fdopen(fd, 'w') as f:
+            # Same encoding='utf-8', newline='' rationale as the read above.
+            with os.fdopen(fd, 'w', encoding='utf-8', newline='') as f:
                 f.write(formatted)
             os.replace(tmp_path, input)
         except BaseException:
