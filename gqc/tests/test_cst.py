@@ -46,9 +46,9 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 # sweeps every .gq file in the repo, so this list is just the "headline"
 # subset with individual, separately-named test IDs.
 REPRESENTATIVE_GAMES = [
-    REPO_ROOT / "examples" / "games" / "showcase" / "showcase.gq",
-    REPO_ROOT / "examples" / "games" / "perf" / "perf_menu_text.gq",
-    REPO_ROOT / "examples" / "games" / "tutorial_1.gq",
+    REPO_ROOT / "examples" / "showcase" / "showcase.gq",
+    REPO_ROOT / "examples" / "perf_menu_text" / "perf_menu_text.gq",
+    REPO_ROOT / "examples" / "tutorial_1" / "tutorial_1.gq",
     REPO_ROOT / "gqc" / "examples" / "skel" / "games" / "working_samples" / "sample_working.gq",
     REPO_ROOT / "gamequeer" / "tests" / "golden" / "edge_coverage.gq",
 ]
