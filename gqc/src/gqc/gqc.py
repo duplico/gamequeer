@@ -234,14 +234,20 @@ def new(name : str, out_dir : pathlib.Path, force : bool):
 @click.argument('base_dir', type=click.Path(file_okay=False, dir_okay=True, writable=True, path_type=pathlib.Path))
 @click.option('--force', '-f', is_flag=True)
 def init_dir(base_dir : pathlib.Path, force : bool):
+    """Scaffold a fresh gqc workspace at BASE_DIR: a `build/` output
+    directory, a `.gitignore`, and a self-sufficient `Makefile`
+    (`makefile_src.py`) that discovers the game-as-directory layout
+    (gamequeer#420) natively in GNU Make. There's no top-level `games/` or
+    shared `assets/` directory here -- each game brings its own
+    `<name>/assets/` when scaffolded with `gqc new <name>`."""
     directory_tree = [
-        'assets',
-        'assets/animations/',
-        'assets/lighting/',
         'build',
-        'games'
     ]
 
+    # Makefile.local isn't written or referenced by the generated Makefile
+    # above (GNU Make discovers games live), but a workspace may still hand-
+    # maintain a Makefile that -includes one via `gqc update-makefile-local`,
+    # so it stays ignored.
     git_ignore = [
         'build/',
         'Makefile.local',
@@ -273,36 +279,40 @@ def init_dir(base_dir : pathlib.Path, force : bool):
     # Create the directory tree
     for dir in directory_tree:
         (base_dir / dir).mkdir(parents=True, exist_ok=True)
-    
+
     # Drop the gitignore file
     with (base_dir / '.gitignore').open('w') as f:
         f.write('\n'.join(git_ignore))
 
-    # Drop the empty Makefile.local file
-    with (base_dir / 'Makefile.local').open('w') as f:
-        f.write('')
-    
     # Drop the Makefile from makefile_src.py
     makefile_contents = makefile_src.makefile_skel.replace('GQCCMD', "python -m gqc")
     with (base_dir / 'Makefile').open('w') as f:
         f.write(makefile_contents)
 
 @gqc_cli.command()
-@click.argument('base_dir', type=click.Path(file_okay=False, dir_okay=True, writable=True, path_type=pathlib.Path))
+@click.argument('base_dir', type=click.Path(file_okay=False, dir_okay=True, exists=True, writable=True, path_type=pathlib.Path))
 def update_makefile_local(base_dir : pathlib.Path):
+    """Regenerate BASE_DIR/Makefile.local for the game-as-directory layout
+    (gamequeer#420): every top-level directory directly under BASE_DIR
+    whose own name matches a `.gq` file inside it (`<name>/<name>.gq`) is
+    treated as a game, mirroring the discovery the generated `Makefile`
+    (`gqc init-dir`, `makefile_src.py`) does natively in GNU Make.
+
+    The generated `Makefile` no longer -includes or invokes this command
+    -- it computes the game list live with $(wildcard)/$(foreach). This
+    remains for a hand-maintained Makefile that still wants a
+    Makefile.local fragment to -include."""
     makefile_path = base_dir / 'Makefile.local'
 
-    GamePath = namedtuple('game_path', ['name', 'relpath'])
+    GamePath = namedtuple('game_path', ['name', 'dir'])
 
-    games_src_dir = base_dir / 'games'
-
-    # Get the complete relative path of all .gq files in the games directory, recursively
-    game_src_paths = [game for game in games_src_dir.rglob('*.gq')]
+    # Every top-level directory whose own name matches a .gq file directly
+    # inside it -- not a recursive scan, and not the old flat games/*.gq
+    # convention.
     game_paths = []
-    for path in game_src_paths:
-        # For example, for a file at games/foo/bar/gamename.gq, we want to store:
-        #  GamePath('gamename', 'foo/bar')
-        game_paths.append(GamePath(path.stem, path.parents[0].relative_to(games_src_dir)))
+    for entry in sorted(base_dir.iterdir()):
+        if entry.is_dir() and (entry / f'{entry.name}.gq').is_file():
+            game_paths.append(GamePath(entry.name, entry))
 
     # Populate the Makefile with the game destinations, and create
     #  the build directory tree for games as well.
@@ -314,9 +324,9 @@ def update_makefile_local(base_dir : pathlib.Path):
         all_list = []
         # For every detected game,
         for game_path in game_paths:
-            # Get the source directory and build a destination directory path under build/
-            src_file = games_src_dir / (game_path.relpath) / f'{game_path.name}.gq'
-            dest_dir = base_dir / 'build' / (game_path.relpath) / game_path.name
+            # Get the source file and build a destination directory path under build/
+            src_file = game_path.dir / f'{game_path.name}.gq'
+            dest_dir = base_dir / 'build' / game_path.name
             dest_file = dest_dir / f'{game_path.name}.gqgame'
             # Create a Makefile target for the .gqgame file for the game
             f.write(f'{dest_file.relative_to(base_dir)}: {src_file.relative_to(base_dir)}\n')

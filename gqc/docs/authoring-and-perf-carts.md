@@ -454,14 +454,26 @@ were polled.
   actually references and rewrites their path literals to match. Verifies the
   migrated game compiles to a byte-identical `.gqgame` before committing
   anything; on any mismatch the original flat game is left untouched.
-- `init-dir` / `update-makefile-local` — scaffold a workspace + Makefile.
-  **Both still only know the flat `games/**/*.gq` convention** (`makefile_src.py`'s
-  generated Makefile shells out to `find $(BASE_DIR)/games -name "*.gq" -print`;
-  `update_makefile_local` scans the same `games/` subtree) — they haven't been
-  updated for the game-as-directory layout. A workspace scaffolded with
-  `init-dir` needs `new`/`migrate` used per-game plus a hand-maintained
-  Makefile that discovers the game-as-directory convention instead (see
-  `gq-games`'s own `Makefile` for a worked example), not `update-makefile-local`.
+- **`init-dir <dir>`** — scaffold a fresh workspace at `<dir>`: a `build/`
+  output directory, a `.gitignore`, and a self-sufficient `Makefile`
+  (`makefile_src.py`) that discovers the game-as-directory convention
+  directly in GNU Make (`$(wildcard)`/`$(foreach)`/`$(eval)`, the same
+  pattern `gq-games`'s own hand-maintained `Makefile` uses): any top-level
+  `<name>/<name>.gq` under the workspace root becomes a `make` target,
+  live, with no separate regeneration step to re-run when a game is added
+  or removed. There's no top-level `games/` or shared `assets/` directory
+  — add a game with `gqc new <name>` (each game brings its own
+  `<name>/assets/`), then just run `make`. Like `gq-games`'s Makefile, this
+  one is **asset-blind**: it only tracks a game's entry `.gq` file, not its
+  `assets/` subtree, so an asset-only edit needs `make clean` (or deleting
+  that game's `build/<name>/`) to force a rebuild.
+- **`update-makefile-local <dir>`** — regenerates `<dir>/Makefile.local`
+  using the same top-level `<name>/<name>.gq` discovery, for a
+  hand-maintained Makefile that still wants to `-include` a
+  Python-generated fragment instead of computing the game list itself. The
+  `Makefile` `init-dir` scaffolds doesn't call or need this — it discovers
+  games live. Sane on a workspace with no games (writes an empty `all:`
+  target).
 
 ## 5. How animations bind and get encoded
 

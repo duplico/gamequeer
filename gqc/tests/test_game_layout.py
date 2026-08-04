@@ -450,3 +450,172 @@ def test_new_force_overwrites_existing_game(tmp_path):
     exit_code, stderr, _ = _run(tmp_path, ["new", "mygame", "--force"])
     assert exit_code == 0, stderr
     assert entry_path.read_text() != "MODIFIED"
+
+
+# --- `gqc init-dir` / `gqc update-makefile-local`: workspace scaffolding ----
+#
+# Both commands used to only know the flat games/**/*.gq convention
+# (`makefile_src.py`'s generated Makefile shelled out to
+# `find $(BASE_DIR)/games -name "*.gq"`; `update_makefile_local` recursively
+# scanned the same `games/` subtree) -- a workspace scaffolded with
+# `init-dir` couldn't actually build a `gqc new`-scaffolded game without a
+# hand-maintained Makefile (see gq-games's own Makefile, gq-games#54, for
+# the worked example this now mirrors). Both now discover the
+# game-as-directory convention (gamequeer#420) directly: any top-level
+# `<name>/<name>.gq` under the workspace root is a game.
+
+
+def _require_make():
+    if shutil.which("make") is None:
+        pytest.skip("make not found on PATH")
+
+
+def _make(cwd, *args, timeout=COMPILE_TIMEOUT_S):
+    _require_make()
+    proc = subprocess.run(
+        ["make", *args],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+    return proc.returncode, proc.stdout, proc.stderr
+
+
+def test_init_dir_scaffolds_no_flat_games_dir(tmp_path):
+    exit_code, stderr, _ = _run(tmp_path, ["init-dir", str(tmp_path)])
+    assert exit_code == 0, stderr
+
+    assert not (tmp_path / "games").exists()
+    assert not (tmp_path / "assets").exists()
+    assert (tmp_path / "build").is_dir()
+    assert (tmp_path / "Makefile").exists()
+    assert (tmp_path / ".gitignore").exists()
+    # The generated Makefile is self-sufficient (discovers games live via
+    # GNU Make) -- no stub Makefile.local is dropped alongside it.
+    assert not (tmp_path / "Makefile.local").exists()
+
+
+def test_init_dir_makefile_discovers_directory_layout_not_flat_games_glob(tmp_path):
+    exit_code, stderr, _ = _run(tmp_path, ["init-dir", str(tmp_path)])
+    assert exit_code == 0, stderr
+
+    makefile = (tmp_path / "Makefile").read_text()
+    assert "games -name" not in makefile
+    assert "$(wildcard $(BASE_DIR)/*/)" in makefile
+    assert "update-makefile-local" not in makefile
+
+
+def test_init_dir_then_make_on_empty_workspace_is_a_sane_noop(tmp_path):
+    exit_code, stderr, _ = _run(tmp_path, ["init-dir", str(tmp_path)])
+    assert exit_code == 0, stderr
+
+    exit_code, stdout, stderr = _make(tmp_path)
+    assert exit_code == 0, stderr
+    assert not list((tmp_path / "build").iterdir())
+
+
+def test_init_dir_new_and_make_builds_the_scaffolded_game(tmp_path):
+    # End-to-end: `gqc init-dir`, then `gqc new` a game inside the
+    # scaffolded workspace, then a real `make` (no gqc invocation at all)
+    # must discover and compile it.
+    exit_code, stderr, _ = _run(tmp_path, ["init-dir", str(tmp_path)])
+    assert exit_code == 0, stderr
+
+    exit_code, stderr, _ = _run(tmp_path, ["new", "demo"])
+    assert exit_code == 0, stderr
+
+    exit_code, stdout, stderr = _make(tmp_path)
+    assert exit_code == 0, stderr
+
+    gqgame = tmp_path / "build" / "demo" / "demo.gqgame"
+    assert gqgame.exists()
+
+    # Re-running `make` with nothing changed does no work (the .gqgame is
+    # already up to date relative to its one tracked prerequisite).
+    exit_code, stdout, stderr = _make(tmp_path)
+    assert exit_code == 0, stderr
+    assert "Nothing to be done" in stdout or "up to date" in stdout
+
+
+def test_init_dir_make_ignores_non_game_top_level_directories(tmp_path):
+    # A top-level directory that isn't itself a game (no same-named .gq
+    # inside it) must be silently skipped, not mistaken for one.
+    exit_code, stderr, _ = _run(tmp_path, ["init-dir", str(tmp_path)])
+    assert exit_code == 0, stderr
+
+    (tmp_path / "tools" / "common").mkdir(parents=True)
+    (tmp_path / "tools" / "common" / "helper.py").write_text("# not a game\n")
+
+    exit_code, stderr, _ = _run(tmp_path, ["new", "demo"])
+    assert exit_code == 0, stderr
+
+    exit_code, stdout, stderr = _make(tmp_path)
+    assert exit_code == 0, stderr
+    assert (tmp_path / "build" / "demo" / "demo.gqgame").exists()
+    assert not (tmp_path / "build" / "tools").exists()
+
+
+def test_update_makefile_local_discovers_directory_layout(tmp_path):
+    exit_code, stderr, _ = _run(tmp_path, ["new", "demo"])
+    assert exit_code == 0, stderr
+
+    exit_code, stderr, _ = _run(tmp_path, ["update-makefile-local", str(tmp_path)])
+    assert exit_code == 0, stderr
+
+    makefile_local = (tmp_path / "Makefile.local").read_text()
+    assert "build/demo/demo.gqgame: demo/demo.gq" in makefile_local
+    assert "games/" not in makefile_local
+
+
+def test_update_makefile_local_on_workspace_with_no_games_is_sane(tmp_path):
+    exit_code, stderr, _ = _run(tmp_path, ["update-makefile-local", str(tmp_path)])
+    assert exit_code == 0, stderr
+
+    makefile_local = tmp_path / "Makefile.local"
+    assert makefile_local.exists()
+    assert makefile_local.read_text().strip().endswith("all:")
+
+    # A plain `make -f` against the generated fragment must not error just
+    # because there's nothing to build.
+    exit_code, stdout, stderr = _make(tmp_path, "-f", "Makefile.local")
+    assert exit_code == 0, stderr
+
+
+def test_update_makefile_local_on_nonexistent_dir_gives_clean_diagnostic(tmp_path):
+    # Regression guard (Copilot review, PR #444): BASE_DIR previously had no
+    # exists=True check, so a typo'd/nonexistent path raised a raw
+    # FileNotFoundError from `(base_dir / 'Makefile.local').open('w')`
+    # instead of click's normal usage-error diagnostic.
+    missing = tmp_path / "does-not-exist"
+    exit_code, stderr, _ = _run(tmp_path, ["update-makefile-local", str(missing)])
+    assert exit_code != 0
+    assert "does not exist" in stderr
+    assert "Traceback" not in stderr
+
+
+def test_init_dir_makefile_clean_targets_base_dir_not_cwd(tmp_path):
+    # Regression guard (Copilot review, PR #444): `clean`'s `-rm -rf build/*`
+    # used to be relative to whatever directory `make` was invoked from,
+    # not $(BASE_DIR) -- inconsistent with every other rule in the file,
+    # which is BASE_DIR-rooted so it works regardless of invocation CWD.
+    exit_code, stderr, _ = _run(tmp_path, ["init-dir", str(tmp_path)])
+    assert exit_code == 0, stderr
+
+    exit_code, stderr, _ = _run(tmp_path, ["new", "demo"])
+    assert exit_code == 0, stderr
+
+    exit_code, stdout, stderr = _make(tmp_path)
+    assert exit_code == 0, stderr
+    gqgame = tmp_path / "build" / "demo" / "demo.gqgame"
+    assert gqgame.exists()
+
+    # Invoke `clean` from an unrelated CWD via `-f <path>` (not `-C`, which
+    # would just chdir into tmp_path first and mask the bug); it must still
+    # remove tmp_path's own build/ output, not create/empty a bogus one
+    # relative to the unrelated CWD.
+    other_cwd = tmp_path.parent
+    exit_code, stdout, stderr = _make(other_cwd, "-f", str(tmp_path / "Makefile"), "clean")
+    assert exit_code == 0, stderr
+    assert not gqgame.exists()
+    assert not (other_cwd / "build").exists()
