@@ -46,6 +46,7 @@ import pytest
 from PIL import Image
 
 from gqc import parser
+from gqc.datamodel import Game
 
 from .support import reset_compiler_state
 
@@ -324,6 +325,33 @@ def test_missing_lightcue_asset_migrate_hint_falls_back_when_game_name_unset(
     assert "None" not in unwrapped
     assert "this game" in unwrapped
     assert "gqc migrate <name>" in unwrapped
+
+
+def test_lightcue_open_failure_after_exists_check_gives_clean_diagnostic(
+    tmp_path, monkeypatch, capsys
+):
+    # Regression guard (Copilot review, gamequeer#437): the lightcue
+    # exists() check doesn't guard the open() right below it -- an
+    # unreadable path (or one removed between the check and the open) used
+    # to surface as a raw, unhandled OSError traceback instead of the same
+    # kind of clean diagnostic a plain "not found" gets. A directory
+    # sitting at the lightcue source path reproduces this deterministically
+    # without needing to race anything: Path.exists() is True for a
+    # directory, but open(dir_path, "r") raises IsADirectoryError.
+    monkeypatch.chdir(tmp_path)
+    reset_compiler_state()
+    Game.game_name = "mygame"
+    (tmp_path / "assets" / "lighting" / "test.gqcue").mkdir(parents=True)
+    source = GAME_HEADER + 'lightcues { c1 <- "test.gqcue"; }\n' + STAGE
+
+    with pytest.raises(SystemExit) as exc_info:
+        parser.parse(io.StringIO(source))
+    assert exc_info.value.code == 1
+
+    captured = capsys.readouterr()
+    unwrapped = _unwrapped(captured.err)
+    assert "Traceback" not in unwrapped
+    assert "could not be opened" in unwrapped
 
 
 def test_missing_asset_diagnostic_is_silent_when_asset_present(compile_gq):

@@ -283,9 +283,22 @@ def parse_lightcue_definition_section(instring, loc, toks):
                 _migrate_hint(f"Light cue {cue_name} source {cue_source} not found"),
                 instring, loc,
             )
-        
-        with open(cue_source, 'r') as f:
-            parsed_cue = parse_cue(f)
+
+        # gamequeer#437 review: the exists() check above doesn't guard the
+        # open() right below it -- unreadable (permissions) or removed
+        # between the check and the open still hit a raw, unhandled OSError
+        # here otherwise, undercutting the "clean diagnostic, never a raw
+        # traceback" intent this whole missing-asset path exists for. No
+        # migrate hint here: unlike a plain "not found", this is a
+        # filesystem-state problem the migrate flow wouldn't fix.
+        try:
+            with open(cue_source, 'r') as f:
+                parsed_cue = parse_cue(f)
+        except OSError as e:
+            raise GqcParseError(
+                f"Light cue {cue_name} source {cue_source} could not be opened: {e}",
+                instring, loc,
+            )
         try:
             parsed_cue.set_name(cue_name)
         except ValueError as ve:
