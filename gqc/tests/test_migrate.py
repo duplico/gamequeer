@@ -555,14 +555,13 @@ def test_migrate_flat_baseline_symlink_failure_raises_clean_migrate_error(
     tmp_path, monkeypatch
 ):
     # _compile_flat_baseline's os.symlink() (and its shutil.copyfile()
-    # neighbor) were unguarded -- an OSError (permissions, a filesystem/OS
-    # without symlink support) would escape as a raw traceback instead of
-    # the clean MigrateError this module documents everywhere else
-    # (gamequeer#437 review; Copilot flagged this across all four of #433's
-    # review rounds, always suppressed, never fixed). This runs before
-    # execute()'s first real workspace mutation (the whole harness lives in
-    # a throwaway tempdir), so there's nothing to roll back -- just confirm
-    # the clean error and that the original workspace is untouched.
+    # neighbor) are unguarded: an OSError (permissions, a filesystem/OS
+    # without symlink support) would otherwise escape as a raw traceback
+    # instead of the clean MigrateError this module documents everywhere
+    # else. This runs before execute()'s first real workspace mutation (the
+    # whole harness lives in a throwaway tempdir), so there's nothing to
+    # roll back -- just confirm the clean error and that the original
+    # workspace is untouched.
     plan = _build_single_game_plan(tmp_path)
     entry_before = plan.entry_path.read_bytes()
 
