@@ -430,12 +430,20 @@ def test_deprecation_notice_emitted_in_legacy_mode(compile_gq):
     assert "gqc migrate" in stderr
 
 
-def test_deprecation_notice_goes_to_stderr_not_stdout(compile_gq):
-    exit_code, stderr, out_dir = compile_gq(GAME_HEADER + STAGE)
+def test_deprecation_notice_goes_to_stderr_not_stdout(tmp_path):
+    # Uses `_run` (not `compile_gq`) specifically because it's the only
+    # fixture here that captures stdout separately from stderr --
+    # `compile_gq` only returns stderr, so it can't actually prove the
+    # notice *isn't* on stdout.
+    src_path = tmp_path / "game.gq"
+    src_path.write_text(GAME_HEADER + STAGE)
+    out_dir = tmp_path / "build"
+
+    exit_code, stderr, stdout = _run(
+        tmp_path, ["compile", "-o", str(out_dir), str(src_path)]
+    )
     assert exit_code == 0, stderr
     assert "legacy" in stderr.lower()
-    # compile_gq only captures stderr directly, but the compiled artifact
-    # existing (rather than the notice corrupting it) is the load-bearing
-    # machine-parsed-output check: the notice must never land in the
-    # .gqgame byte stream or map.txt.
+    assert "legacy" not in stdout.lower()
+    # Machine-parsed output must be untouched by the notice.
     assert (out_dir / "game.gqgame").exists()
