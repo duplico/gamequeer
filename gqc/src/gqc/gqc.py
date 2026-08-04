@@ -285,7 +285,7 @@ def init_dir(base_dir : pathlib.Path, force : bool):
         f.write('\n'.join(git_ignore))
 
     # Drop the Makefile from makefile_src.py
-    makefile_contents = makefile_src.makefile_skel.replace('GQCCMD', "python -m gqc")
+    makefile_contents = makefile_src.makefile_skel.replace('GQCCMD', "gqc")
     with (base_dir / 'Makefile').open('w') as f:
         f.write(makefile_contents)
 
@@ -318,7 +318,7 @@ def update_makefile_local(base_dir : pathlib.Path):
     #  the build directory tree for games as well.
     with makefile_path.open('w') as f:
         f.write('# Auto-generated Makefile.local\n\n')
-        f.write('GQC_CMD := python -m gqc\n\n')
+        f.write('GQC_CMD := gqc\n\n')
         f.write('.PHONY: all\n')
         f.write('.DEFAULT_GOAL := all\n\n')
         all_list = []

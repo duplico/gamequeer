@@ -506,6 +506,19 @@ def test_init_dir_makefile_discovers_directory_layout_not_flat_games_glob(tmp_pa
     assert "update-makefile-local" not in makefile
 
 
+def test_init_dir_makefile_gqc_cmd_default_assumes_uv_tool_install(tmp_path):
+    # gamequeer's uv migration: the generated Makefile's default GQC_CMD
+    # assumes `gqc` is on PATH (e.g. via `uv tool install`), not a bare
+    # `python -m gqc` (which needed a pip-editable install into whatever
+    # interpreter `python` resolved to).
+    exit_code, stderr, _ = _run(tmp_path, ["init-dir", str(tmp_path)])
+    assert exit_code == 0, stderr
+
+    makefile = (tmp_path / "Makefile").read_text()
+    assert "GQC_CMD := gqc" in makefile
+    assert "python -m gqc" not in makefile
+
+
 def test_init_dir_then_make_on_empty_workspace_is_a_sane_noop(tmp_path):
     exit_code, stderr, _ = _run(tmp_path, ["init-dir", str(tmp_path)])
     assert exit_code == 0, stderr
@@ -566,6 +579,10 @@ def test_update_makefile_local_discovers_directory_layout(tmp_path):
     makefile_local = (tmp_path / "Makefile.local").read_text()
     assert "build/demo/demo.gqgame: demo/demo.gq" in makefile_local
     assert "games/" not in makefile_local
+    # See test_init_dir_makefile_gqc_cmd_default_assumes_uv_tool_install:
+    # same GQC_CMD default, same reasoning.
+    assert "GQC_CMD := gqc" in makefile_local
+    assert "python -m gqc" not in makefile_local
 
 
 def test_update_makefile_local_on_workspace_with_no_games_is_sane(tmp_path):

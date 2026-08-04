@@ -17,12 +17,18 @@
 #  Makefile, this one is hand-maintained, not GQC-generated -- edit it
 #  freely.
 
-ifndef GQC_CMD
-# You'll want to alter this line if you need to invoke gqc with a different command:
-GQC_CMD := python -m gqc
-endif
-
 BASE_DIR := $(realpath $(shell dirname $(firstword $(MAKEFILE_LIST))))
+
+ifndef GQC_CMD
+# uv (https://docs.astral.sh/uv/) runs gqc straight out of this repo's own
+# gqc/ checkout -- no install step, no venv to activate, no PATH to manage.
+# examples/ knows exactly where that checkout lives relative to itself
+# (a sibling directory), which a workspace outside this repo wouldn't --
+# see gqc/src/gqc/makefile_src.py's GQC_CMD default/comment for that case.
+# Override this if you'd rather invoke a different gqc, e.g. `GQC_CMD :=
+# gqc` after `uv tool install ./gqc`.
+GQC_CMD := uv run --project $(BASE_DIR)/../gqc -m gqc
+endif
 
 # Every top-level directory name that contains its own matching entry
 # file (<name>/<name>.gq) -- i.e. every migrated game. A top-level

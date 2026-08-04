@@ -29,10 +29,17 @@ jobs:
       - uses: actions/checkout@v4
         # gamequeer has no submodules; omit submodules: recursive
 
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+      - name: Install uv (and Python 3.12)
+        # uv is the documented toolchain for gqc (pip-editable + pyenv are
+        # no longer the supported path) -- this both installs uv and
+        # provisions the interpreter `uv sync` below resolves against,
+        # matching gqc/pyproject.toml's `requires-python` floor and the
+        # gamequeer-builder image's own pinned base (see builder.Dockerfile).
+        uses: astral-sh/setup-uv@v9
         with:
           python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: "gqc/uv.lock"
 
       - name: Install ffmpeg
         # Needed by the `ffmpeg`-marked animation grammar tests, which convert
@@ -46,14 +53,15 @@ jobs:
         # and skip themselves here rather than byte-comparing against it.
         run: sudo apt-get update -q && sudo apt-get install -y ffmpeg
 
-      - name: Install gqc (editable, with test deps)
-        run: pip install -e "gqc/[test]"
+      - name: Install gqc (uv sync, with test deps)
+        run: uv sync --extra test
+        working-directory: gqc/
 
       - name: Run pytest
         # Real tests now exist (gamequeer#331); a bare `pytest tests` fails on
         # zero collected items (exit 5) same as any other test failure or
         # error, with no special-casing.
-        run: pytest tests
+        run: uv run pytest tests
         working-directory: gqc/
 
   gq-game-language-tests:

@@ -1,7 +1,7 @@
 init:
-	pip install -r requirements.txt
+	uv sync --extra test
 
 test:
-	pytest tests
+	uv run pytest tests
 
 .PHONY: init test

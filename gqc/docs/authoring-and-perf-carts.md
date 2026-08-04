@@ -430,7 +430,18 @@ were polled.
 
 ## 4. The `gqc` compiler
 
-`python -m gqc <subcommand>` (`gqc/src/gqc/gqc.py`):
+`gqc` is a [uv](https://docs.astral.sh/uv/)-managed project (`gqc/pyproject.toml`,
+`gqc/uv.lock`). From a `gamequeer` checkout: `uv run --project gqc gqc
+<subcommand>`, or `cd gqc && uv run gqc <subcommand>`. For a workspace that
+doesn't itself live inside a `gamequeer` checkout (e.g. a generated `gqc
+init-dir` workspace's `Makefile`), install it as a uv tool instead —
+`uv tool install /path/to/gamequeer/gqc` puts a `gqc` executable on `PATH`,
+kept in sync with a `uv tool upgrade gqc` (or `uv tool install --reinstall
+...`) after pulling new `gqc` source. A plain `pip install -e gqc/[test]`
+into an ad hoc virtualenv still works if you'd rather not use uv, but isn't
+the maintained path (see `gqc/pyproject.toml`).
+
+Every `gqc` subcommand below (`gqc/src/gqc/gqc.py`):
 
 - **`compile <input.gq> -o <out_dir>`** — produces `<out_dir>/<name>.gqgame`
   (the flashable cart), plus `map.txt` (linker/symbol summary) and
