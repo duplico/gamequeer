@@ -8,8 +8,10 @@ from rich.progress import Progress
 
 from . import parser
 from . import anim, cues
+from . import cst
 from . import makefile_src
 from . import linker
+from . import GqcParseError
 from .datamodel import Game
 
 DITHER_CHOICES = ('none', 'bayer', 'heckbert', 'floyd_steinberg', 'sierra2', 'sierra2_4a')
@@ -33,6 +35,42 @@ def mkanim(out_path : pathlib.Path, src_path : pathlib.Path, dither : str, frame
 def mkcue(out_path : pathlib.Path, src_path : pathlib.Path):
     with Progress() as progress:
         cues.make_cue(progress, src_path, out_path)
+
+@gqc_cli.command()
+@click.argument('input', type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True, path_type=pathlib.Path), required=True)
+@click.option('--write', '-w', is_flag=True, help="Write the formatted output back to INPUT instead of printing it to stdout.")
+@click.option('--check', is_flag=True, help="Don't write anything; exit nonzero if INPUT isn't already formatted.")
+def fmt(input : pathlib.Path, write : bool, check : bool):
+    """Parse INPUT to gqc's comment- and layout-preserving CST (gqc.cst)
+    and re-emit it, proving the CST round-trips (gamequeer#424 step 1).
+
+    This step's `render` is an identity transform -- no reindentation or
+    other pretty-printing happens yet (that's explicitly deferred to a
+    follow-on step; see gqc.cst's module docstring) -- so today this is
+    mainly useful as a `--check` round-trip/lossless-parse validator, and
+    as the CST's own proof of concept."""
+    with open(input, 'r') as f:
+        source = f.read()
+
+    try:
+        tree = cst.parse_cst(source)
+    except GqcParseError as ge:
+        click.echo(str(ge), err=True)
+        raise SystemExit(1)
+
+    formatted = cst.render(tree)
+
+    if check:
+        if formatted != source:
+            click.echo(f"{input} is not formatted", err=True)
+            raise SystemExit(1)
+        return
+
+    if write:
+        with open(input, 'w') as f:
+            f.write(formatted)
+    else:
+        click.echo(formatted, nl=False)
 
 @gqc_cli.command()
 @click.option('--no-mem-map', '-n', is_flag=True)
