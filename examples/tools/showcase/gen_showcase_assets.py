@@ -10,7 +10,7 @@ exactly how they were made.
 Usage (from the examples/ directory, inside the gamequeer builder container
 which provides Pillow):
 
-    python games/showcase/gen_showcase_assets.py assets/animations
+    python tools/showcase/gen_showcase_assets.py showcase/assets/animations
 
 Encoding intent (verified via map.txt's .frame section after `gqc compile`):
   * showcase_flat.gif    frames -> RLE7        (solid bouncing box, flat /
