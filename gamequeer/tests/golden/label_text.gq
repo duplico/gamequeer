@@ -9,8 +9,10 @@
  * rowmajor_byte_blit.gq, edge_coverage.gq). No committed golden fixture
  * exercises the label path at all before this one.
  *
- * Adapted from examples/games/perf/perf_text.gq (duplico/gamequeer#298),
- * which documents the full authoring rationale and gotchas found (see
+ * Adapted from examples/perf_text/perf_text.gq (as
+ * examples/games/perf/perf_text.gq at the time, duplico/gamequeer#298;
+ * moved onto the game-as-directory layout by #440), which documents the
+ * full authoring rationale and gotchas found (see
  * gqc/docs/authoring-and-perf-carts.md §§2, 8-9) -- this fixture keeps the
  * same three stages and content, re-headered for the golden-test
  * convention.
