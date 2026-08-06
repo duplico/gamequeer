@@ -364,6 +364,25 @@ add_leds_dump_test(golden_if_literal_condition if_literal_condition 28)
 
 add_leds_dump_test(golden_nested_precedence_group nested_precedence_group 28)
 
+# ---- golden_cascade_input_preserve: load_stage() same-tick user-input
+# preservation regression (gamequeer#455). boot's `enter` event
+# unconditionally (no timer) cascades into idle via `gostage`, all within
+# tick 0's single handle_events() forward pass; cascade_input_preserve_
+# trigger.txt scripts a lone "R" (dial-right) token that HAL_event_poll()
+# ORs into s_gq_event that same tick, before the pass reaches
+# GQ_EVENT_BUTTON_R's index. Before #455's fix, load_stage()'s clear-all
+# loop wiped that bit as a side effect of the cascade, so idle's
+# `input(->) { cue lime; }` handler never ran -- this fixture's
+# --dump-leds CSV has only the tick 0 boot-color row forever (confirmed by
+# hand against a deliberately-reverted build). With the fix, only the
+# stage-owned synthetic events are cleared, the BUTTON_R bit survives the
+# cascade, and idle's handler runs within the same tick. TICKS=8 lands
+# exactly on the lime cue's tick-7 dark-out row. See
+# cascade_input_preserve.gq's header comment for the full derivation.
+
+add_leds_dump_test(golden_cascade_input_preserve cascade_input_preserve 8
+    INPUT cascade_input_preserve_trigger.txt)
+
 # ---- golden_framebuffer_anim_advance_{frame0,frame1,frame2}: animation
 # frame-metadata cache regression coverage for gamequeer#264/PR#282
 # (draw_animation_stack() caches the current frame's gq_anim_frame instead of

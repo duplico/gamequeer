@@ -135,10 +135,23 @@ uint8_t load_stage(t_gq_pointer stage_ptr) {
         led_stop();
     }
 
-    // Clear all unhandled events
-    for (uint16_t event_type = 0x0000; event_type < GQ_EVENT_COUNT; event_type++) {
-        GQ_EVENT_CLR(event_type);
-    }
+    // Clear only the stage-owned synthetic events: they belong to the
+    // outgoing stage and have no meaning in the new one. Deliberately do NOT
+    // clear the user-input events (BUTTON_A/B/L/R, BUTTON_CLICK) here --
+    // those belong to the player, not to whichever stage happens to be
+    // current when they arrive. A same-tick gostage() (e.g. an ENTER handler
+    // that auto-cascades into another stage) used to wipe a button/dial
+    // event that HAL_event_poll() had already OR'd into s_gq_event this
+    // tick, before handle_events()'s single forward pass ever reached it --
+    // silently dropping the input. See gamequeer#455. (#452 remains: TIMER
+    // is still stage-owned and still cleared here.)
+    GQ_EVENT_CLR(GQ_EVENT_ENTER);
+    GQ_EVENT_CLR(GQ_EVENT_BGDONE);
+    GQ_EVENT_CLR(GQ_EVENT_MENU);
+    GQ_EVENT_CLR(GQ_EVENT_TIMER);
+    GQ_EVENT_CLR(GQ_EVENT_FGDONE1);
+    GQ_EVENT_CLR(GQ_EVENT_FGDONE2);
+    GQ_EVENT_CLR(GQ_EVENT_REFRESH);
 
     // Close any menu (text or choice)
     menu_close();

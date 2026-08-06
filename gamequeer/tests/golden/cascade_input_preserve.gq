@@ -1,0 +1,103 @@
+/*
+ * cascade_input_preserve.gq -- --dump-leds golden CSV fixture for
+ * gamequeer#455: load_stage() used to unconditionally clear EVERY pending
+ * event bit (including user-input events: BUTTON_A/B/L/R, BUTTON_CLICK) on
+ * every stage load. Combined with GQ_OP_GOSTAGE calling load_stage()
+ * synchronously mid-dispatch, and handle_events()'s single forward pass
+ * over event_type 0 (ENTER) .. GQ_EVENT_COUNT, this meant: if a stage's own
+ * `enter` event auto-cascades into another stage via `gostage` (no timer,
+ * no user action -- purely a same-tick chain), any button/dial event
+ * HAL_event_poll() already OR'd into s_gq_event *that same tick* -- before
+ * handle_events() reached its index in the loop -- was silently wiped by
+ * the cascade's load_stage() call and never dispatched to the destination
+ * stage. See gamequeer#455's diagnosis for the full trace and the
+ * hardware-observed symptom (first dial turn after an auto-cascading boot
+ * chain does nothing).
+ *
+ * Two stages, no scripted navigation beyond one input token landing on the
+ * cascade tick itself:
+ *
+ *   boot: `event enter { gostage idle; }` -- an immediate, unconditional
+ *         cascade with no timer and no button involved, so it fires on
+ *         tick 0, inside the very first handle_events() pass (ENTER is
+ *         index 0, so this is not the "gostage inside a later-processed
+ *         event handler defers to next tick" case documented in
+ *         label_text.gq's header -- the cascade *is* the first event this
+ *         run ever processes).
+ *   idle: `event input(->) { cue lime; }` -- the only way this fixture ever
+ *         shows any color other than load_game()'s fixed boot color is if
+ *         the dial-right event reaches idle's event_commands table. gqc's
+ *         linker requires at least one event with at least one statement
+ *         per stage (create_symbol_table() indexes event_statements[0]
+ *         unconditionally, per if_literal_condition.gq's header comment on
+ *         the same constraint); this event already satisfies it, so idle
+ *         needs no `enter` handler of its own.
+ *
+ * cascade_input_preserve_trigger.txt scripts a single "R" token as its
+ * first (only) line -- HAL_input_load()/HAL_event_poll() (HAL.c) inject
+ * exactly one input event per system_tick() iteration, so this lands on
+ * tick 0: the same tick boot's `enter` event runs and cascades into idle
+ * via load_stage(). Before gamequeer#455's fix, load_stage()'s clear-all
+ * loop wiped the BUTTON_R bit HAL_event_poll() had already OR'd in earlier
+ * that same tick, before handle_events()'s forward pass ever reached index
+ * GQ_EVENT_BUTTON_R (4) -- idle's `input(->)` handler would never run, and
+ * the LEDs would stay at load_game()'s fixed boot color for the entire
+ * fixture (no further --dump-leds rows past tick 0 at all). With the fix,
+ * load_stage() preserves the BUTTON_R bit (only stage-owned synthetic
+ * events -- ENTER/BGDONE/MENU/TIMER/FGDONE1/FGDONE2/REFRESH -- are
+ * cleared), so by the time the same forward pass reaches index 4,
+ * stage_current is already idle (load_stage() updates it synchronously)
+ * and the bit is still set: idle's `cue lime;` runs within tick 0.
+ *
+ * Tick-by-tick (see leds.c's led_tick() for the state machine; cadence
+ * confirmed by running the built emulator once and inspecting the output
+ * before committing it as the golden CSV, per this repo's established
+ * practice -- same "first redraw 3 ticks after the cue starts" pattern as
+ * if_literal_condition.gq/nested_precedence_group.gq, since the cue itself
+ * is shaped identically, just triggered by a button event instead of an
+ * unconditional `enter`):
+ *
+ *   tick 0: load_game()'s fixed boot color (16, 32, 0). boot's enter event
+ *           runs (gostage idle;); idle's input(->) handler runs within the
+ *           same handle_events() pass (cue lime;) if and only if
+ *           gamequeer#455 is fixed.
+ *   tick 3: lime's first redraw (ticks_elapsed==0 branch).
+ *   tick 7: lime's single frame (duration 4) done; non-looping, no bgcue ->
+ *           LEDs go dark.
+ *
+ * TICKS=8 in the ctest call (tests/CMakeLists.txt) runs iterations 0..7,
+ * landing exactly on the tick 7 dark-out confirmation row. On the
+ * pre-#455-fix VM, this fixture's --dump-leds CSV has only the tick 0 row
+ * (input silently dropped, LEDs never move) -- a golden mismatch against
+ * the 3-row (0/3/7) fixed CSV below, confirmed by hand against a
+ * deliberately-reverted (pre-fix) build.
+ *
+ * How to reproduce the compiled fixture (cascade_input_preserve.gqgame):
+ *
+ *   From the gamequeer repo root:
+ *     uv run --project gqc -m gqc compile --no-mem-map \
+ *         -o gamequeer/tests/golden gamequeer/tests/golden/cascade_input_preserve.gq
+ */
+
+game {
+    id = 1;
+    title := "CascadeInputPreserve";
+    author := "test";
+    starting_stage = boot;
+}
+
+lightcues {
+    lime <- "cascade_input_preserve_lime.gqcue";
+}
+
+stage boot {
+    event enter {
+        gostage idle;
+    }
+}
+
+stage idle {
+    event input(->) {
+        cue lime;
+    }
+}
