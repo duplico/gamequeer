@@ -1,0 +1,20 @@
+/*
+ * nested_precedence_group_lime.gqcue -- "computed result matched expected"
+ * indicator cue for nested_precedence_group.gq (gamequeer#453). One hold
+ * frame, lime, duration 4 (1 subtick) -- the minimum legal frame duration
+ * (LEDS_SUBTICKS), same shape as if_literal_condition_lime.gqcue. Not
+ * looping (played via a foreground `cue` statement), so it plays once and
+ * then the LEDs go dark -- see nested_precedence_group.gq's header comment
+ * for the full tick-by-tick timeline this produces.
+ */
+
+frame {
+    duration = 4;
+    colors {
+        lime,
+        lime,
+        lime,
+        lime,
+        lime
+    }
+}

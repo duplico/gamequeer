@@ -1,0 +1,126 @@
+/*
+ * nested_precedence_group.gq -- --dump-leds golden CSV fixture for
+ * gamequeer#453: a same-precedence chain of 3+ terms (e.g. "748 + b + c")
+ * nested one parenthesized level inside a differently-precedenced parent
+ * operator (e.g. "a % (...)") used to crash gqc entirely --
+ * `ValueError: Invalid subexpression length 5: should be [operand,
+ * operator, operand] or [operator operand]` from
+ * IntExpression.get_result_symbol (datamodel.py) -- because that shape
+ * never passes back through parser.parse_int_expression's own left-fold
+ * (only a bare/outermost same-precedence chain does; pyparsing's
+ * infix_notation matches a parenthesized sub-group via its own internal
+ * Forward, without ever invoking int_expression's parse action on that
+ * sub-group's content). Fixing the crash alone would not be sufficient if
+ * the fix folded the chain in the wrong direction -- a chain of `+`s can't
+ * tell a left- from a right-fold apart by its own result, so this fixture
+ * pins BOTH a same-precedence chain that reaches the previously-crashing
+ * shape (mod wrapping a nested `+` chain) AND a shape whose *result*
+ * actually depends on fold direction (multiply wrapping a nested `-`
+ * chain), so a left/right-associativity regression shows up as the wrong
+ * cue choice, not just a crash.
+ *
+ * Two stages, sequenced by a timer (same "gostage on a timer" shape as
+ * if_literal_condition.gq, whose header comment this one's timing
+ * derivation follows) so one golden CSV covers both shapes without needing
+ * scripted button input. All operands below are `volatile` variables
+ * (never literals at their point of use in an event), so both expressions
+ * are genuinely emitted as runtime MODBY/ADDBY/SUBBY/MULBY arithmetic
+ * commands -- gamequeer#385's compile-time constant folding never triggers
+ * (it only ever sees literal operands), so this exercises
+ * IntExpression.get_result_symbol's actual left-fold codegen path, not
+ * just the parser/fold_constant_int_expression side of gamequeer#453's fix:
+ *
+ *   check_mod_add:  `roll = a % (748 + b + c);` with a=17, b=5, c=9 --
+ *                   748+5+9=762, 17%762=17 either fold direction (`+` is
+ *                   associative), so this pins "compiles and evaluates
+ *                   correctly at all", not fold direction specifically.
+ *                   `if (roll == 17)` -> lime.
+ *   check_mul_sub:  `y = k * (100 - d - e);` with k=1, d=5, e=9 --
+ *                   left-fold (the required left-to-right evaluation
+ *                   order): (100-5)-9=86. A right-fold regression would
+ *                   instead compute 100-(5-9)=104, landing on the `else`
+ *                   arm -- this is the fold-direction discriminator.
+ *                   `if (y == 86)` -> lime.
+ *
+ * Tick-by-tick (see leds.c's led_tick() for the state machine; confirmed by
+ * running the built emulator once and inspecting the output before
+ * committing it as the golden CSV, per this repo's established practice --
+ * identical cadence to if_literal_condition.gq's, since the statement
+ * shapes around each `if` are the same, just with runtime-computed
+ * conditions instead of literal ones):
+ *
+ *   tick 0:  load_game()'s fixed boot color (16, 32, 0) -- not this
+ *            fixture's concern (see leds_dump_test.gq's header).
+ *   tick 3:  check_mod_add's enter event has already run at tick 0
+ *            (`roll = ...; if (roll == 17) { cue lime; } ...`); first
+ *            redraw shows lime.
+ *   tick 7:  lime's single frame is done (elapsed 4 >= duration 4);
+ *            non-looping, no bgcue -> LEDs go dark.
+ *   tick 20: check_mod_add's `timer 20;` (set at tick 0) fires -> `event
+ *            timer { gostage check_mul_sub; }` -- check_mul_sub's enter
+ *            event runs immediately (`y = ...; if (y == 86) { cue lime;
+ *            } ...`).
+ *   tick 23: lime's first redraw (ticks_elapsed==0 branch, 3 ticks after it
+ *            started at tick 20 -- same +3 cadence as tick 3 above).
+ *   tick 27: lime's single frame done -> LEDs go dark again.
+ *
+ * TICKS=28 in the ctest call (tests/CMakeLists.txt) lands exactly on the
+ * tick-27 dark-out confirmation row above.
+ *
+ * gqc's linker requires at least one event with at least one statement per
+ * stage (create_symbol_table() indexes event_statements[0] unconditionally)
+ * -- both stages' `enter` events already satisfy this.
+ *
+ * How to reproduce the compiled fixture (nested_precedence_group.gqgame):
+ *
+ *   From the gamequeer repo root, using the builder container:
+ *     docker run --rm -v $(pwd):/workspaces/gamequeer --workdir /workspaces/gamequeer \
+ *         --user $(id -u):$(id -g) gamequeer-builder:latest \
+ *         /bin/bash -c "cd gamequeer/tests/golden && PYTHONPATH=/workspaces/gamequeer/gqc/src \
+ *             python -m gqc compile --no-mem-map -o . nested_precedence_group.gq"
+ *
+ *   Or via the Makefile target:
+ *     make golden-fixture
+ */
+
+game {
+    id = 1;
+    title := "NestedPrecedenceGroup";
+    author := "test";
+    starting_stage = check_mod_add;
+}
+
+lightcues {
+    lime <- "nested_precedence_group_lime.gqcue";
+    red <- "nested_precedence_group_red.gqcue";
+}
+
+volatile {
+    int a = 17;
+    int b = 5;
+    int c = 9;
+    int roll = 0;
+    int k = 1;
+    int d = 5;
+    int e = 9;
+    int y = 0;
+}
+
+stage check_mod_add {
+    event enter {
+        roll = a % (748 + b + c);
+        if (roll == 17) { cue lime; } else { cue red; }
+        timer 20;
+    }
+
+    event timer {
+        gostage check_mul_sub;
+    }
+}
+
+stage check_mul_sub {
+    event enter {
+        y = k * (100 - d - e);
+        if (y == 86) { cue lime; } else { cue red; }
+    }
+}
