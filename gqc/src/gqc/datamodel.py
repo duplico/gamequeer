@@ -1348,13 +1348,28 @@ def fold_constant_int_expression(node):
     except TypeError:
         return None
     if node_len not in (2, 3):
-        # Covers bare single-token groups (len 1, handled by the recursive
-        # unwrap above one level up) and >3-token same-precedence chains
-        # nested inside a non-outermost operator level, which
-        # IntExpression.get_result_symbol doesn't support lowering either
-        # (a pre-existing limitation, not something gamequeer#385 is
-        # responsible for fixing) -- decline to fold rather than guess.
-        return None
+        if node_len <= 3:
+            # Bare single-token groups (len 1, handled by the recursive
+            # unwrap above one level up) or an empty/malformed group --
+            # decline to fold rather than guess.
+            return None
+
+        # A same-precedence chain of 3+ terms nested one (or more)
+        # parenthesized levels inside a differently-precedenced parent, e.g.
+        # the "1+2+3+4" in "(1+2) % (1+2+3+4)" -- see
+        # IntExpression.get_result_symbol's matching >3 branch for why this
+        # shape reaches here as a single flat token list instead of already
+        # being reduced to nested [operand, operator, operand] triples
+        # (gamequeer#453). Left-fold it the same way (recursing through this
+        # function -- pure compile-time evaluation, no register pool to
+        # reconcile) so a fully-literal nested chain like this one still
+        # folds all the way to a single literal at compile time instead of
+        # declining here and falling through to get_result_symbol's own
+        # (also-correct, but runtime-ADDBY-emitting) left-fold.
+        left = fold_constant_int_expression(node[:-2])
+        if left is None:
+            return None
+        node = [GqcIntOperand(is_literal=True, value=left), node[-2], node[-1]]
 
     if len(node) == 2:
         operator, operand = node
@@ -1657,14 +1672,39 @@ class IntExpression:
             # unwrap), so this recursion is a no-op passthrough for them.
             return self.get_result_symbol(subexpr[0])
         elif len(subexpr) > 3:
-            raise ValueError(f"Invalid subexpression length {len(subexpr)}: should be [operand, operator, operand] or [operator operand]")
+            # A same-precedence chain of 3+ terms (e.g. the "748 + b + c" in
+            # "a % (748 + b + c)") reaches here as a single flat token list
+            # instead of already being folded down to nested
+            # [operand, operator, operand] triples, whenever it's nested one
+            # (or more) parenthesized levels inside a differently-precedenced
+            # parent -- gamequeer#453. pyparsing's infix_notation matches a
+            # parenthesized sub-group via its own internal Forward, which
+            # never runs int_expression's own parse action
+            # (parser.parse_int_expression, whose matching >3 branch left-
+            # folds a chain the *same* way) on that sub-group's content, so a
+            # bare/outermost "(a + b + c)" -- handed to
+            # parser.parse_int_expression directly -- already arrives here
+            # pre-folded to a 3-token triple, while this nested case doesn't.
+            #
+            # Left-fold it here too, resolving everything left of the final
+            # operator first via a plain recursive call into this same
+            # method (reusing this IntExpression's own register pool
+            # directly, unlike parser.parse_int_expression's left-fold, which
+            # has to reconcile two independently-allocated pools -- see the
+            # IntExpression-unwrap branch above), so evaluation order matches
+            # ordinary left-to-right associativity (e.g. a nested
+            # "a - b - c" must still evaluate as (a - b) - c, not
+            # a - (b - c)) instead of raising.
+            subexpr = [self.get_result_symbol(subexpr[:-2]), subexpr[-2], subexpr[-1]]
 
         # A literal-only subtree (e.g. the "2*3" in "2*3+x") -- fold it to a
         # single literal instead of allocating a register and emitting real
         # arithmetic ops for it. Nested precedence groups like this one
         # never pass back through parser.parse_int_expression's own fold
         # attempt (only a fully-parenthesized -- or the outermost -- group
-        # does), so this is the only place that sees them.
+        # does), so this is the only place that sees them (the just-left-
+        # folded >3-token case above included, now that it's been reshaped
+        # to the same 3-token triple shape this already handles).
         folded = fold_constant_int_expression(subexpr)
         if folded is not None:
             return GqcIntOperand(is_literal=True, value=folded)

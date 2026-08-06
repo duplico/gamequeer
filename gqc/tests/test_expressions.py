@@ -286,3 +286,178 @@ def test_flat_6_term_chain_mixed_with_variable_stays_single_register(compile_gq)
     setvar_lines = [line for line in lines if "SETVAR" in line]
     assert len(addby_lines) == 1
     assert any("0x0000000f" in line for line in setvar_lines)
+
+
+# --- gamequeer#453: same-precedence chain nested inside a differently- ------
+# --- precedenced parent via parens -------------------------------------------
+#
+# A bare/outermost "(a + b + c)" -- the RHS of "x = (a + b + c);", or any
+# fully-parenthesized subexpression at the *top* of an assignment/condition
+# -- is handed to parser.parse_int_expression directly, whose own >3-token
+# branch left-folds it before it's ever built into an IntExpression (see the
+# "flat chain" and "fully parenthesized" sections above). But a
+# same-precedence chain of 3+ terms nested *inside* a differently-
+# precedenced parent, e.g. the "748 + b + c" in "roll = a % (748 + b + c);"
+# (gamequeer#453, blocking the BLOOPER cart, gq-games#49, whose generator
+# emits exactly this shape), never reaches parse_int_expression as its own
+# invocation: pyparsing's infix_notation matches a parenthesized sub-group
+# via its own internal Forward, which doesn't run int_expression's parse
+# action on that sub-group's content. It arrives at
+# IntExpression.get_result_symbol (datamodel.py) as a single flat >3-token
+# list instead of already being reduced to nested
+# [operand, operator, operand] triples, and before this fix that branch
+# unconditionally raised `ValueError: Invalid subexpression length N: should
+# be [operand, operator, operand] or [operator operand]`.
+#
+# Per gamequeer#331/#341/#345 precedent (see this module's docstring),
+# correctness is asserted cheaply from the emitted `cmds.gqasm` listing --
+# a fully-literal nested chain folds (gamequeer#385) to a single SETVAR
+# literal whose value directly pins left-to-right evaluation order, and a
+# mixed literal/variable chain pins the real ADDBY/SUBBY op count and
+# register-reuse shape the same way the flat-chain and outermost-
+# parenthesized-chain tests above do. The exact issue repro shape (a nested
+# `+` chain, non-associative-agnostic) and the BLOOPER end-to-end integration
+# check are additionally verified against the headless emulator -- see
+# gamequeer/tests/golden/nested_precedence_group.gq, whose second stage
+# nests a `-` chain (order-*sensitive*) inside a `*` parent specifically to
+# discriminate a wrong (right-)fold direction from a crash.
+
+
+def test_nested_group_inside_binary_op_parent_previously_raised_now_compiles(compile_gq):
+    # The issue's own minimal repro shape, verbatim: a 3-term same-
+    # precedence `+` chain nested inside a `%` parent via parens. All
+    # variables (not literals), so this exercises the real
+    # IntExpression.get_result_symbol left-fold codegen path, not just
+    # parser.py/fold_constant_int_expression's side of the fix.
+    source = game_with_stage(
+        "roll = a % (748 + b + c);",
+        "volatile { int a = 0; int b = 0; int c = 0; int roll = 0; }",
+    )
+    exit_code, stderr, out_dir = compile_gq(source)
+    assert exit_code == 0, stderr
+    assert_no_traceback(stderr)
+    cmds = (out_dir / "cmds.gqasm").read_text()
+    assert "MODBY" in cmds
+    assert "ADDBY" in cmds
+
+
+def test_nested_group_as_left_operand_previously_raised_now_compiles(compile_gq):
+    # Same nested chain, but as the parent operator's *left* operand instead
+    # of its right -- "(a + b + c) % d", the mirror image of the issue's own
+    # "a % (748 + b + c)" repro.
+    source = game_with_stage(
+        "roll = (a + b + c) % d;",
+        "volatile { int a = 0; int b = 0; int c = 0; int d = 0; int roll = 0; }",
+    )
+    exit_code, stderr, out_dir = compile_gq(source)
+    assert exit_code == 0, stderr
+    assert_no_traceback(stderr)
+    cmds = (out_dir / "cmds.gqasm").read_text()
+    assert "MODBY" in cmds
+    assert "ADDBY" in cmds
+
+
+def test_nested_group_both_operands_previously_raised_now_compiles(compile_gq):
+    # Both operands of the parent operator are their own nested 3+-term
+    # chains: "(a + b + c) % (d + e + f)".
+    source = game_with_stage(
+        "roll = (a + b + c) % (d + e + f);",
+        "volatile { int a = 0; int b = 0; int c = 0; int d = 0; int e = 0; int f = 0; int roll = 0; }",
+    )
+    exit_code, stderr, out_dir = compile_gq(source)
+    assert exit_code == 0, stderr
+    assert_no_traceback(stderr)
+    cmds = (out_dir / "cmds.gqasm").read_text()
+    assert "MODBY" in cmds
+    assert cmds.count("ADDBY") >= 2
+
+
+def test_nested_group_5_term_chain_previously_raised_now_compiles(compile_gq):
+    # One level deeper than the issue's own 3-term repro: a 5-term nested
+    # chain ("1 + b + c + d + e"), all variables past the leading literal so
+    # it can't fold away and has to recurse through
+    # IntExpression.get_result_symbol's left-fold more than once.
+    source = game_with_stage(
+        "roll = a % (1 + b + c + d + e);",
+        "volatile { int a = 0; int b = 0; int c = 0; int d = 0; int e = 0; int roll = 0; }",
+    )
+    exit_code, stderr, out_dir = compile_gq(source)
+    assert exit_code == 0, stderr
+    assert_no_traceback(stderr)
+    cmds = (out_dir / "cmds.gqasm").read_text()
+    assert "MODBY" in cmds
+    assert cmds.count("ADDBY") == 4
+
+
+def test_nested_group_doubly_nested_previously_raised_now_compiles(compile_gq):
+    # Two levels of nesting: the previously-crashing shape itself
+    # ("a % (b + c + d)") as one operand of a further-outer `+`.
+    source = game_with_stage(
+        "roll = (a % (b + c + d)) + e;",
+        "volatile { int a = 0; int b = 0; int c = 0; int d = 0; int e = 0; int roll = 0; }",
+    )
+    exit_code, stderr, out_dir = compile_gq(source)
+    assert exit_code == 0, stderr
+    assert_no_traceback(stderr)
+    cmds = (out_dir / "cmds.gqasm").read_text()
+    assert "MODBY" in cmds
+    assert "ADDBY" in cmds
+
+
+def test_nested_group_fully_literal_evaluates_left_to_right_subtraction(compile_gq):
+    # gamequeer#385 folding: entirely literal, so this must fold all the way
+    # to a single literal SETVAR -- and the *value* pins left-to-right
+    # evaluation ((100-5)-9=86), not right-to-left (100-(5-9)=104), the
+    # fold-direction check a purely-associative `+` chain can't provide (see
+    # test_nested_shift_or_chain_* above for why `+`/`|` chains alone were
+    # never sufficient to pin fold direction).
+    source = game_with_stage("x = 1 * (100 - 5 - 9);", "volatile { int x = 0; }")
+    exit_code, stderr, out_dir = compile_gq(source)
+    assert exit_code == 0, stderr
+    assert_no_traceback(stderr)
+    cmds = (out_dir / "cmds.gqasm").read_text()
+    assert "SUBBY" not in cmds
+    assert "MULBY" not in cmds
+    setvar_lines = [line for line in cmds.splitlines() if "SETVAR" in line]
+    assert len(setvar_lines) == 1
+    assert "0x00000056" in setvar_lines[0]  # 86
+
+
+def test_nested_group_fully_literal_evaluates_left_to_right_division(compile_gq):
+    # Same fold-direction pin as above, but with `/`, whose C-truncating
+    # semantics make left- vs right-fold diverge even more sharply:
+    # (100/10)/3 == 3 (truncating), while 100/(10/3) == 100/3 == 33.
+    source = game_with_stage("x = 1 + (100 / 10 / 3);", "volatile { int x = 0; }")
+    exit_code, stderr, out_dir = compile_gq(source)
+    assert exit_code == 0, stderr
+    assert_no_traceback(stderr)
+    cmds = (out_dir / "cmds.gqasm").read_text()
+    assert "DIVBY" not in cmds
+    assert "ADDBY" not in cmds
+    setvar_lines = [line for line in cmds.splitlines() if "SETVAR" in line]
+    assert len(setvar_lines) == 1
+    assert "0x00000004" in setvar_lines[0]  # 1 + (100/10/3) = 1 + 3 = 4
+
+
+def test_nested_group_mixed_with_variable_stays_left_associative(compile_gq):
+    # Same nested "100 - 5 - y" shape as
+    # test_nested_subtraction_evaluates_nonassociatively_mixed_with_variable
+    # above, but nested inside a differently-precedenced `*` parent (the
+    # gamequeer#453 shape) instead of being the bare/outermost RHS. The
+    # purely-literal leading pair "100 - 5" folds to a single literal 95
+    # first (gamequeer#385), and only the final "- y" survives as a real
+    # SUBBY against that folded literal -- pinning the same single-SUBBY,
+    # left-associative codegen shape the outermost version already pins,
+    # now for the nested case gamequeer#453 fixes.
+    source = game_with_stage(
+        "x = 1 * (100 - 5 - y);", "volatile { int x = 0; int y = 0; }"
+    )
+    exit_code, stderr, out_dir = compile_gq(source)
+    assert exit_code == 0, stderr
+    assert_no_traceback(stderr)
+    cmds = (out_dir / "cmds.gqasm").read_text()
+    lines = cmds.splitlines()
+    subby_lines = [line for line in lines if "SUBBY" in line]
+    setvar_lines = [line for line in lines if "SETVAR" in line]
+    assert len(subby_lines) == 1
+    assert any("0x0000005f" in line for line in setvar_lines)  # literal 95 (0x5f)
