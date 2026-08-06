@@ -1,0 +1,17 @@
+/*
+ * nested_precedence_group_red.gqcue -- "computed result diverged from
+ * expected" indicator cue for nested_precedence_group.gq (gamequeer#453).
+ * See nested_precedence_group_lime.gqcue's header comment for why this pair
+ * of single-frame, non-looping cues is shaped this way.
+ */
+
+frame {
+    duration = 4;
+    colors {
+        red,
+        red,
+        red,
+        red,
+        red
+    }
+}

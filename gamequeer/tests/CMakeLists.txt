@@ -349,6 +349,21 @@ add_leds_dump_test(golden_led_handback led_handback 52
 
 add_leds_dump_test(golden_if_literal_condition if_literal_condition 28)
 
+# ---- golden_nested_precedence_group: gqc-side same-precedence-chain
+# left-fold regression (gamequeer#453). A pass/fail gate cart, same shape as
+# golden_if_literal_condition above: `roll = a % (748 + b + c);` (a
+# same-precedence `+` chain nested inside a differently-precedenced parent
+# via parens, all runtime variables so it's genuinely codegen'd rather than
+# constant-folded away) must both compile at all and evaluate to the right
+# result, and `y = k * (100 - d - e);` must evaluate left-to-right
+# ((100-d)-e), not right-to-left (100-(d-e)) -- a fold-direction regression
+# lands on the `else`/red arm of that second stage's `if` instead of
+# crashing. See nested_precedence_group.gq's header comment for the full
+# tick-by-tick derivation and the before/after evidence. TICKS=28 lands
+# exactly on the second cue's dark-out row.
+
+add_leds_dump_test(golden_nested_precedence_group nested_precedence_group 28)
+
 # ---- golden_framebuffer_anim_advance_{frame0,frame1,frame2}: animation
 # frame-metadata cache regression coverage for gamequeer#264/PR#282
 # (draw_animation_stack() caches the current frame's gq_anim_frame instead of
