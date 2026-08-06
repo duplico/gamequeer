@@ -135,6 +135,22 @@ uint8_t load_stage(t_gq_pointer stage_ptr) {
         led_stop();
     }
 
+    // Disarm the outgoing stage's timer *before* clearing GQ_EVENT_TIMER
+    // below, not after. system_tick() is the only place that ever sets
+    // GQ_EVENT_TIMER, and it does so gated on `timer_active` -- if
+    // `timer_active` is still 1 when GQ_EVENT_TIMER is cleared, any
+    // intervening call to system_tick() (today: none can interleave with
+    // load_stage(), since both run in MAIN with no reentrancy; system_tick()
+    // is never called from RTC_ISR -- but that is a call-graph fact, not
+    // something this function can enforce) would re-set GQ_EVENT_TIMER from
+    // the *outgoing* stage's still-armed timer_interval/timer_counter,
+    // handing a same-tick gostage() cascade a stale timer flag several hops
+    // downstream (gamequeer#452). Zeroing `timer_active` first closes the
+    // window structurally: system_tick() no-ops on a disarmed timer, so
+    // nothing can re-set the flag we're about to clear, regardless of
+    // ordering or interleaving. No masking needed.
+    timer_active = 0;
+
     // Clear only the stage-owned synthetic events: they belong to the
     // outgoing stage and have no meaning in the new one. Deliberately do NOT
     // clear the user-input events (BUTTON_A/B/L/R, BUTTON_CLICK) here --
@@ -143,8 +159,7 @@ uint8_t load_stage(t_gq_pointer stage_ptr) {
     // that auto-cascades into another stage) used to wipe a button/dial
     // event that HAL_event_poll() had already OR'd into s_gq_event this
     // tick, before handle_events()'s single forward pass ever reached it --
-    // silently dropping the input. See gamequeer#455. (#452 remains: TIMER
-    // is still stage-owned and still cleared here.)
+    // silently dropping the input. See gamequeer#455.
     GQ_EVENT_CLR(GQ_EVENT_ENTER);
     GQ_EVENT_CLR(GQ_EVENT_BGDONE);
     GQ_EVENT_CLR(GQ_EVENT_MENU);
@@ -169,9 +184,6 @@ uint8_t load_stage(t_gq_pointer stage_ptr) {
         *label_y[i] = 0;
     }
     *label_flags = 0;
-
-    // If a timer is active, stop it.
-    timer_active = 0;
 
     // Set stage entry event flag
     GQ_EVENT_SET(GQ_EVENT_ENTER);
