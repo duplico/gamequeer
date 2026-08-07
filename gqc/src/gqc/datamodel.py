@@ -859,30 +859,34 @@ class Frame:
         return structs.GQ_ANIM_FRAME_SIZE
 
     def uncompressed_bytes(self):
+        # NB: packed, NOT row-padded (gamequeer#439) -- every deployed
+        # decoder (2024 fleet firmware, current firmware, and the emulator
+        # alike; see oled.c's gq_image_advance_run()/gq_image_peek_run() for
+        # rle_type == 1) reads UNCOMP data as one continuous bitstream and
+        # never realigns to a byte boundary at a row wrap. Row-padding here
+        # (the old behavior) produced a bitstream those decoders shear
+        # against for any width % 8 != 0. Do not reintroduce a per-row
+        # flush without a matching, lockstep decoder change.
         run = 0
         val = 0
         out_bytes = []
-        row_run = 0
 
         for pixel_raw in self.image.getdata():
             pixel = 1 if pixel_raw else 0
 
-            if run == 8 or row_run == self.image.width:
+            if run == 8:
                 out_bytes.append(val)
                 run = 0
                 val = 0
-                if row_run == self.image.width:
-                    row_run = 0
-            
+
             if pixel:
                 val |= (0b10000000 >> run)
-            
+
             run += 1
-            row_run += 1
 
         # We definitely didn't finish the above with a write-out, so do one:
         out_bytes.append(val)
-        
+
         return bytes(out_bytes)
 
     def rle_bytes(self, bits):

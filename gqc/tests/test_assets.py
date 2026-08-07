@@ -83,17 +83,68 @@ def _run_cli(tmp_path, args, timeout=60):
 # --- Frame encoders: uncompressed_bytes() ------------------------------------
 
 
-def test_uncompressed_bytes_pads_each_row_to_its_own_byte():
-    # width=3 doesn't divide evenly into a byte, so each of the 2 rows must
-    # start a fresh output byte rather than packing continuously across the
-    # row boundary (row0 = 1,0,0 -> 0x80; row1 = 1,1,0 -> 0xc0).
+def _decode_uncompressed(data: bytes, width: int, height: int):
+    """Decode packed UNCOMP bytes back into rows of 0/1 pixels, mirroring
+    the deployed C decoder's read behavior (oled.c's
+    gq_image_advance_run()/gq_image_peek_run() for rle_type == 1): pixels
+    are consumed continuously across the bitstream -- there is no
+    realignment to a byte boundary at a row wrap."""
+    bits = []
+    for byte in data:
+        bits.extend((byte >> (7 - i)) & 1 for i in range(8))
+
+    rows = []
+    idx = 0
+    for _ in range(height):
+        rows.append(bits[idx : idx + width])
+        idx += width
+    return rows
+
+
+def test_uncompressed_bytes_packs_continuously_across_row_boundaries():
+    # width=3 doesn't divide evenly into a byte (gamequeer#439): rows must
+    # pack continuously into the bitstream -- NOT start a fresh output byte
+    # at each row -- since that's what every deployed decoder (2024 fleet
+    # firmware, current firmware, and the emulator) actually reads.
+    # row0 = 1,0,0 ; row1 = 1,1,0 -> bitstream 100 110 xxx -> 0x9800... i.e.
+    # byte0 = 1001 1000 = 0x98, no second byte needed (only 6 bits used, the
+    # implementation still flushes one final byte).
     im = Image.new("1", (3, 2), 0)
     im.putpixel((0, 0), 1)
     im.putpixel((0, 1), 1)
     im.putpixel((1, 1), 1)
 
     frame = Frame(img=im)
-    assert frame.uncompressed_bytes() == bytes([0x80, 0xC0])
+    assert frame.uncompressed_bytes() == bytes([0x98])
+
+
+def test_uncompressed_bytes_round_trips_non_byte_aligned_width():
+    # A width that isn't a multiple of 8 must still decode back to the
+    # original pixels when read as a packed (non-row-padded) bitstream --
+    # the regression this issue is about.
+    im = Image.new("1", (3, 2), 0)
+    im.putpixel((0, 0), 1)
+    im.putpixel((0, 1), 1)
+    im.putpixel((1, 1), 1)
+
+    frame = Frame(img=im)
+    decoded = _decode_uncompressed(frame.uncompressed_bytes(), im.width, im.height)
+    expected = [[1 if im.getpixel((x, y)) else 0 for x in range(im.width)] for y in range(im.height)]
+    assert decoded == expected
+
+
+def test_uncompressed_bytes_byte_aligned_width_unchanged():
+    # Regression guard: for a byte-aligned width, packed and row-padded
+    # encodings coincide, so this must stay byte-identical to the
+    # pre-gamequeer#439 output.
+    im = Image.new("1", (8, 2), 0)
+    im.putpixel((0, 0), 1)
+    im.putpixel((7, 0), 1)
+    im.putpixel((0, 1), 1)
+    im.putpixel((1, 1), 1)
+
+    frame = Frame(img=im)
+    assert frame.uncompressed_bytes() == bytes([0x81, 0xC0])
 
 
 # --- Frame encoders: rle_bytes(7) --------------------------------------------
