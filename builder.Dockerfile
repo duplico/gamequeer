@@ -88,3 +88,10 @@ RUN pip install --upgrade pip && pip install --requirement /workspaces/gamequeer
 # Put the dev python gqc module in the python path
 ENV PYTHONPATH=$PYTHONPATH:/workspaces/gamequeer/gqc/src/:/workspaces/gamequeer/gqc/src/
 ENV PATH="/workspaces/gamequeer/build/:$PATH"
+
+# `gqc` console shim: this image runs gqc straight off PYTHONPATH above (no
+# pip/uv install of the package itself), but gqc's generated workspace
+# Makefile defaults GQC_CMD to a bare `gqc` on PATH (see
+# gqc/src/gqc/makefile_src.py) -- as does anything else expecting the
+# `uv tool install` layout.
+RUN printf '#!/bin/sh\nexec python -m gqc "$@"\n' > /usr/local/bin/gqc && chmod +x /usr/local/bin/gqc
