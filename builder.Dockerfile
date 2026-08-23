@@ -40,8 +40,13 @@ RUN apt-get update --fix-missing && apt-get -y upgrade && apt-get install -y --n
     ca-certificates \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-RUN curl --fail --silent --show-error --location https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add -
-RUN echo "deb http://apt.llvm.org/$base_tag/ llvm-toolchain-$base_tag-$llvm_version main" >> /etc/apt/sources.list.d/llvm.list
+RUN mkdir -p /etc/apt/keyrings \
+    && curl --fail --silent --show-error --location \
+        --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 15 \
+        --output /tmp/llvm-snapshot.asc https://apt.llvm.org/llvm-snapshot.gpg.key \
+    && gpg --dearmor --output /etc/apt/keyrings/llvm-snapshot.gpg /tmp/llvm-snapshot.asc \
+    && rm -f /tmp/llvm-snapshot.asc
+RUN echo "deb [signed-by=/etc/apt/keyrings/llvm-snapshot.gpg] http://apt.llvm.org/$base_tag/ llvm-toolchain-$base_tag-$llvm_version main" >> /etc/apt/sources.list.d/llvm.list
 
 RUN apt-get update --fix-missing && apt-get -y upgrade && apt-get install -y --no-install-recommends \
     clang-format-${llvm_version} \
