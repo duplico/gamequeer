@@ -568,3 +568,113 @@ def test_in_cohort_with_variable_id_does_not_fold(compile_gq):
     assert "GE" in [op.name for op in ops]
     assert "LE" in [op.name for op in ops]
     assert "AND" in [op.name for op in ops]
+
+
+# --- short-operator / long-operator prefix hazard ----------------------------
+#
+# pyparsing >= 3.3.3's infix_notation commits to the first operator level that
+# matches, without backtracking (https://github.com/pyparsing/pyparsing/issues/672).
+# A short operator at a higher-precedence level that is a prefix of a longer
+# operator at a lower level (`&` vs `&&`, `|` vs `||`) therefore mis-lexes the
+# long one unless guarded. Every shape below is literal-only, so it folds and
+# the folded value pins both the tokenization and the precedence.
+
+
+def _c_eval(expr: str) -> int:
+    """Reference evaluation of an all-literal gqc int expression via Python,
+    translating the logical operators (whose Python spellings differ)."""
+    import re
+
+    py = re.sub(r"&&", " and ", expr)
+    py = re.sub(r"\|\|", " or ", py)
+    result = eval(py)  # noqa: S307 - test-local, literal-only input
+    # Python's and/or return an operand; gqc's logical ops yield 0 or 1.
+    return int(bool(result)) if ("&&" in expr or "||" in expr) else int(result)
+
+
+@pytest.mark.parametrize(
+    "expr, expected",
+    [
+        # Spacing variants: the lexer must split on the operator, not on whitespace.
+        ("5&&1", 1),
+        ("5&&0", 0),
+        ("0||0", 0),
+        ("3||0", 1),
+        ("5&3", 1),
+        ("5|2", 7),
+        ("6 & 3", 2),
+        ("6 | 1", 7),
+        # `&` binds tighter than `^`, which binds tighter than `|`, which binds
+        # tighter than `&&`, then `||` (gqc's table order).
+        ("1 & 2 && 0 | 0 || 5", 1),
+        ("6 & 3 && 4 | 0 || 0", 1),
+        ("0 & 3 && 4 | 0 || 0", 0),
+        ("6 & 3 && 0 | 0 || 0", 0),
+        ("6 & 3 && 0 | 0 || 7", 1),
+        ("1 | 2 & 3", 3),
+        ("(1 | 2) & 2", 2),
+        ("1 | 0 && 0 | 0", 0),
+        ("1 | 0 || 0 | 0", 1),
+        # Other operator pairs where one is a prefix of another.
+        ("1 << 2 < 5", 1),
+        ("1<<2<5", 1),
+        ("1 << 2 <= 4", 1),
+        ("16 >> 2 > 3", 1),
+        ("16>>2>=4", 1),
+        ("16 >> 2 >= 5", 0),
+        ("1 < 2", 1),
+        ("2 > 1", 1),
+        ("2 <= 2", 1),
+        ("2 >= 3", 0),
+        ("1==1", 1),
+        ("1!=1", 0),
+        ("!1 == 0", 1),
+        ("3 - -2", 5),
+        ("3 + 2", 5),
+    ],
+)
+def test_short_vs_long_operator_prefix_hazard_folds_correctly(compile_gq, expr, expected):
+    source = game_with_stage(f"x = {expr};", "volatile { int x = 0; }")
+    exit_code, stderr, out_dir = compile_gq(source)
+    assert exit_code == 0, stderr
+    assert_no_traceback(stderr)
+    cmds = (out_dir / "cmds.gqasm").read_text()
+    assert _folded_setvar_value(cmds) == expected
+
+
+@pytest.mark.parametrize(
+    "expr",
+    [
+        "5&&1",
+        "0||0",
+        "5&3",
+        "5|2",
+        "1 & 2 && 0 | 0 || 5",
+        "6 & 3 && 4 | 0 || 0",
+        "6 & 3 && 0 | 0 || 7",
+        "1 | 0 && 0 | 0",
+        "1 | 2 & 3",
+    ],
+)
+def test_bitwise_logical_mix_matches_reference_evaluation(compile_gq, expr):
+    # Cross-check the hand-written expectations above against Python's own
+    # precedence where the two languages agree (&, |, then logical ops).
+    # Python orders `&` > `^` > `|` > comparisons > `and` > `or`, matching
+    # gqc's table for these shapes.
+    source = game_with_stage(f"x = {expr};", "volatile { int x = 0; }")
+    exit_code, stderr, out_dir = compile_gq(source)
+    assert exit_code == 0, stderr
+    cmds = (out_dir / "cmds.gqasm").read_text()
+    assert _folded_setvar_value(cmds) == _c_eval(expr)
+
+
+def test_short_vs_long_operator_with_variable_operands(compile_gq):
+    # Non-foldable operands: the long operator must still lower to its own
+    # logical op, not a bitwise op followed by a dangling second character.
+    source = game_with_stage(
+        "x = a && b; y = a || b; z = a & b; w = a | b;",
+        "volatile { int a = 0; int b = 0; int x = 0; int y = 0; int z = 0; int w = 0; }",
+    )
+    exit_code, stderr, out_dir = compile_gq(source)
+    assert exit_code == 0, stderr
+    assert_no_traceback(stderr)

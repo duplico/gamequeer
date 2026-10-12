@@ -188,16 +188,19 @@ def test_nested_shift_or_chain_4_pairs_no_longer_exhausts_registers(compile_gq):
 
 
 def test_nested_shift_or_chain_5_pairs_previously_recursionerror_now_clean(compile_gq):
-    # One level deeper than the register-exhaustion boundary: pyparsing's
-    # packrat recursive descent exceeds Python's own recursion limit before
-    # codegen is ever reached. Pin the clean one-line diagnostic instead of
-    # a raw RecursionError traceback.
+    # One level deeper than the register-exhaustion boundary. Depending on
+    # the pyparsing version, this either compiles cleanly (the iterative
+    # infix_notation of pyparsing >= 3.3.3 has no recursion-depth ceiling) or
+    # the packrat recursive descent exceeds Python's own recursion limit
+    # before codegen is reached, which gqc reports as a clean one-line
+    # diagnostic. What must never happen is a raw RecursionError traceback.
     source = game_with_stage(
         f"mask = {nested_shift_or_chain(5)};", "volatile { int mask = 0; }"
     )
     exit_code, stderr, _ = compile_gq(source)
-    assert exit_code != 0
     assert_no_traceback(stderr)
+    if exit_code == 0:
+        return
     assert "too deep" in stderr
 
 
