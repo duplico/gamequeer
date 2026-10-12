@@ -6,6 +6,18 @@ FROM ${base_img} AS builder-install
 # Base image ships a stale Yarn apt repo whose GPG key has rotated; we use npm, not yarn.
 RUN rm -f /etc/apt/sources.list.d/yarn.list
 
+# Debian 11 (bullseye) is end-of-life and its security pool on deb.debian.org no
+# longer serves the +deb11uN packages its index still advertises (404s on
+# apt-get install). archive.debian.org serves a frozen, self-consistent bullseye
+# (main, updates, and final security), keeping apt-sourced tool versions
+# (notably ffmpeg 4.3.x, which the golden fixtures depend on) fixed. The
+# archive's Release files carry no Valid-Until, so no validity override is needed.
+RUN printf '%s\n' \
+    'deb http://archive.debian.org/debian bullseye main' \
+    'deb http://archive.debian.org/debian bullseye-updates main' \
+    'deb http://archive.debian.org/debian-security bullseye-security main' \
+    > /etc/apt/sources.list
+
 # Dependencies for C
 RUN apt-get update --fix-missing && apt-get -y upgrade && apt-get install -y --no-install-recommends \
     apt-utils \
@@ -91,7 +103,7 @@ COPY requirements.txt /workspaces/gamequeer/
 RUN pip install --upgrade pip && pip install --requirement /workspaces/gamequeer/requirements.txt
 
 # Put the dev python gqc module in the python path
-ENV PYTHONPATH=$PYTHONPATH:/workspaces/gamequeer/gqc/src/:/workspaces/gamequeer/gqc/src/
+ENV PYTHONPATH=${PYTHONPATH:-}:/workspaces/gamequeer/gqc/src/:/workspaces/gamequeer/gqc/src/
 ENV PATH="/workspaces/gamequeer/build/:$PATH"
 
 # `gqc` console shim: this image runs gqc straight off PYTHONPATH above (no
