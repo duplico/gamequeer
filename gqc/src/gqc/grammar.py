@@ -359,9 +359,14 @@ def build_game_parser():
         (pp.one_of('+ -'), 2, pp.opAssoc.LEFT),
         (pp.one_of('<< >>'), 2, pp.opAssoc.LEFT),
         (pp.one_of('< > <= >='), 2, pp.opAssoc.LEFT),
-        ('&', 2, pp.opAssoc.LEFT),
+        # The negative lookaheads guard the short bitwise operators against
+        # prefix-matching the long logical ones: pyparsing >= 3.3.3's
+        # infix_notation commits to the first matching level without
+        # backtracking, and '&' / '|' sit at higher precedence than '&&' / '||'.
+        # See https://github.com/pyparsing/pyparsing/issues/672
+        (pp.Regex(r'&(?!&)'), 2, pp.opAssoc.LEFT),
         ('^', 2, pp.opAssoc.LEFT),
-        ('|', 2, pp.opAssoc.LEFT),
+        (pp.Regex(r'\|(?!\|)'), 2, pp.opAssoc.LEFT),
         (pp.one_of('== !='), 2, pp.opAssoc.LEFT),
         (pp.one_of('&& ||'), 2, pp.opAssoc.LEFT),
     ])
